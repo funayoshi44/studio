@@ -106,23 +106,28 @@ export default function OnlineDuelPage() {
   const initializeGameState = async () => {
     if (!game || !user || game.playerIds.length < 2) return;
 
-    const p1 = game.playerIds[0];
-    const p2 = game.playerIds[1];
-    if (!p1 || !p2) return;
+    // This initialization is now primarily handled in findAndJoinGame
+    // We keep a check here just in case something goes wrong, but it should generally not be needed.
+    if (game.playerIds[0] === user.uid && (!game.gameState || !game.gameState.playerHands || Object.keys(game.gameState.playerHands).length < 2)) {
+      console.log("Host is re-initializing game state...");
+      const p1 = game.playerIds[0];
+      const p2 = game.playerIds[1];
+      if (!p1 || !p2) return;
 
-    const newGameState: DuelGameState = {
-        ...initialDuelGameState,
-        playerHands: {
-            [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
-            [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
-        },
-        scores: { [p1]: 0, [p2]: 0 },
-        kyuso: { [p1]: 0, [p2]: 0 },
-        only: { [p1]: 0, [p2]: 0 },
-        moves: { [p1]: null, [p2]: null },
-    };
-    
-    await updateGameState(game.id, newGameState);
+      const newGameState: DuelGameState = {
+          ...initialDuelGameState,
+          playerHands: {
+              [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
+              [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
+          },
+          scores: { [p1]: 0, [p2]: 0 },
+          kyuso: { [p1]: 0, [p2]: 0 },
+          only: { [p1]: 0, [p2]: 0 },
+          moves: { [p1]: null, [p2]: null },
+      };
+      
+      await updateGameState(game.id, newGameState);
+    }
   };
   
   const handleSelectCard = async (card: number) => {
@@ -152,8 +157,12 @@ export default function OnlineDuelPage() {
 
     const p1Id = game.playerIds[0];
     const p2Id = game.playerIds[1];
-    const p1Card = user.uid === p1Id ? playerCard : opponentCard;
-    const p2Card = user.uid === p2Id ? playerCard : opponentCard;
+    
+    // Determine which card belongs to which player regardless of who is evaluating
+    const p1Card = newGameState.moves[p1Id];
+    const p2Card = newGameState.moves[p2Id];
+
+    if (p1Card === null || p2Card === null) return; // Should not happen, but a safeguard
 
     // Determine winner
     if (p1Card === 1 && p2Card === 13) { winnerId = p1Id; winType = 'only'; } 
@@ -183,24 +192,27 @@ export default function OnlineDuelPage() {
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${playerCard} vs ${opponentCard}`;
+    if(!resultDetail) resultDetail = `${p1Card} vs ${p2Card}`;
 
     // Update game state for UI before checking game end
-    const roundHistory = { [user.uid]: playerCard, [opponentId]: opponentCard };
+    const roundHistory = { [p1Id]: p1Card, [p2Id]: p2Card };
     newGameState.history[newGameState.currentRound] = roundHistory;
-    newGameState.playerHands[user.uid] = newGameState.playerHands[user.uid].filter((c:number) => c !== playerCard);
-    newGameState.playerHands[opponentId] = newGameState.playerHands[opponentId].filter((c:number) => c !== opponentCard);
+    newGameState.playerHands[p1Id] = newGameState.playerHands[p1Id].filter((c:number) => c !== p1Card);
+    newGameState.playerHands[p2Id] = newGameState.playerHands[p2Id].filter((c:number) => c !== p2Card);
     newGameState.roundWinner = winnerId;
     newGameState.roundResultText = resultText;
     newGameState.roundResultDetail = resultDetail;
     
     // The evaluation should only happen once, by the host (player 1).
-    updateGameState(game.id, newGameState).then(() => {
-        setTimeout(() => {
-            // Pass the updated state to checkGameEnd
-            checkGameEnd(newGameState);
-        }, 2000);
-    });
+    // This prevents race conditions.
+    if(user.uid === p1Id) {
+        updateGameState(game.id, newGameState).then(() => {
+            setTimeout(() => {
+                // Pass the updated state to checkGameEnd
+                checkGameEnd(newGameState);
+            }, 2000);
+        });
+    }
   };
   
   const checkGameEnd = (currentGameState: DuelGameState) => {
@@ -328,7 +340,7 @@ export default function OnlineDuelPage() {
   }
 
   // If the game state has not been initialized yet and this user is the host, initialize it.
-  if (game.playerIds.length > 1 && (!gameState || Object.keys(gameState).length === 0 || !gameState.playerHands) && game.playerIds[0] === user.uid) {
+  if (game.status === 'in-progress' && game.playerIds.length > 1 && (!gameState || !gameState.playerHands || Object.keys(gameState.playerHands).length < 2)) {
      initializeGameState();
      return <div className="text-center py-10">Initializing game...</div>;
   }
@@ -349,7 +361,7 @@ export default function OnlineDuelPage() {
     );
   }
   
-  if (!gameState || !gameState.playerHands) {
+  if (!gameState || !gameState.playerHands || Object.keys(gameState.playerHands).length < 2) {
      return <div className="text-center py-10">Loading game state...</div>;
   }
 
@@ -367,28 +379,37 @@ export default function OnlineDuelPage() {
     );
   }
   
-  const ScoreDisplay = () => (
-    <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-      {user && gameState && gameState.scores && game.playerIds[0] &&(
-        <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
-          <p className="font-bold">{game.players[game.playerIds[0]].displayName}: {gameState.scores?.[game.playerIds[0]] ?? 0} {t('wins')}</p>
-          <div className="text-sm opacity-80">
-            <span>{t('kyuso')}: {gameState.kyuso?.[game.playerIds[0]] ?? 0} | </span>
-            <span>{t('onlyOne')}: {gameState.only?.[game.playerIds[0]] ?? 0}</span>
-          </div>
-        </Card>
-      )}
-      {opponentId && gameState && gameState.scores && game.playerIds[1] && (
-         <Card className="p-4 bg-red-100 dark:bg-red-900/50">
-            <p className="font-bold">{game.players[game.playerIds[1]].displayName}: {gameState.scores?.[game.playerIds[1]] ?? 0} {t('wins')}</p>
-            <div className="text-sm opacity-80">
-                <span>{t('kyuso')}: {gameState.kyuso?.[game.playerIds[1]] ?? 0} | </span>
-                <span>{t('onlyOne')}: {gameState.only?.[game.playerIds[1]] ?? 0}</span>
-            </div>
-        </Card>
-      )}
-    </div>
-  );
+  const ScoreDisplay = () => {
+    const p1Id = game.playerIds[0];
+    const p2Id = game.playerIds[1];
+
+    if (!p1Id || !p2Id || !game.players[p1Id] || !game.players[p2Id]) {
+      return null; // Don't render if player info is incomplete
+    }
+
+    return (
+      <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
+        {user && gameState && gameState.scores && (
+          <>
+            <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
+              <p className="font-bold">{game.players[p1Id].displayName}: {gameState.scores?.[p1Id] ?? 0} {t('wins')}</p>
+              <div className="text-sm opacity-80">
+                <span>{t('kyuso')}: {gameState.kyuso?.[p1Id] ?? 0} | </span>
+                <span>{t('onlyOne')}: {gameState.only?.[p1Id] ?? 0}</span>
+              </div>
+            </Card>
+             <Card className="p-4 bg-red-100 dark:bg-red-900/50">
+                <p className="font-bold">{game.players[p2Id].displayName}: {gameState.scores?.[p2Id] ?? 0} {t('wins')}</p>
+                <div className="text-sm opacity-80">
+                    <span>{t('kyuso')}: {gameState.kyuso?.[p2Id] ?? 0} | </span>
+                    <span>{t('onlyOne')}: {gameState.only?.[p2Id] ?? 0}</span>
+                </div>
+            </Card>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const myMove = gameState?.moves?.[user.uid];
   const opponentMove = opponentId ? gameState?.moves?.[opponentId] : null;
