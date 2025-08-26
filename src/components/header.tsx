@@ -33,7 +33,7 @@ export function Header() {
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
             <Link href="/online" passHref>
-              <Button variant="ghost" disabled>
+              <Button variant="ghost">
                 <Users className="h-4 w-4 mr-2"/>
                 {t('onlinePlay')}
               </Button>

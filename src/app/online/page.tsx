@@ -4,7 +4,7 @@ import { useState, useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-// import { createGame, findAvailableGames, joinGame, type Game } from '@/lib/firestore';
+import { createGame, findAvailableGames, joinGame, type Game } from '@/lib/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Swords, Scissors, Layers, RefreshCw } from 'lucide-react';
@@ -13,7 +13,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { GameContext } from '@/contexts/game-context';
-import type { Game } from '@/lib/firestore';
 
 export default function OnlineLobbyPage() {
   const { user } = useAuth();
@@ -27,8 +26,7 @@ export default function OnlineLobbyPage() {
   const fetchGames = async () => {
     setLoading(true);
     // For now, we only support Duel
-    // const availableGames = await findAvailableGames('duel');
-    const availableGames: Game[] = []; // Disabled
+    const availableGames = await findAvailableGames('duel');
     setGames(availableGames);
     setLoading(false);
   };
@@ -43,22 +41,22 @@ export default function OnlineLobbyPage() {
   
   const handleCreateGame = async (gameType: GameType) => {
     if (!user) return;
-    // try {
-    //   const gameId = await createGame(user, gameType);
-    //   router.push(`/${gameType}/${gameId}`);
-    // } catch (error) {
-    //   console.error("Failed to create game:", error);
-    // }
+    try {
+      const gameId = await createGame(user, gameType);
+      router.push(`/${gameType}/${gameId}`);
+    } catch (error) {
+      console.error("Failed to create game:", error);
+    }
   };
 
   const handleJoinGame = async (gameId: string, gameType: GameType) => {
     if (!user) return;
-    // try {
-    //     await joinGame(gameId, user);
-    //     router.push(`/${gameType}/${gameId}`);
-    // } catch (error) {
-    //     console.error("Failed to join game:", error);
-    // }
+    try {
+        await joinGame(gameId, user);
+        router.push(`/${gameType}/${gameId}`);
+    } catch (error) {
+        console.error("Failed to join game:", error);
+    }
   };
 
   const GameCard = ({ gameType, icon: Icon }: { gameType: GameType; icon: React.ElementType }) => (
@@ -70,7 +68,7 @@ export default function OnlineLobbyPage() {
         <CardTitle>{t(`${gameType}Title`)}</CardTitle>
       </CardHeader>
       <CardContent>
-        <Button onClick={() => handleCreateGame(gameType)} disabled>{t('createGame')}</Button>
+        <Button onClick={() => handleCreateGame(gameType)}>{t('createGame')}</Button>
       </CardContent>
     </Card>
   );
@@ -82,7 +80,6 @@ export default function OnlineLobbyPage() {
       <Card className="mb-8">
         <CardHeader>
           <CardTitle>{t('createGame')}</CardTitle>
-          <CardDescription>Online play is currently disabled. Please play with AI.</CardDescription>
         </CardHeader>
         <CardContent className="grid md:grid-cols-3 gap-6">
           <GameCard gameType="duel" icon={Swords} />
@@ -119,7 +116,7 @@ export default function OnlineLobbyPage() {
               <div key={game.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center gap-4">
                   <Avatar>
-                    <AvatarImage src={Object.values(game.players)[0]?.photoURL} />
+                    <AvatarImage src={Object.values(game.players)[0]?.photoURL ?? undefined} />
                     <AvatarFallback>{Object.values(game.players)[0]?.displayName?.[0]}</AvatarFallback>
                   </Avatar>
                   <div>
@@ -128,7 +125,7 @@ export default function OnlineLobbyPage() {
                         {t('vs')} {Object.values(game.players)[0]?.displayName}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(game.createdAt.toDate(), { addSuffix: true, locale: language === 'ja' ? ja : undefined })}
+                        {game.createdAt && formatDistanceToNow(game.createdAt.toDate(), { addSuffix: true, locale: language === 'ja' ? ja : undefined })}
                     </p>
                   </div>
                 </div>
