@@ -1,7 +1,9 @@
+
 "use client";
 
 import { useContext } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { GameContext } from '@/contexts/game-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
@@ -21,9 +23,20 @@ export default function Home() {
 
   return (
     <div className="flex flex-col items-center text-center">
-      <h1 className="text-5xl font-bold mb-8 text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
+      <h1 className="text-5xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">
         {t('appName')}
       </h1>
+
+      <div className="mb-8 w-full max-w-4xl">
+        <Image
+          src="https://picsum.photos/800/400"
+          alt="A placeholder image showing a beautiful landscape."
+          width={800}
+          height={400}
+          className="rounded-lg shadow-md object-cover w-full"
+          data-ai-hint="beautiful landscape"
+        />
+      </div>
       
       <Card className="w-full max-w-lg mb-12 bg-card/80 backdrop-blur-sm">
         <CardHeader>
