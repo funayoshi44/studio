@@ -11,6 +11,8 @@ import {
   getDocs,
   serverTimestamp,
   Timestamp,
+  limit,
+  runTransaction,
 } from 'firebase/firestore';
 import type { GameType } from './types';
 
@@ -109,4 +111,63 @@ export const findAvailableGames = async (gameType: GameType): Promise<Game[]> =>
     games.push({ id: doc.id, ...doc.data() } as Game);
   });
   return games;
+};
+
+// --- Auto Matchmaking ---
+export const findAndJoinGame = async (user: {uid: string; displayName: string | null; photoURL: string | null}, gameType: GameType): Promise<string> => {
+  const gamesRef = collection(db, 'games');
+  // Query for a waiting game of the correct type that the user is not already in.
+  const q = query(
+    gamesRef,
+    where('gameType', '==', gameType),
+    where('status', '==', 'waiting'),
+    where('playerIds', '!=', [user.uid]), // This is a workaround since 'not-in' is not supported for array membership in this way
+    limit(1)
+  );
+
+  return runTransaction(db, async (transaction) => {
+    const querySnapshot = await getDocs(q);
+    let suitableGame: Game | null = null;
+    let suitableGameId: string | null = null;
+
+    // Filter out games the user is already in client-side
+    querySnapshot.forEach(doc => {
+      const game = { id: doc.id, ...doc.data() } as Game;
+      if (!game.playerIds.includes(user.uid)) {
+        suitableGame = game;
+        suitableGameId = doc.id;
+      }
+    });
+
+    if (suitableGame && suitableGameId) {
+      // Found a game, join it
+      const gameRef = doc(db, 'games', suitableGameId);
+      transaction.update(gameRef, {
+        [`players.${user.uid}`]: {
+          displayName: user.displayName,
+          photoURL: user.photoURL,
+        },
+        playerIds: [...suitableGame.playerIds, user.uid],
+        status: 'in-progress',
+      });
+      return suitableGameId;
+    } else {
+      // No waiting games found, create a new one
+      const newGameRef = doc(collection(db, "games")); // Create a new ref with an auto-generated ID
+      transaction.set(newGameRef, {
+        gameType,
+        players: {
+          [user.uid]: {
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+          },
+        },
+        playerIds: [user.uid],
+        status: 'waiting',
+        createdAt: serverTimestamp(),
+        gameState: {},
+      });
+      return newGameRef.id;
+    }
+  });
 };

@@ -94,6 +94,10 @@ export const translations = {
     gameIdCopied: 'ゲームIDをコピーしました！',
     waitingForOpponentMove: '相手の番です...',
     yourTurn: 'あなたの番です',
+    autoMatch: '自動マッチング',
+    findMatch: '対戦を探す',
+    findMatchDescription: 'ボタンを押して、すぐに対戦相手を見つけよう。',
+    autoMatching: 'マッチング中...',
   },
   en: {
     appName: 'CardVerse',
@@ -193,5 +197,9 @@ export const translations = {
     gameIdCopied: 'Game ID copied!',
     waitingForOpponentMove: "Waiting for opponent's move...",
     yourTurn: 'Your Turn',
+    autoMatch: 'Auto Match',
+    findMatch: 'Find a Match',
+    findMatchDescription: 'Press the button to find an opponent to play against right away.',
+    autoMatching: 'Matching...',
   },
 };

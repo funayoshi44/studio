@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAIMove } from '../actions';
 import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-adjustment';
 import Link from 'next/link';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Lightbulb } from 'lucide-react';
 
 const TOTAL_ROUNDS = 13;
 
@@ -29,6 +31,7 @@ type DuelState = {
   finalResult: string;
   finalDetail: string;
   history: { player: number; cpu: number }[];
+  aiRationale: string | null;
 };
 
 const initialDuelState: DuelState = {
@@ -49,6 +52,7 @@ const initialDuelState: DuelState = {
   finalResult: '',
   finalDetail: '',
   history: [],
+  aiRationale: null,
 };
 
 export default function DuelPage() {
@@ -66,7 +70,7 @@ export default function DuelPage() {
     setLoading(true);
 
     const newPlayerCards = state.playerCards.filter((c) => c !== card);
-    setState(prev => ({ ...prev, playerCard: card, playerCards: newPlayerCards }));
+    setState(prev => ({ ...prev, playerCard: card, playerCards: newPlayerCards, aiRationale: null }));
 
     const { player: prevPlayerMove, cpu: prevCpuMove } = state.history[state.history.length - 1] || {};
 
@@ -94,7 +98,7 @@ export default function DuelPage() {
     const newCpuCards = state.cpuCards.filter((c) => c !== cpuCard);
     
     setTimeout(() => {
-        setState(prev => ({ ...prev, cpuCard }));
+        setState(prev => ({ ...prev, cpuCard, aiRationale: aiResponse.rationale }));
         setTimeout(() => evaluateRound(card, cpuCard, newCpuCards), 500);
     }, 300);
   };
@@ -221,6 +225,7 @@ export default function DuelPage() {
         playerCard: null,
         cpuCard: null,
         resultText: '',
+        aiRationale: null,
     }));
   }
 
@@ -287,6 +292,18 @@ export default function DuelPage() {
             <div className="my-6">
               <p className="text-2xl font-bold mb-2">{state.resultText}</p>
               <p className="text-lg text-muted-foreground">{state.resultDetail}</p>
+               {state.aiRationale && (
+                <Accordion type="single" collapsible className="w-full max-w-md mx-auto mt-4">
+                  <AccordionItem value="item-1">
+                    <AccordionTrigger>
+                      <span className="flex items-center gap-2"><Lightbulb className="w-4 h-4" /> AI's Rationale</span>
+                    </AccordionTrigger>
+                    <AccordionContent className="text-left text-sm text-muted-foreground bg-background/50 p-4 rounded-md">
+                      {state.aiRationale}
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              )}
               <Button onClick={advanceToNextRound} className="mt-4" size="lg">
                 {t('nextRound')}
               </Button>

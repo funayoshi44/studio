@@ -10,6 +10,8 @@ import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-ad
 import Link from 'next/link';
 import { evaluatePokerHand, type PokerCard, createPokerDeck } from '@/lib/game-logic/poker';
 import { cn } from '@/lib/utils';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Lightbulb } from 'lucide-react';
 
 type PokerState = {
   round: number;
@@ -24,6 +26,7 @@ type PokerState = {
   playerHandRank: string | null;
   cpuHandRank: string | null;
   resultText: string;
+  aiRationale: string | null;
 };
 
 const initialPokerState: PokerState = {
@@ -39,6 +42,7 @@ const initialPokerState: PokerState = {
   playerHandRank: null,
   cpuHandRank: null,
   resultText: '',
+  aiRationale: null,
 };
 
 export default function PokerPage() {
@@ -100,28 +104,32 @@ export default function PokerPage() {
     setLoading(true);
     const playerRank = evaluatePokerHand(state.playerHand);
     
-    // Simple AI for exchanging cards
-    const cpuRankBefore = evaluatePokerHand(state.cpuHand);
+    // AI asks for which cards to exchange
+    const aiInput: AdjustDifficultyInput = {
+        gameType: 'poker',
+        difficulty: difficulty,
+        gameState: {
+            exchangeCount: state.exchangeCount,
+            // Pass hand as simple strings for the AI
+            cpuHand: state.cpuHand.map(c => `${c.rank}${c.suit}`),
+            cpuHandRank: evaluatePokerHand(state.cpuHand).name,
+        },
+        // AI's available moves are the indices of the cards it can discard
+        availableMoves: state.cpuHand.map((_, i) => i.toString()),
+    };
+
+    const aiResponse = await getAIMove(aiInput);
+    const cardsToDiscardIndices = aiResponse.move.split(',').map(i => parseInt(i.trim())).filter(i => !isNaN(i) && i >= 0 && i < 5);
+    
     let cpuHand = [...state.cpuHand];
     let deck = [...state.deck];
-    // This is a simplified logic, a real AI would be more complex
-    if (difficulty !== 'easy' && cpuRankBefore.value < 4) { // 3 of a kind or less
-        // a very basic logic to discard non-pairing cards
-        // a better implementation would use the GenAI call
-        const counts: {[key: string]: number[]} = {};
-        cpuHand.forEach((c, i) => {
-            if(!counts[c.rank]) counts[c.rank] = [];
-            counts[c.rank].push(i);
-        });
-        const toDiscard = [];
-        for (const rank in counts) {
-            if (counts[rank].length === 1) toDiscard.push(counts[rank][0]);
-        }
-        if (toDiscard.length > 0 && toDiscard.length <=3) { // just an arbitrary limit
-             toDiscard.forEach(index => {
+
+    if (cardsToDiscardIndices.length > 0) {
+        cardsToDiscardIndices.forEach(index => {
+            if (deck.length > 0 && index < cpuHand.length) {
                 cpuHand[index] = deck.pop()!;
-            });
-        }
+            }
+        });
     }
 
     const cpuRankAfter = evaluatePokerHand(cpuHand);
@@ -142,6 +150,7 @@ export default function PokerPage() {
         resultText: winner === 'player' ? t('youWin') : winner === 'cpu' ? t('cpuWins') : t('draw'),
         playerScore: prev.playerScore + (winner === 'player' ? 1 : 0),
         cpuScore: prev.cpuScore + (winner === 'cpu' ? 1 : 0),
+        aiRationale: aiResponse.rationale,
     }));
     setLoading(false);
   };
@@ -224,7 +233,19 @@ export default function PokerPage() {
       {state.phase === 'result' && (
           <div className="my-6">
               <p className="text-2xl font-bold mb-4">{state.resultText}</p>
-              <Button onClick={nextRound} size="lg">{t('nextRound')}</Button>
+                {state.aiRationale && (
+                    <Accordion type="single" collapsible className="w-full max-w-md mx-auto my-4">
+                    <AccordionItem value="item-1">
+                        <AccordionTrigger>
+                        <span className="flex items-center gap-2"><Lightbulb className="w-4 h-4" /> AI's Rationale</span>
+                        </AccordionTrigger>
+                        <AccordionContent className="text-left text-sm text-muted-foreground bg-background/50 p-4 rounded-md">
+                        {state.aiRationale}
+                        </AccordionContent>
+                    </AccordionItem>
+                    </Accordion>
+                )}
+              <Button onClick={nextRound} size="lg" className="mt-2">{t('nextRound')}</Button>
           </div>
       )}
 

@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAIMove } from '../actions';
 import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-adjustment';
 import Link from 'next/link';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Lightbulb } from 'lucide-react';
 
 type Move = 'rock' | 'paper' | 'scissors';
 const moves: Move[] = ['rock', 'paper', 'scissors'];
@@ -28,6 +30,7 @@ type JankenState = {
   playerFinalMove: Move | null;
   cpuFinalMove: Move | null;
   resultText: string;
+  aiRationale: string | null;
 };
 
 const initialJankenState: JankenState = {
@@ -40,6 +43,7 @@ const initialJankenState: JankenState = {
   playerFinalMove: null,
   cpuFinalMove: null,
   resultText: '',
+  aiRationale: null,
 };
 
 export default function JankenPage() {
@@ -68,6 +72,7 @@ export default function JankenPage() {
       playerFirstMove: move,
       cpuFirstMove: cpuMove,
       phase: 'final',
+      aiRationale: null, // Clear rationale for the next stage
     }));
     setLoading(false);
   };
@@ -84,6 +89,7 @@ export default function JankenPage() {
         cpuFirstMove: state.cpuFirstMove,
       },
       availableMoves: moves,
+      playerPreviousMove: state.playerFirstMove as string,
     };
     const aiResponse = await getAIMove(aiInput);
     let cpuFinalMove = aiResponse.move as Move;
@@ -91,6 +97,7 @@ export default function JankenPage() {
         cpuFinalMove = moves[Math.floor(Math.random() * moves.length)];
     }
 
+    setState(prev => ({ ...prev, aiRationale: aiResponse.rationale }));
     evaluateRound(move, cpuFinalMove);
     setLoading(false);
   };
@@ -216,6 +223,18 @@ export default function JankenPage() {
             </div>
           </div>
           <p className="text-2xl font-bold mb-4">{state.resultText}</p>
+          {state.aiRationale && (
+            <Accordion type="single" collapsible className="w-full max-w-md mx-auto my-4">
+              <AccordionItem value="item-1">
+                <AccordionTrigger>
+                  <span className="flex items-center gap-2"><Lightbulb className="w-4 h-4" /> AI's Rationale</span>
+                </AccordionTrigger>
+                <AccordionContent className="text-left text-sm text-muted-foreground bg-background/50 p-4 rounded-md">
+                  {state.aiRationale}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
           <Button onClick={nextRound} size="lg">{t('nextRound')}</Button>
         </div>
       )}
