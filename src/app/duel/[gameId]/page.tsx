@@ -66,12 +66,7 @@ export default function OnlineDuelPage() {
     if (!gameId || !user) return;
     const unsubscribe = subscribeToGame(gameId, (gameData) => {
       if (gameData) {
-        // First time load or game reset
-        if (Object.keys(gameData.gameState).length === 0 && gameData.playerIds.length === 2 && gameData.playerIds.includes(user.uid)) {
-           initializeGameState(gameData);
-        } else {
-           setGame(gameData);
-        }
+        setGame(gameData);
       } else {
         toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
         router.push('/online');
@@ -84,20 +79,26 @@ export default function OnlineDuelPage() {
   useEffect(() => {
     if (!game || !gameState || !user || !opponent) return;
 
-    const playerMove = gameState.moves?.[user.uid];
-    const opponentMove = gameState.moves?.[opponent];
+    // Ensure moves object exists
+    if (!gameState.moves) return;
+    
+    const playerMove = gameState.moves[user.uid];
+    const opponentMove = gameState.moves[opponent];
 
-    if (playerMove && opponentMove && gameState.roundWinner === null) {
+    // Check if both moves have been made and the round winner hasn't been decided yet
+    if (playerMove != null && opponentMove != null && gameState.roundWinner === null) {
       evaluateRound(playerMove, opponentMove);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.gameState, opponent, user, game]);
+  }, [game?.gameState]);
 
 
-  const initializeGameState = async (gameData: Game) => {
-    const p1 = gameData.playerIds[0];
-    const p2 = gameData.playerIds[1];
-    if (!p1 || !p2 || !user) return;
+  const initializeGameState = async () => {
+    if (!game || !user) return;
+
+    const p1 = game.playerIds[0];
+    const p2 = game.playerIds[1];
+    if (!p1 || !p2) return;
 
     const newGameState: DuelGameState = {
         ...initialDuelGameState,
@@ -111,7 +112,7 @@ export default function OnlineDuelPage() {
         moves: { [p1]: null, [p2]: null },
     };
     
-    await updateGameState(gameData.id, newGameState);
+    await updateGameState(game.id, newGameState);
   };
   
   const handleSelectCard = async (card: number) => {
@@ -119,19 +120,25 @@ export default function OnlineDuelPage() {
     if (gameState.moves?.[user.uid]) return; // Already moved
 
     setLoading(true);
-    await submitMove(gameId, user.uid, card);
+    try {
+      await submitMove(gameId, user.uid, card);
+    } catch (error) {
+      console.error("Failed to submit move:", error);
+      toast({ title: "Error", description: "Failed to submit move.", variant: 'destructive' });
+    }
     setLoading(false);
   };
   
-  const evaluateRound = async (playerCard: number, opponentCard: number) => {
-    if (!user || !opponent || !gameState) return;
+  const evaluateRound = (playerCard: number, opponentCard: number) => {
+    if (!user || !opponent || !gameState || !game) return;
 
     let winnerId: string | 'draw' = 'draw';
     let resultText = '';
     let resultDetail = '';
     let winType = '';
     
-    let currentGameState = { ...gameState };
+    // Create a mutable copy of the current game state
+    let newGameState = JSON.parse(JSON.stringify(gameState));
 
     // Determine winner
     if (playerCard === 1 && opponentCard === 13) { winnerId = user.uid; winType = 'only'; } 
@@ -143,12 +150,12 @@ export default function OnlineDuelPage() {
 
     // Update scores and special win counts
     if (winnerId !== 'draw') {
-        currentGameState.scores[winnerId]++;
+        newGameState.scores[winnerId]++;
         if (winType === 'only') {
-            currentGameState.only[winnerId]++;
+            newGameState.only[winnerId]++;
             resultDetail = t('duelResultOnlyOne');
         } else if (winType === 'kyuso') {
-            currentGameState.kyuso[winnerId]++;
+            newGameState.kyuso[winnerId]++;
             resultDetail = t('duelResultKyuso');
         }
     }
@@ -158,26 +165,29 @@ export default function OnlineDuelPage() {
 
     // Update game state for UI before checking game end
     const roundHistory = { [user.uid]: playerCard, [opponent]: opponentCard };
-    currentGameState.history[currentGameState.currentRound] = roundHistory;
-    currentGameState.playerHands[user.uid] = currentGameState.playerHands[user.uid].filter(c => c !== playerCard);
-    currentGameState.playerHands[opponent] = currentGameState.playerHands[opponent].filter(c => c !== opponentCard);
-    currentGameState.roundWinner = winnerId;
-    currentGameState.roundResultText = resultText;
-    currentGameState.roundResultDetail = resultDetail;
-
-    setGame(prev => ({...prev!, gameState: currentGameState}));
-
-    // Wait a bit so players can see the result, then check for game end or advance
-    setTimeout(() => {
-        checkGameEnd(currentGameState);
-    }, 2000);
+    newGameState.history[newGameState.currentRound] = roundHistory;
+    newGameState.playerHands[user.uid] = newGameState.playerHands[user.uid].filter((c:number) => c !== playerCard);
+    newGameState.playerHands[opponent] = newGameState.playerHands[opponent].filter((c:number) => c !== opponentCard);
+    newGameState.roundWinner = winnerId;
+    newGameState.roundResultText = resultText;
+    newGameState.roundResultDetail = resultDetail;
+    
+    // The evaluation should only happen once, by one client. Let's say the host.
+    if (game.playerIds[0] === user.uid) {
+        updateGameState(game.id, newGameState).then(() => {
+            setTimeout(() => {
+                checkGameEnd(newGameState);
+            }, 2000);
+        });
+    }
   };
   
   const checkGameEnd = (currentGameState: DuelGameState) => {
-     if(!user || !opponent) return;
+     if(!user || !opponent || !game) return;
 
       let ended = false;
       let finalWinnerId: string | 'draw' | null = null;
+      let finalGameStatus: "finished" | "in-progress" = "in-progress";
 
       if (currentGameState.only[user.uid] > 0) { ended = true; finalWinnerId = user.uid; }
       else if (currentGameState.only[opponent] > 0) { ended = true; finalWinnerId = opponent; }
@@ -191,10 +201,12 @@ export default function OnlineDuelPage() {
       }
 
       if (ended) {
-          // Set final game state
-          setGame(prev => ({...prev!, status: 'finished', winner: finalWinnerId}));
+          finalGameStatus = 'finished';
+          // Set final game state on the server
+          const finalGameState = { ...currentGameState, status: 'finished', winner: finalWinnerId };
+          updateGameState(game.id, finalGameState);
       } else {
-          // Advance to next round
+          // Advance to next round on the server
           const nextGameState: DuelGameState = {
               ...currentGameState,
               currentRound: currentGameState.currentRound + 1,
@@ -203,7 +215,7 @@ export default function OnlineDuelPage() {
               roundResultText: '',
               roundResultDetail: '',
           };
-          setGame(prev => ({...prev!, gameState: nextGameState}));
+          updateGameState(game.id, nextGameState);
       }
   };
 
@@ -230,6 +242,11 @@ export default function OnlineDuelPage() {
         </div>
     );
   }
+  
+  // Game state might not be initialized yet if the second player just joined
+  if (!gameState || Object.keys(gameState).length === 0 || !gameState.playerHands) {
+     return <div className="text-center py-10">Initializing game...</div>;
+  }
 
   const PlayerInfo = ({ uid }: { uid: string }) => {
     const player = game?.players[uid];
@@ -247,7 +264,7 @@ export default function OnlineDuelPage() {
   
   const ScoreDisplay = () => (
     <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-      {user && gameState && (
+      {user && gameState && gameState.scores && (
         <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
           <p className="font-bold">{t('you')}: {gameState.scores?.[user.uid] ?? 0} {t('wins')}</p>
           <div className="text-sm opacity-80">
@@ -256,7 +273,7 @@ export default function OnlineDuelPage() {
           </div>
         </Card>
       )}
-      {opponent && gameState && (
+      {opponent && gameState && gameState.scores && (
          <Card className="p-4 bg-red-100 dark:bg-red-900/50">
             <p className="font-bold">{opponentInfo?.displayName}: {gameState.scores?.[opponent] ?? 0} {t('wins')}</p>
             <div className="text-sm opacity-80">
@@ -283,7 +300,7 @@ export default function OnlineDuelPage() {
         <>
           {!gameState.roundWinner && (
             <div className="my-8">
-                {!myMove ? (
+                {myMove == null ? (
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
@@ -300,7 +317,7 @@ export default function OnlineDuelPage() {
             </div>
           )}
 
-          {(myMove !== null) && (
+          {(myMove != null) && (
             <div className="my-8">
               <div className="flex justify-around items-center">
                 <div className="text-center">
