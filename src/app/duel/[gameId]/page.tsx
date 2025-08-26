@@ -95,9 +95,8 @@ export default function OnlineDuelPage() {
         }
 
         // Check if opponent has disconnected
-        if (gameData.status === 'finished' && gameData.winner === user.uid && game.status === 'in-progress') {
+        if (game?.status === 'in-progress' && gameData.status === 'finished' && gameData.winner === user.uid) {
             toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
-            router.push('/online');
         }
 
         setGame(gameData);
@@ -272,9 +271,8 @@ export default function OnlineDuelPage() {
 
       if (ended) {
           // Set final game state on the server
-          const finalGameState = { ...currentGameState };
           if(user.uid === p1Id) {
-            updateGameState(game.id, { ...finalGameState, status: 'finished', winner: finalWinnerId });
+            updateGameState(game.id, { ...currentGameState, status: 'finished', winner: finalWinnerId });
           }
       } else {
           // Advance to next round on the server
@@ -327,8 +325,8 @@ export default function OnlineDuelPage() {
     const cardValue = card ?? '?';
     const isImage = card === 6;
 
-    const baseClasses = "flex items-center justify-center text-3xl font-bold rounded-lg border-4";
-    const sizeClasses = "w-24 h-32 relative overflow-hidden";
+    const baseClasses = "flex items-center justify-center text-xl md:text-3xl font-bold rounded-lg border-4";
+    const sizeClasses = "w-20 h-28 md:w-24 md:h-32 relative overflow-hidden";
     
     if (!revealed) {
       return <div className={`${sizeClasses} ${baseClasses} bg-gray-400 border-gray-500`}>?</div>
@@ -429,16 +427,16 @@ export default function OnlineDuelPage() {
     }
 
     return (
-      <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
+      <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
           <>
-            <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
+            <Card className="p-3 md:p-4 bg-blue-100 dark:bg-blue-900/50">
               <p className="font-bold">{game.players[p1Id].displayName}: {gameState.scores?.[p1Id] ?? 0} {t('wins')}</p>
               <div className="text-sm opacity-80">
                 <span>{t('kyuso')}: {gameState.kyuso?.[p1Id] ?? 0} | </span>
                 <span>{t('onlyOne')}: {gameState.only?.[p1Id] ?? 0}</span>
               </div>
             </Card>
-             <Card className="p-4 bg-red-100 dark:bg-red-900/50">
+             <Card className="p-3 md:p-4 bg-red-100 dark:bg-red-900/50">
                 <p className="font-bold">{game.players[p2Id].displayName}: {gameState.scores?.[p2Id] ?? 0} {t('wins')}</p>
                 <div className="text-sm opacity-80">
                     <span>{t('kyuso')}: {gameState.kyuso?.[p2Id] ?? 0} | </span>
@@ -501,7 +499,7 @@ export default function OnlineDuelPage() {
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                             {myCards.sort((a,b) => a-b).map(card => (
-                              <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
+                              <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-14 h-16 md:w-16 md:h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
                                 {card === 6 ? (
                                     <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} />
                                 ) : (
@@ -542,12 +540,12 @@ export default function OnlineDuelPage() {
         </>
       )}
 
-      {game.status === 'finished' && game.winner && (
+      {game.status === 'finished' && (
         <div className="my-8">
             <p className="text-4xl font-bold mb-4">
                 {game.winner === 'draw'
                     ? t('duelFinalResultDraw')
-                    : `${game.players[game.winner]?.displayName ?? 'Player'} ${t('winsTheGame')}!`}
+                    : game.winner ? `${game.players[game.winner]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
             </p>
             <div className="space-x-4 mt-6">
                 <Link href="/online" passHref>

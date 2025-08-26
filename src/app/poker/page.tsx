@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useContext, useEffect, useCallback } from 'react';
@@ -164,14 +165,14 @@ export default function PokerPage() {
   }
 
   const PokerHand = ({ hand, show, owner }: { hand: PokerCard[], show: boolean, owner: 'player' | 'cpu' }) => (
-    <div className="flex justify-center space-x-2 mb-4">
+    <div className="flex justify-center space-x-1 md:space-x-2 mb-4">
       {hand.map((card, index) => {
         const isSelected = owner === 'player' && state.selectedIndices.includes(index);
         return (
           <div
             key={index}
             className={cn(
-              "w-16 h-24 md:w-20 md:h-28 rounded-lg flex flex-col items-center justify-center text-sm md:text-lg font-bold border-2 transition-all duration-300",
+              "w-14 h-20 md:w-20 md:h-28 rounded-lg flex flex-col items-center justify-center text-sm md:text-lg font-bold border-2 transition-all duration-300",
               show ? "bg-white text-black" : "bg-primary text-primary-foreground",
               owner === 'player' && state.phase === 'betting' && "cursor-pointer",
               isSelected ? 'border-accent bg-amber-100 transform -translate-y-2' : 'border-gray-300'
@@ -180,8 +181,8 @@ export default function PokerPage() {
           >
             {show ? (
               <>
-                <div>{card.rank}</div>
-                <div className="text-xl md:text-2xl">{card.suit}</div>
+                <div className="text-base md:text-lg">{card.rank}</div>
+                <div className="text-lg md:text-2xl">{card.suit}</div>
               </>
             ) : (
                <div className="text-2xl">?</div>

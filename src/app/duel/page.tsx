@@ -235,7 +235,7 @@ export default function DuelPage() {
     const cardValue = card ?? '?';
     const isImage = card === 6;
 
-    if (card === null) return <div className="w-24 h-32 bg-gray-400 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-500">?</div>;
+    if (card === null) return <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-400 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-500">?</div>;
     
     const cardContent = isImage ? (
       <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} />
@@ -244,22 +244,22 @@ export default function DuelPage() {
     );
 
     return (
-        <div className="relative w-24 h-32 bg-white text-black rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-300 overflow-hidden">
+        <div className="relative w-20 h-28 md:w-24 md:h-32 bg-white text-black rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-300 overflow-hidden">
             {cardContent}
         </div>
     );
   };
 
   const ScoreDisplay = () => (
-    <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-      <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
+    <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
+      <Card className="p-3 md:p-4 bg-blue-100 dark:bg-blue-900/50">
         <p className="font-bold">{t('you')}: {state.playerScore} {t('wins')}</p>
         <div className="text-sm opacity-80">
           <span>{t('kyuso')}: {state.playerKyuso} | </span>
           <span>{t('onlyOne')}: {state.playerOnly}</span>
         </div>
       </Card>
-      <Card className="p-4 bg-red-100 dark:bg-red-900/50">
+      <Card className="p-3 md:p-4 bg-red-100 dark:bg-red-900/50">
         <p className="font-bold">{t('cpu')}: {state.cpuScore} {t('wins')}</p>
         <div className="text-sm opacity-80">
           <span>{t('kyuso')}: {state.cpuKyuso} | </span>
@@ -286,7 +286,7 @@ export default function DuelPage() {
               <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
               <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                 {state.playerCards.map(card => (
-                  <Button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
+                  <Button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="w-14 h-16 md:w-16 md:h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
                     {card === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} /> : card}
                   </Button>
                 ))}
