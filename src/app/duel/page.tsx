@@ -238,7 +238,7 @@ export default function DuelPage() {
     if (card === null) return <div className="w-24 h-32 bg-gray-400 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-500">?</div>;
     
     const cardContent = isImage ? (
-      <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
+      <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} />
     ) : (
       cardValue
     );
@@ -287,7 +287,7 @@ export default function DuelPage() {
               <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                 {state.playerCards.map(card => (
                   <Button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
-                    {card === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" /> : card}
+                    {card === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} /> : card}
                   </Button>
                 ))}
               </div>
@@ -358,5 +358,3 @@ export default function DuelPage() {
     </div>
   );
 }
-
-    

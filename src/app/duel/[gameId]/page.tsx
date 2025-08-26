@@ -276,7 +276,7 @@ export default function OnlineDuelPage() {
     }
 
     const cardContent = isImage ? (
-      <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
+      <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} />
     ) : (
       cardValue
     );
@@ -413,7 +413,7 @@ export default function OnlineDuelPage() {
                             {myCards.map(card => (
                               <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
                                 {card === 6 ? (
-                                    <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
+                                    <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} />
                                 ) : (
                                     card
                                 )}
@@ -482,5 +482,3 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
-
-    
