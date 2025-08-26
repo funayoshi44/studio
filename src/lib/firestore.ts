@@ -136,14 +136,16 @@ export const findAvailableGames = async (gameType: GameType): Promise<Game[]> =>
 
 const initialDuelGameState = {
   currentRound: 1,
+  // Cards are now indexed by player UID
   playerHands: {},
   scores: {},
   kyuso: {},
   only: {},
+  // Keep track of moves for the current round
   moves: {},
   lastMoveBy: null,
   history: {},
-  roundWinner: null,
+  roundWinner: null, // UID of winner or 'draw'
   roundResultText: '',
   roundResultDetail: '',
 };
@@ -156,7 +158,6 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     gamesRef,
     where('gameType', '==', gameType),
     where('status', '==', 'waiting'),
-    // orderBy('createdAt', 'asc'), // This requires a composite index. Removing for simplicity.
     limit(10)
   );
 
@@ -207,8 +208,6 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     } else {
       // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games")); // Create a new ref with an auto-generated ID
-      const TOTAL_ROUNDS = 13;
-      const p1 = user.uid;
       
       transaction.set(newGameRef, {
         gameType,
