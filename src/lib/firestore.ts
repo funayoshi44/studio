@@ -39,9 +39,36 @@ export interface Message {
   createdAt: Timestamp;
 }
 
+const initialDuelGameState = {
+  currentRound: 1,
+  playerHands: {},
+  scores: {},
+  kyuso: {},
+  only: {},
+  moves: {},
+  lastMoveBy: null,
+  history: {},
+  roundWinner: null,
+  roundResultText: '',
+  roundResultDetail: '',
+};
+
 // Create a new game
 export const createGame = async (user: {uid: string; displayName: string | null; photoURL: string | null}, gameType: GameType): Promise<string> => {
   const gameCollection = collection(db, 'games');
+  const TOTAL_ROUNDS = 13; // Specific to Duel game type
+  
+  const initialGameStateForHost = {
+      ...initialDuelGameState,
+      playerHands: {
+          [user.uid]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
+      },
+      scores: { [user.uid]: 0 },
+      kyuso: { [user.uid]: 0 },
+      only: { [user.uid]: 0 },
+      moves: { [user.uid]: null },
+  };
+
   const docRef = await addDoc(gameCollection, {
     gameType,
     players: {
@@ -53,7 +80,7 @@ export const createGame = async (user: {uid: string; displayName: string | null;
     playerIds: [user.uid],
     status: 'waiting',
     createdAt: serverTimestamp(),
-    gameState: {},
+    gameState: gameType === 'duel' ? initialGameStateForHost : {},
   });
   return docRef.id;
 };
@@ -74,21 +101,22 @@ export const joinGame = async (gameId: string, user: {uid: string; displayName: 
             throw new Error('Game is full or you are already in it');
         }
         
-        // Initialize game state when the second player joins
         const p1 = gameData.playerIds[0];
         const p2 = user.uid;
-        const TOTAL_ROUNDS = 13; // Specific to Duel
+        const TOTAL_ROUNDS = 13;
         
-        const initialGameStateForJoin = {
-          ...initialDuelGameState,
+        const existingGameState = gameData.gameState || initialDuelGameState;
+
+        const newGameState = {
+          ...existingGameState,
           playerHands: {
-              [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
+              ...existingGameState.playerHands,
               [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
           },
-          scores: { [p1]: 0, [p2]: 0 },
-          kyuso: { [p1]: 0, [p2]: 0 },
-          only: { [p1]: 0, [p2]: 0 },
-          moves: { [p1]: null, [p2]: null },
+          scores: { ...existingGameState.scores, [p2]: 0 },
+          kyuso: { ...existingGameState.kyuso, [p2]: 0 },
+          only: { ...existingGameState.only, [p2]: 0 },
+          moves: { ...existingGameState.moves, [p2]: null },
         };
 
         transaction.update(gameRef, {
@@ -98,7 +126,7 @@ export const joinGame = async (gameId: string, user: {uid: string; displayName: 
             },
             playerIds: [...gameData.playerIds, user.uid],
             status: 'in-progress',
-            gameState: initialGameStateForJoin,
+            gameState: newGameState,
         });
     });
 };
@@ -158,20 +186,6 @@ export const findAvailableGames = async (): Promise<Game[]> => {
   return games;
 };
 
-const initialDuelGameState = {
-  currentRound: 1,
-  playerHands: {},
-  scores: {},
-  kyuso: {},
-  only: {},
-  moves: {},
-  lastMoveBy: null,
-  history: {},
-  roundWinner: null,
-  roundResultText: '',
-  roundResultDetail: '',
-};
-
 // --- Auto Matchmaking ---
 export const findAndJoinGame = async (user: {uid: string; displayName: string | null; photoURL: string | null}, gameType: GameType): Promise<string> => {
   const gamesRef = collection(db, 'games');
@@ -190,7 +204,6 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     let suitableGame: Game | null = null;
     let suitableGameId: string | null = null;
     
-    // Find a game the user is not part of
     for (const doc of querySnapshot.docs) {
         const game = { id: doc.id, ...doc.data() } as Game;
         if (!game.playerIds.includes(user.uid)) {
@@ -203,21 +216,23 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     if (suitableGame && suitableGameId) {
       // Found a game, join it
       const gameRef = doc(db, 'games', suitableGameId);
-      const p1 = suitableGame.playerIds[0];
       const p2 = user.uid;
       const TOTAL_ROUNDS = 13;
       
-      const initialGameStateForJoin = {
-          ...initialDuelGameState,
-          playerHands: {
-              [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
-              [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
-          },
-          scores: { [p1]: 0, [p2]: 0 },
-          kyuso: { [p1]: 0, [p2]: 0 },
-          only: { [p1]: 0, [p2]: 0 },
-          moves: { [p1]: null, [p2]: null },
+      const existingGameState = suitableGame.gameState || initialDuelGameState;
+
+      const newGameState = {
+        ...existingGameState,
+        playerHands: {
+            ...existingGameState.playerHands,
+            [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
+        },
+        scores: { ...existingGameState.scores, [p2]: 0 },
+        kyuso: { ...existingGameState.kyuso, [p2]: 0 },
+        only: { ...existingGameState.only, [p2]: 0 },
+        moves: { ...existingGameState.moves, [p2]: null },
       };
+
 
       transaction.update(gameRef, {
         [`players.${user.uid}`]: {
@@ -226,12 +241,24 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
         },
         playerIds: [...suitableGame.playerIds, user.uid],
         status: 'in-progress',
-        gameState: initialGameStateForJoin,
+        gameState: newGameState,
       });
       return suitableGameId;
     } else {
       // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games"));
+      const TOTAL_ROUNDS = 13; // Specific to Duel game type
+  
+      const initialGameStateForHost = {
+          ...initialDuelGameState,
+          playerHands: {
+              [user.uid]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
+          },
+          scores: { [user.uid]: 0 },
+          kyuso: { [user.uid]: 0 },
+          only: { [user.uid]: 0 },
+          moves: { [user.uid]: null },
+      };
       
       transaction.set(newGameRef, {
         gameType,
@@ -244,7 +271,7 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
-        gameState: {},
+        gameState: gameType === 'duel' ? initialGameStateForHost : {},
       });
       return newGameRef.id;
     }
