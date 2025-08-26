@@ -168,7 +168,13 @@ export default function OnlineDuelPage() {
         }
     }
     
-    resultText = winnerId === user.uid ? t('youWin') : winnerId === opponent ? t('cpuWins') : t('draw');
+    if (winnerId === 'draw') {
+        resultText = t('draw');
+    } else {
+        const winnerName = game.players[winnerId]?.displayName ?? 'Player';
+        resultText = `${winnerName} ${t('wins')}!`;
+    }
+
     if(!resultDetail) resultDetail = `${playerCard} vs ${opponentCard}`;
 
     // Update game state for UI before checking game end
@@ -408,14 +414,13 @@ export default function OnlineDuelPage() {
         </>
       )}
 
-      {game.status === 'finished' && (
+      {game.status === 'finished' && game.winner && (
         <div className="my-8">
             <p className="text-4xl font-bold mb-4">
-                {game.winner === user.uid && t('duelFinalResultWin')}
-                {game.winner === opponent && t('duelFinalResultLoss')}
-                {game.winner === 'draw' && t('duelFinalResultDraw')}
+                {game.winner === 'draw'
+                    ? t('duelFinalResultDraw')
+                    : `${game.players[game.winner]?.displayName ?? 'Player'} wins the game!`}
             </p>
-            {/* <p className="text-xl mb-6 text-muted-foreground">{state.finalDetail}</p> */}
             <div className="space-x-4">
                 <Link href="/online" passHref>
                     <Button size="lg">{t('playAgain')}</Button>
@@ -439,5 +444,3 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
-
-    
