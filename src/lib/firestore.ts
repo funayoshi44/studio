@@ -273,4 +273,34 @@ export const subscribeToMessages = (gameId: string, callback: (messages: Message
     callback(messages);
   });
 };
+
+// Forfeit a game
+export const leaveGame = async (gameId: string, leavingPlayerId: string): Promise<void> => {
+    const gameRef = doc(db, 'games', gameId);
+    try {
+        await runTransaction(db, async (transaction) => {
+            const gameSnap = await transaction.get(gameRef);
+            if (!gameSnap.exists()) {
+                console.log("Game not found, can't leave.");
+                return;
+            }
+
+            const gameData = gameSnap.data() as Game;
+
+            // Don't do anything if game is already finished
+            if (gameData.status === 'finished') {
+                return;
+            }
+
+            const winnerId = gameData.playerIds.find(p => p !== leavingPlayerId) || null;
+
+            transaction.update(gameRef, {
+                status: 'finished',
+                winner: winnerId,
+            });
+        });
+    } catch (error) {
+        console.error("Failed to leave game:", error);
+    }
+};
     

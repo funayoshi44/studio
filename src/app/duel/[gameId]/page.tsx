@@ -1,19 +1,20 @@
 
 "use client";
 
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message, leaveGame } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, Send } from 'lucide-react';
+import { Copy, Send, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 
 const TOTAL_ROUNDS = 13;
@@ -65,6 +66,22 @@ export default function OnlineDuelPage() {
   const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
   const opponentInfo = opponentId ? game?.players[opponentId] : null;
 
+  // Handle user leaving the page
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+        if (user && gameId && game?.status === 'in-progress') {
+            leaveGame(gameId, user.uid);
+        }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [gameId, user, game?.status]);
+
+
   // Subscribe to game and message updates
   useEffect(() => {
     if (!gameId || !user) return;
@@ -76,6 +93,13 @@ export default function OnlineDuelPage() {
             router.push('/online');
             return;
         }
+
+        // Check if opponent has disconnected
+        if (gameData.status === 'finished' && gameData.winner === user.uid && game.status === 'in-progress') {
+            toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+            router.push('/online');
+        }
+
         setGame(gameData);
       } else {
         toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
@@ -89,7 +113,7 @@ export default function OnlineDuelPage() {
       unsubscribeGame();
       unsubscribeMessages();
     };
-  }, [gameId, user, router, toast]);
+  }, [gameId, user, router, toast, game?.status]);
 
   // Evaluate round when both players have moved
   useEffect(() => {
@@ -204,7 +228,7 @@ export default function OnlineDuelPage() {
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${game.players[p1Id].displayName}: ${p1Card} vs ${game.players[p2Id].displayName}: ${p2Card}`;
+    if(!resultDetail) resultDetail = `${game.players[p1Id]?.displayName ?? 'P1'}: ${p1Card} vs ${game.players[p2Id]?.displayName ?? 'P2'}: ${p2Card}`;
 
     // Update game state for UI before checking game end
     const roundHistory = { [p1Id]: p1Card, [p2Id]: p2Card };
@@ -248,9 +272,9 @@ export default function OnlineDuelPage() {
 
       if (ended) {
           // Set final game state on the server
-          const finalGameState = { ...currentGameState, status: 'finished', winner: finalWinnerId };
+          const finalGameState = { ...currentGameState };
           if(user.uid === p1Id) {
-            updateGameState(game.id, finalGameState);
+            updateGameState(game.id, { ...finalGameState, status: 'finished', winner: finalWinnerId });
           }
       } else {
           // Advance to next round on the server
@@ -271,6 +295,13 @@ export default function OnlineDuelPage() {
   const handleCopyGameId = () => {
     navigator.clipboard.writeText(gameId);
     toast({ title: t('gameIdCopied') });
+  };
+  
+  const handleForfeit = async () => {
+    if (user && gameId) {
+        await leaveGame(gameId, user.uid);
+        router.push('/online');
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -425,7 +456,37 @@ export default function OnlineDuelPage() {
 
   return (
     <div className="text-center">
-      <h2 className="text-3xl font-bold mb-2">{t('duelTitle')} - Online</h2>
+      <div className="flex justify-between items-center mb-2">
+        <div className="w-1/3"></div>
+        <div className="w-1/3 text-center">
+            <h2 className="text-3xl font-bold">{t('duelTitle')} - Online</h2>
+        </div>
+        <div className="w-1/3 flex justify-end">
+             {game.status === 'in-progress' && (
+                <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                            <Flag className="mr-2 h-4 w-4" />
+                            {t('forfeit')}
+                        </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                        <AlertDialogHeader>
+                        <AlertDialogTitle>{t('forfeitConfirmationTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                           {t('forfeitConfirmationBody')}
+                        </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                        <AlertDialogAction onClick={handleForfeit}>{t('forfeit')}</AlertDialogAction>
+                        <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
+                        </AlertDialogFooter>
+                    </AlertDialogContent>
+                </AlertDialog>
+            )}
+        </div>
+      </div>
+
       <div className="mb-4 text-muted-foreground">
         <span>{t('round')} {gameState?.currentRound > TOTAL_ROUNDS ? TOTAL_ROUNDS : gameState?.currentRound} / {TOTAL_ROUNDS}</span>
       </div>
