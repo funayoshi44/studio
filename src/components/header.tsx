@@ -1,13 +1,24 @@
 "use client";
 
+import { useContext } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut } from 'lucide-react';
+import { AuthContext } from '@/contexts/auth-context';
 
 export function Header() {
   const t = useTranslation();
+  const { user, logOut } = useContext(AuthContext);
+
+  const handleLogout = async () => {
+    try {
+      await logOut();
+    } catch (error) {
+      console.error("Logout failed", error);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -26,12 +37,19 @@ export function Header() {
               </Button>
             </Link>
             <LanguageToggle />
-            <Link href="/login" passHref>
-              <Button>
-                <User className="h-4 w-4 mr-2"/>
-                {t('login')}
+            {user ? (
+              <Button onClick={handleLogout}>
+                <LogOut className="h-4 w-4 mr-2"/>
+                Logout
               </Button>
-            </Link>
+            ) : (
+              <Link href="/login" passHref>
+                <Button>
+                  <User className="h-4 w-4 mr-2"/>
+                  {t('login')}
+                </Button>
+              </Link>
+            )}
         </div>
       </div>
     </header>

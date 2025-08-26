@@ -1,5 +1,8 @@
-import Link from "next/link"
+"use client";
 
+import Link from "next/link"
+import { useContext } from "react";
+import { AuthContext } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -8,43 +11,37 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const { googleSignIn, user } = useContext(AuthContext);
+  const router = useRouter();
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await googleSignIn();
+    } catch (error) {
+      console.error("Google Sign In failed", error);
+    }
+  };
+
+  if (user) {
+    router.push('/');
+    return null;
+  }
+
   return (
     <div className="flex items-center justify-center py-12">
       <Card className="mx-auto max-w-sm w-full">
         <CardHeader>
           <CardTitle className="text-2xl">Login</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            Sign in with your Google account to continue.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4">
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <div className="flex items-center">
-                <Label htmlFor="password">Password</Label>
-                <Link href="#" className="ml-auto inline-block text-sm underline">
-                  Forgot your password?
-                </Link>
-              </div>
-              <Input id="password" type="password" required />
-            </div>
-            <Button type="submit" className="w-full">
-              Login
-            </Button>
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
               Login with Google
             </Button>
           </div>
