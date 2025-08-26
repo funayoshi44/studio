@@ -1,3 +1,4 @@
+
 import { db } from './firebase';
 import {
   collection,
@@ -155,7 +156,7 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     gamesRef,
     where('gameType', '==', gameType),
     where('status', '==', 'waiting'),
-    orderBy('createdAt', 'asc'),
+    // orderBy('createdAt', 'asc'), // This requires a composite index. Removing for simplicity.
     limit(10)
   );
 
@@ -206,6 +207,9 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     } else {
       // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games")); // Create a new ref with an auto-generated ID
+      const TOTAL_ROUNDS = 13;
+      const p1 = user.uid;
+      
       transaction.set(newGameRef, {
         gameType,
         players: {
@@ -246,5 +250,4 @@ export const subscribeToMessages = (gameId: string, callback: (messages: Message
     callback(messages);
   });
 };
-
     
