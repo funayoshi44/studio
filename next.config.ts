@@ -27,6 +27,12 @@ const nextConfig: NextConfig = {
         hostname: 'i.pravatar.cc',
         port: '',
         pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'poetryfactory.jp',
+        port: '',
+        pathname: '/**',
       }
     ],
   },

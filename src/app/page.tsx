@@ -29,7 +29,7 @@ export default function Home() {
 
       <div className="mb-8 w-full max-w-4xl">
         <Image
-          src="https://assets.st-note.com/production/uploads/images/207323238/rectangle_large_type_2_52e2796bfeb2e5fcf9ce15bd9ae645fe.jpeg?width=2000&height=2000&fit=bounds&quality=85"
+          src="https://poetryfactory.jp/wp-content/uploads/2023/08/%E3%82%B5%E3%83%A0%E3%83%8D%EF%BC%88%E4%BB%AE%EF%BC%89.png"
           alt="A placeholder image showing a beautiful landscape."
           width={800}
           height={400}
