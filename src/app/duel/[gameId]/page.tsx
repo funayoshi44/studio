@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, type Game } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -97,7 +97,7 @@ export default function OnlineDuelPage() {
   const initializeGameState = async (gameData: Game) => {
     const p1 = gameData.playerIds[0];
     const p2 = gameData.playerIds[1];
-    if (!p1 || !p2) return;
+    if (!p1 || !p2 || !user) return;
 
     const newGameState: DuelGameState = {
         ...initialDuelGameState,
@@ -110,8 +110,8 @@ export default function OnlineDuelPage() {
         only: { [p1]: 0, [p2]: 0 },
         moves: { [p1]: null, [p2]: null },
     };
-    await submitMove(gameId, user!.uid, { '.nan': null }); // a little hack to update game state
-    setGame({ ...gameData, gameState: newGameState });
+    
+    await updateGameState(gameData.id, newGameState);
   };
   
   const handleSelectCard = async (card: number) => {
