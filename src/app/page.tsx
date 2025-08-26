@@ -29,7 +29,7 @@ export default function Home() {
 
       <div className="mb-8 w-full max-w-4xl">
         <Image
-          src="https://picsum.photos/800/400"
+          src="https://assets.st-note.com/production/uploads/images/207323238/rectangle_large_type_2_52e2796bfeb2e5fcf9ce15bd9ae645fe.jpeg?width=2000&height=2000&fit=bounds&quality=85"
           alt="A placeholder image showing a beautiful landscape."
           width={800}
           height={400}
