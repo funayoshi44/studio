@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link"
-import { useContext } from "react";
+import { useState, useContext } from "react";
 import { AuthContext } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -14,21 +13,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export default function RegisterPage() {
-  const { googleSignIn, user } = useContext(AuthContext);
+  const { logIn, user } = useContext(AuthContext);
+  const [username, setUsername] = useState('');
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleGoogleSignIn = async () => {
-    try {
-      await googleSignIn();
-    } catch (error) {
-      console.error("Google Sign In failed", error);
-      toast({ title: "Sign Up Failed", description: "Could not sign up with Google.", variant: "destructive" });
+  const handleRegister = (e: React.FormEvent) => {
+    e.preventDefault();
+     if (!username.trim()) {
+      toast({
+        title: "Registration Failed",
+        description: "Please enter a username.",
+        variant: "destructive",
+      });
+      return;
     }
+    logIn(username);
   };
-
+  
   if (user) {
     router.push('/');
     return null;
@@ -40,15 +46,25 @@ export default function RegisterPage() {
         <CardHeader>
           <CardTitle className="text-xl">Sign Up</CardTitle>
           <CardDescription>
-            Create an account using one of the providers below.
+            Enter a username to create an account.
           </CardDescription>
         </CardHeader>
         <CardContent>
-            <div className="grid gap-4">
-                 <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
-                    Sign up with Google
+            <form onSubmit={handleRegister} className="grid gap-4">
+                 <div className="grid gap-2">
+                    <Label htmlFor="username">Username</Label>
+                    <Input
+                        id="username"
+                        placeholder="Your name"
+                        required
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                    />
+                </div>
+                <Button type="submit" className="w-full">
+                    Sign Up
                 </Button>
-            </div>
+            </form>
           <div className="mt-4 text-center text-sm">
             Already have an account?{" "}
             <Link href="/login" className="underline">

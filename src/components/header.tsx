@@ -22,14 +22,6 @@ export function Header() {
   const t = useTranslation();
   const { user, logOut } = useContext(AuthContext);
 
-  const handleLogout = async () => {
-    try {
-      await logOut();
-    } catch (error) {
-      console.error("Logout failed", error);
-    }
-  };
-
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center">
@@ -41,7 +33,7 @@ export function Header() {
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
             <Link href="/online" passHref>
-              <Button variant="ghost">
+              <Button variant="ghost" disabled>
                 <Users className="h-4 w-4 mr-2"/>
                 {t('onlinePlay')}
               </Button>
@@ -73,7 +65,7 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
+                  <DropdownMenuItem onClick={() => logOut()}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
                   </DropdownMenuItem>

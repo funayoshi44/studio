@@ -1,17 +1,18 @@
 "use client";
 
 import { useState, useContext, useEffect } from 'react';
-import { GameContext } from '@/contexts/game-context';
+// import { GameContext } from '@/contexts/game-context';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, type Game } from '@/lib/firestore';
+// import { subscribeToGame, submitMove, type Game } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import type { Game } from '@/lib/firestore';
 
 
 const TOTAL_ROUNDS = 13;
@@ -57,6 +58,13 @@ export default function OnlineDuelPage() {
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // THIS PAGE IS DISABLED FOR NOW
+  useEffect(() => {
+    toast({ title: "Online play is currently disabled.", variant: 'destructive'});
+    router.push('/');
+  }, [router, toast]);
+
+
   const gameState = game?.gameState as DuelGameState | undefined;
   const opponent = game && user ? game.playerIds.find(p => p !== user.uid) : null;
   const opponentInfo = opponent ? game?.players[opponent] : null;
@@ -64,20 +72,20 @@ export default function OnlineDuelPage() {
   // Subscribe to game updates
   useEffect(() => {
     if (!gameId || !user) return;
-    const unsubscribe = subscribeToGame(gameId, (gameData) => {
-      if (gameData) {
-        // First time load or game reset
-        if (Object.keys(gameData.gameState).length === 0) {
-           initializeGameState(gameData);
-        } else {
-           setGame(gameData);
-        }
-      } else {
-        toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
-        router.push('/online');
-      }
-    });
-    return () => unsubscribe();
+    // const unsubscribe = subscribeToGame(gameId, (gameData) => {
+    //   if (gameData) {
+    //     // First time load or game reset
+    //     if (Object.keys(gameData.gameState).length === 0) {
+    //        initializeGameState(gameData);
+    //     } else {
+    //        setGame(gameData);
+    //     }
+    //   } else {
+    //     toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
+    //     router.push('/online');
+    //   }
+    // });
+    // return () => unsubscribe();
   }, [gameId, user, router, toast]);
 
   // Evaluate round when both players have moved
@@ -109,7 +117,7 @@ export default function OnlineDuelPage() {
         only: { [p1]: 0, [p2]: 0 },
         moves: { [p1]: null, [p2]: null },
     };
-    await submitMove(gameId, user!.uid, { '.nan': null }); // a little hack to update game state
+    // await submitMove(gameId, user!.uid, { '.nan': null }); // a little hack to update game state
     setGame({ ...gameData, gameState: newGameState });
   };
   
@@ -118,7 +126,7 @@ export default function OnlineDuelPage() {
     if (gameState.moves?.[user.uid]) return; // Already moved
 
     setLoading(true);
-    await submitMove(gameId, user.uid, card);
+    // await submitMove(gameId, user.uid, card);
     setLoading(false);
   };
   
