@@ -98,6 +98,8 @@ export const translations = {
     findMatch: '対戦を探す',
     findMatchDescription: 'ボタンを押して、すぐに対戦相手を見つけよう。',
     autoMatching: 'マッチング中...',
+    chat: 'チャット',
+    sendAMessage: 'メッセージを送信...',
   },
   en: {
     appName: 'CardVerse',
@@ -201,5 +203,9 @@ export const translations = {
     findMatch: 'Find a Match',
     findMatchDescription: 'Press the button to find an opponent to play against right away.',
     autoMatching: 'Matching...',
+    chat: 'Chat',
+    sendAMessage: 'Send a message...',
   },
 };
+
+    

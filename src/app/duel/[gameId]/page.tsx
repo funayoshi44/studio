@@ -1,17 +1,17 @@
 "use client";
 
 import { useState, useContext, useEffect } from 'react';
-// import { GameContext } from '@/contexts/game-context';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Copy } from 'lucide-react';
+import { Copy, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Input } from '@/components/ui/input';
 
 
 const TOTAL_ROUNDS = 13;
@@ -20,9 +20,9 @@ type DuelGameState = {
   currentRound: number;
   // Cards are now indexed by player UID
   playerHands: { [uid: string]: number[] };
-  scores: { [uid: string]: number };
-  kyuso: { [uid: string]: number };
-  only: { [uid: string]: number };
+  scores: { [uid:string]: number };
+  kyuso: { [uid:string]: number };
+  only: { [uid:string]: number };
   // Keep track of moves for the current round
   moves: { [uid: string]: number | null };
   lastMoveBy: string | null;
@@ -55,16 +55,18 @@ export default function OnlineDuelPage() {
 
   const t = useTranslation();
   const [game, setGame] = useState<Game | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const gameState = game?.gameState as DuelGameState | undefined;
   const opponent = game && user ? game.playerIds.find(p => p !== user.uid) : null;
   const opponentInfo = opponent ? game?.players[opponent] : null;
 
-  // Subscribe to game updates
+  // Subscribe to game and message updates
   useEffect(() => {
     if (!gameId || !user) return;
-    const unsubscribe = subscribeToGame(gameId, (gameData) => {
+    const unsubscribeGame = subscribeToGame(gameId, (gameData) => {
       if (gameData) {
         setGame(gameData);
       } else {
@@ -72,7 +74,13 @@ export default function OnlineDuelPage() {
         router.push('/online');
       }
     });
-    return () => unsubscribe();
+
+    const unsubscribeMessages = subscribeToMessages(gameId, setMessages);
+
+    return () => {
+      unsubscribeGame();
+      unsubscribeMessages();
+    };
   }, [gameId, user, router, toast]);
 
   // Evaluate round when both players have moved
@@ -223,6 +231,60 @@ export default function OnlineDuelPage() {
     navigator.clipboard.writeText(gameId);
     toast({ title: t('gameIdCopied') });
   };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !gameId || !newMessage.trim()) return;
+
+    try {
+      await sendMessage(gameId, {
+        uid: user.uid,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        text: newMessage.trim(),
+      });
+      setNewMessage('');
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast({ title: "Error", description: "Failed to send message.", variant: 'destructive' });
+    }
+  };
+
+  const ChatBox = () => (
+    <Card className="w-full max-w-lg mx-auto">
+      <CardHeader>
+        <CardTitle>{t('chat')}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="h-64 overflow-y-auto p-4 border rounded-md mb-4 flex flex-col-reverse bg-muted/50">
+          <div className="flex flex-col gap-4">
+          {messages.slice().reverse().map(msg => (
+            <div key={msg.id} className="flex items-start gap-3">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={msg.photoURL ?? undefined} />
+                <AvatarFallback>{msg.displayName?.[0]}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1">
+                <p className="font-bold text-sm">{msg.displayName}</p>
+                <p className="text-sm bg-background p-2 rounded-lg">{msg.text}</p>
+              </div>
+            </div>
+          ))}
+          </div>
+        </div>
+        <form onSubmit={handleSendMessage} className="flex gap-2">
+          <Input
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            placeholder={t('sendAMessage')}
+          />
+          <Button type="submit" size="icon" disabled={!newMessage.trim()}>
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
   
   if (!user || !game) {
     return <div className="text-center py-10">Loading game...</div>;
@@ -237,14 +299,18 @@ export default function OnlineDuelPage() {
                 <code className="p-2 bg-muted rounded-md">{gameId}</code>
                 <Button onClick={handleCopyGameId} size="icon" variant="ghost"><Copy className="h-4 w-4"/></Button>
             </div>
-            <p>Or share the URL.</p>
-            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mt-8"></div>
+            <p className="mb-4">Or share the URL.</p>
+            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-8"></div>
+            <ChatBox />
         </div>
     );
   }
   
   // Game state might not be initialized yet if the second player just joined
   if (!gameState || Object.keys(gameState).length === 0 || !gameState.playerHands) {
+     if(game.playerIds.length > 1 && game.playerIds[0] === user.uid) {
+         initializeGameState();
+     }
      return <div className="text-center py-10">Initializing game...</div>;
   }
 
@@ -373,3 +439,5 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
+
+    

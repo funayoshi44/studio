@@ -13,6 +13,7 @@ import {
   Timestamp,
   limit,
   runTransaction,
+  orderBy,
 } from 'firebase/firestore';
 import type { GameType } from './types';
 
@@ -26,6 +27,15 @@ export interface Game {
   createdAt: Timestamp;
   gameState: any;
   winner?: string | null; // UID of the winner
+}
+
+export interface Message {
+  id: string;
+  uid: string;
+  displayName: string | null;
+  photoURL: string | null;
+  text: string;
+  createdAt: Timestamp;
 }
 
 // Create a new game
@@ -145,7 +155,8 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     gamesRef,
     where('gameType', '==', gameType),
     where('status', '==', 'waiting'),
-    limit(10) // Look through the 10 oldest waiting games
+    orderBy('createdAt', 'asc'),
+    limit(10)
   );
 
   return runTransaction(db, async (transaction) => {
@@ -206,9 +217,34 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
-        gameState: {}, // Keep empty until a second player joins
+        gameState: {},
       });
       return newGameRef.id;
     }
   });
 };
+
+// Send a message in a game chat
+export const sendMessage = async (gameId: string, message: Omit<Message, 'id' | 'createdAt'>) => {
+  const messagesCol = collection(db, 'games', gameId, 'messages');
+  await addDoc(messagesCol, {
+    ...message,
+    createdAt: serverTimestamp(),
+  });
+};
+
+// Listen for messages in a game chat
+export const subscribeToMessages = (gameId: string, callback: (messages: Message[]) => void) => {
+  const messagesCol = collection(db, 'games', gameId, 'messages');
+  const q = query(messagesCol, orderBy('createdAt', 'desc'), limit(50));
+
+  return onSnapshot(q, (querySnapshot) => {
+    const messages: Message[] = [];
+    querySnapshot.forEach((doc) => {
+      messages.push({ id: doc.id, ...doc.data() } as Message);
+    });
+    callback(messages);
+  });
+};
+
+    
