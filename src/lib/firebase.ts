@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  projectId: "cardverse-oajwb",
-  appId: "1:616399605581:web:37d295c717a11f2856b104",
-  storageBucket: "cardverse-oajwb.firebasestorage.app",
-  apiKey: "AIzaSyBzOOlyxBLQMt9jJDrYUNphoR1yPDC-FxE",
-  authDomain: "cardverse-oajwb.firebaseapp.com",
-  messagingSenderId: "616399605581",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase
