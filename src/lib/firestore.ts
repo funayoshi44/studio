@@ -116,13 +116,12 @@ export const findAvailableGames = async (gameType: GameType): Promise<Game[]> =>
 // --- Auto Matchmaking ---
 export const findAndJoinGame = async (user: {uid: string; displayName: string | null; photoURL: string | null}, gameType: GameType): Promise<string> => {
   const gamesRef = collection(db, 'games');
-  // Query for a waiting game of the correct type that the user is not already in.
+  // Query for a waiting game of the correct type.
   const q = query(
     gamesRef,
     where('gameType', '==', gameType),
     where('status', '==', 'waiting'),
-    where('playerIds', '!=', [user.uid]), // This is a workaround since 'not-in' is not supported for array membership in this way
-    limit(1)
+    limit(10) // Look through the 10 oldest waiting games
   );
 
   return runTransaction(db, async (transaction) => {
@@ -131,13 +130,14 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
     let suitableGameId: string | null = null;
 
     // Filter out games the user is already in client-side
-    querySnapshot.forEach(doc => {
+    for (const doc of querySnapshot.docs) {
       const game = { id: doc.id, ...doc.data() } as Game;
       if (!game.playerIds.includes(user.uid)) {
         suitableGame = game;
         suitableGameId = doc.id;
+        break; // Found a game, stop searching
       }
-    });
+    }
 
     if (suitableGame && suitableGameId) {
       // Found a game, join it
@@ -152,7 +152,7 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
       });
       return suitableGameId;
     } else {
-      // No waiting games found, create a new one
+      // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games")); // Create a new ref with an auto-generated ID
       transaction.set(newGameRef, {
         gameType,
