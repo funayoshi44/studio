@@ -88,7 +88,9 @@ export default function PokerPage() {
         const newPlayerHand = [...prev.playerHand];
         const newDeck = [...prev.deck];
         prev.selectedIndices.forEach(index => {
-            newPlayerHand[index] = newDeck.pop()!;
+            if (newDeck.length > 0) {
+              newPlayerHand[index] = newDeck.pop()!;
+            }
         });
         return {
             ...prev,
@@ -103,6 +105,7 @@ export default function PokerPage() {
   const handleShowdown = async () => {
     setLoading(true);
     const playerRank = evaluatePokerHand(state.playerHand);
+    const cpuRankBefore = evaluatePokerHand(state.cpuHand);
     
     // AI asks for which cards to exchange
     const aiInput: AdjustDifficultyInput = {
@@ -112,7 +115,7 @@ export default function PokerPage() {
             exchangeCount: state.exchangeCount,
             // Pass hand as simple strings for the AI
             cpuHand: state.cpuHand.map(c => `${c.rank}${c.suit}`),
-            cpuHandRank: evaluatePokerHand(state.cpuHand).name,
+            cpuHandRank: t(cpuRankBefore.name as any), // Pass the evaluated rank name
         },
         // AI's available moves are the indices of the cards it can discard
         availableMoves: state.cpuHand.map((_, i) => i.toString()),

@@ -100,6 +100,8 @@ export const translations = {
     autoMatching: 'マッチング中...',
     chat: 'チャット',
     sendAMessage: 'メッセージを送信...',
+    comingSoon: '準備中',
+    winsTheGame: 'がゲームに勝利しました',
   },
   en: {
     appName: 'CardVerse',
@@ -205,7 +207,7 @@ export const translations = {
     autoMatching: 'Matching...',
     chat: 'Chat',
     sendAMessage: 'Send a message...',
+    comingSoon: 'Coming Soon',
+    winsTheGame: 'wins the game',
   },
 };
-
-    

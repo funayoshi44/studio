@@ -53,12 +53,12 @@ export default function OnlineLobbyPage() {
   };
 
   const GameCard = ({ gameType, icon: Icon, disabled = false }: { gameType: GameType; icon: React.ElementType, disabled?: boolean }) => (
-    <Card className={`text-center ${disabled ? 'bg-muted/50' : ''}`}>
+    <Card className={`text-center ${disabled || isMatching ? 'bg-muted/50' : ''}`}>
       <CardHeader>
         <div className="flex justify-center mb-4">
-          <Icon className={`w-12 h-12 ${disabled ? 'text-muted-foreground' : 'text-primary'}`} />
+          <Icon className={`w-12 h-12 ${disabled || isMatching ? 'text-muted-foreground' : 'text-primary'}`} />
         </div>
-        <CardTitle className={disabled ? 'text-muted-foreground' : ''}>{t(`${gameType}Title`)}</CardTitle>
+        <CardTitle className={disabled || isMatching ? 'text-muted-foreground' : ''}>{t(`${gameType}Title`)}</CardTitle>
       </CardHeader>
       <CardContent>
         {isMatching && matchingGameType === gameType ? (
@@ -68,7 +68,7 @@ export default function OnlineLobbyPage() {
           </div>
         ) : (
           <Button onClick={() => handleMatchmaking(gameType)} disabled={isMatching || disabled}>
-            {disabled ? 'Coming Soon' : t('autoMatch')}
+            {disabled ? t('comingSoon') : t('autoMatch')}
           </Button>
         )}
       </CardContent>
