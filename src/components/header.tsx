@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User, LogOut } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut, Users } from 'lucide-react';
 import { AuthContext } from '@/contexts/auth-context';
 
 export function Header() {
@@ -30,6 +30,12 @@ export function Header() {
           </Link>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
+            <Link href="/online" passHref>
+              <Button variant="ghost">
+                <Users className="h-4 w-4 mr-2"/>
+                {t('onlinePlay')}
+              </Button>
+            </Link>
             <Link href="/history" passHref>
               <Button variant="ghost">
                 <BarChart3 className="h-4 w-4 mr-2"/>
