@@ -79,8 +79,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loading,
     logIn,
     logOut,
-    // 下位互換性のためのダミー関数
-    googleSignIn: async () => { console.warn("Google Sign In is not implemented."); },
   };
 
   return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
