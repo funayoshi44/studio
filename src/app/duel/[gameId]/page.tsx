@@ -70,6 +70,12 @@ export default function OnlineDuelPage() {
     if (!gameId || !user) return;
     const unsubscribeGame = subscribeToGame(gameId, (gameData) => {
       if (gameData) {
+        // If user is not part of the game, redirect them.
+        if (!gameData.playerIds.includes(user.uid)) {
+            toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive' });
+            router.push('/online');
+            return;
+        }
         setGame(gameData);
       } else {
         toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
@@ -103,32 +109,38 @@ export default function OnlineDuelPage() {
   }, [game?.gameState, game?.playerIds, user, opponentId]);
 
 
-  const initializeGameState = async () => {
-    if (!game || !user || game.playerIds.length < 2) return;
+  const initializeGameStateIfHost = async () => {
+    if (!game || !user || game.playerIds[0] !== user.uid || game.status !== 'in-progress') return;
+    
+    // Only initialize if the game state is not set up yet
+    if (game.gameState && game.gameState.playerHands && Object.keys(game.gameState.playerHands).length > 0) return;
 
-    // This initialization is now primarily handled in findAndJoinGame
-    // We keep a check here just in case something goes wrong, but it should generally not be needed.
-    if (game.playerIds[0] === user.uid && (!game.gameState || !game.gameState.playerHands || Object.keys(game.gameState.playerHands).length < 2)) {
-      console.log("Host is re-initializing game state...");
-      const p1 = game.playerIds[0];
-      const p2 = game.playerIds[1];
-      if (!p1 || !p2) return;
+    console.log("Host is initializing game state...");
+    const p1 = game.playerIds[0];
+    const p2 = game.playerIds[1];
+    if (!p1 || !p2) return;
 
-      const newGameState: DuelGameState = {
-          ...initialDuelGameState,
-          playerHands: {
-              [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
-              [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
-          },
-          scores: { [p1]: 0, [p2]: 0 },
-          kyuso: { [p1]: 0, [p2]: 0 },
-          only: { [p1]: 0, [p2]: 0 },
-          moves: { [p1]: null, [p2]: null },
-      };
-      
-      await updateGameState(game.id, newGameState);
-    }
+    const newGameState: DuelGameState = {
+        ...initialDuelGameState,
+        playerHands: {
+            [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
+            [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
+        },
+        scores: { [p1]: 0, [p2]: 0 },
+        kyuso: { [p1]: 0, [p2]: 0 },
+        only: { [p1]: 0, [p2]: 0 },
+        moves: { [p1]: null, [p2]: null },
+    };
+    
+    await updateGameState(game.id, newGameState);
   };
+
+  // Run initialization check when game data changes
+  useEffect(() => {
+    initializeGameStateIfHost();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game]);
+
   
   const handleSelectCard = async (card: number) => {
     if (loading || !user || !game || !gameState) return;
@@ -192,7 +204,7 @@ export default function OnlineDuelPage() {
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${p1Card} vs ${p2Card}`;
+    if(!resultDetail) resultDetail = `${game.players[p1Id].displayName}: ${p1Card} vs ${game.players[p2Id].displayName}: ${p2Card}`;
 
     // Update game state for UI before checking game end
     const roundHistory = { [p1Id]: p1Card, [p2Id]: p2Card };
@@ -237,7 +249,9 @@ export default function OnlineDuelPage() {
       if (ended) {
           // Set final game state on the server
           const finalGameState = { ...currentGameState, status: 'finished', winner: finalWinnerId };
-          updateGameState(game.id, finalGameState);
+          if(user.uid === p1Id) {
+            updateGameState(game.id, finalGameState);
+          }
       } else {
           // Advance to next round on the server
           const nextRoundState: DuelGameState = {
@@ -248,7 +262,9 @@ export default function OnlineDuelPage() {
               roundResultText: '',
               roundResultDetail: '',
           };
-          updateGameState(game.id, nextRoundState);
+          if(user.uid === p1Id) {
+            updateGameState(game.id, nextRoundState);
+          }
       }
   };
 
@@ -338,23 +354,17 @@ export default function OnlineDuelPage() {
   if (!user || !game) {
     return <div className="text-center py-10">Loading game...</div>;
   }
-
-  // If the game state has not been initialized yet and this user is the host, initialize it.
-  if (game.status === 'in-progress' && game.playerIds.length > 1 && (!gameState || !gameState.playerHands || Object.keys(gameState.playerHands).length < 2)) {
-     initializeGameState();
-     return <div className="text-center py-10">Initializing game...</div>;
-  }
   
   if (game.status === 'waiting') {
     return (
         <div className="text-center py-10">
             <h2 className="text-2xl font-bold mb-4">{t('waitingForPlayer')}</h2>
-            <p className="mb-4 text-muted-foreground">Share this game ID with your friend:</p>
+            <p className="mb-4 text-muted-foreground">{t('shareGameId')}</p>
             <div className="flex items-center justify-center gap-2 mb-6">
                 <code className="p-2 bg-muted rounded-md">{gameId}</code>
                 <Button onClick={handleCopyGameId} size="icon" variant="ghost"><Copy className="h-4 w-4"/></Button>
             </div>
-            <p className="mb-4">Or share the URL.</p>
+            <p className="mb-4">{t('orShareUrl')}</p>
             <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-8"></div>
             <ChatBox />
         </div>
@@ -370,11 +380,11 @@ export default function OnlineDuelPage() {
     if (!player) return null;
     return (
         <div className="flex flex-col items-center gap-2">
-            <Avatar>
+            <Avatar className="w-16 h-16">
                 <AvatarImage src={player.photoURL ?? undefined} />
-                <AvatarFallback>{player.displayName?.[0]}</AvatarFallback>
+                <AvatarFallback className="text-2xl">{player.displayName?.[0]}</AvatarFallback>
             </Avatar>
-            <p className="font-bold">{uid === user.uid ? t('you') : player.displayName}</p>
+            <p className="font-bold text-lg">{uid === user.uid ? t('you') : player.displayName}</p>
         </div>
     );
   }
@@ -383,13 +393,12 @@ export default function OnlineDuelPage() {
     const p1Id = game.playerIds[0];
     const p2Id = game.playerIds[1];
 
-    if (!p1Id || !p2Id || !game.players[p1Id] || !game.players[p2Id]) {
-      return null; // Don't render if player info is incomplete
+    if (!p1Id || !p2Id || !game.players[p1Id] || !game.players[p2Id] || !gameState || !gameState.scores) {
+      return null;
     }
 
     return (
       <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-        {user && gameState && gameState.scores && (
           <>
             <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
               <p className="font-bold">{game.players[p1Id].displayName}: {gameState.scores?.[p1Id] ?? 0} {t('wins')}</p>
@@ -406,7 +415,6 @@ export default function OnlineDuelPage() {
                 </div>
             </Card>
           </>
-        )}
       </div>
     );
   };
@@ -431,7 +439,7 @@ export default function OnlineDuelPage() {
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
-                            {myCards.map(card => (
+                            {myCards.sort((a,b) => a-b).map(card => (
                               <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
                                 {card === 6 ? (
                                     <Image src="/cards/duel-6.png" alt="Card 6" fill style={{ objectFit: 'cover' }} />
@@ -480,12 +488,9 @@ export default function OnlineDuelPage() {
                     ? t('duelFinalResultDraw')
                     : `${game.players[game.winner]?.displayName ?? 'Player'} ${t('winsTheGame')}!`}
             </p>
-            <div className="space-x-4">
+            <div className="space-x-4 mt-6">
                 <Link href="/online" passHref>
-                    <Button size="lg">{t('playAgain')}</Button>
-                </Link>
-                <Link href="/" passHref>
-                    <Button variant="secondary" size="lg">{t('backToMenu')}</Button>
+                    <Button size="lg">{t('backToMenu')}</Button>
                 </Link>
           </div>
         </div>

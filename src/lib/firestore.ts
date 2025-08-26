@@ -60,25 +60,49 @@ export const createGame = async (user: {uid: string; displayName: string | null;
 
 // Join a game
 export const joinGame = async (gameId: string, user: {uid: string; displayName: string | null; photoURL: string | null}): Promise<void> => {
-  const gameRef = doc(db, 'games', gameId);
-  const gameSnap = await getDoc(gameRef);
+    const gameRef = doc(db, 'games', gameId);
 
-  if (gameSnap.exists()) {
-    const gameData = gameSnap.data() as Game;
-    if (gameData.playerIds.length < 2 && !gameData.playerIds.includes(user.uid)) {
-      await updateDoc(gameRef, {
-        [`players.${user.uid}`]: {
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-        },
-        playerIds: [...gameData.playerIds, user.uid],
-        status: 'in-progress',
-      });
-    }
-  } else {
-    throw new Error('Game not found');
-  }
+    await runTransaction(db, async (transaction) => {
+        const gameSnap = await transaction.get(gameRef);
+
+        if (!gameSnap.exists()) {
+            throw new Error('Game not found');
+        }
+
+        const gameData = gameSnap.data() as Game;
+        if (gameData.playerIds.length >= 2 || gameData.playerIds.includes(user.uid)) {
+            throw new Error('Game is full or you are already in it');
+        }
+        
+        // Initialize game state when the second player joins
+        const p1 = gameData.playerIds[0];
+        const p2 = user.uid;
+        const TOTAL_ROUNDS = 13; // Specific to Duel
+        
+        const initialGameStateForJoin = {
+          ...initialDuelGameState,
+          playerHands: {
+              [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
+              [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
+          },
+          scores: { [p1]: 0, [p2]: 0 },
+          kyuso: { [p1]: 0, [p2]: 0 },
+          only: { [p1]: 0, [p2]: 0 },
+          moves: { [p1]: null, [p2]: null },
+        };
+
+        transaction.update(gameRef, {
+            [`players.${user.uid}`]: {
+                displayName: user.displayName,
+                photoURL: user.photoURL,
+            },
+            playerIds: [...gameData.playerIds, user.uid],
+            status: 'in-progress',
+            gameState: initialGameStateForJoin,
+        });
+    });
 };
+
 
 // Listen for game updates
 export const subscribeToGame = (gameId: string, callback: (game: Game | null) => void) => {
@@ -119,12 +143,12 @@ export const submitMove = async (gameId: string, userId: string, move: any) => {
 
 
 // Find available games
-export const findAvailableGames = async (gameType: GameType): Promise<Game[]> => {
+export const findAvailableGames = async (): Promise<Game[]> => {
   const gamesCollection = collection(db, 'games');
   const q = query(
     gamesCollection,
-    where('gameType', '==', gameType),
-    where('status', '==', 'waiting')
+    where('status', '==', 'waiting'),
+    limit(20)
   );
   const querySnapshot = await getDocs(q);
   const games: Game[] = [];
@@ -136,16 +160,14 @@ export const findAvailableGames = async (gameType: GameType): Promise<Game[]> =>
 
 const initialDuelGameState = {
   currentRound: 1,
-  // Cards are now indexed by player UID
   playerHands: {},
   scores: {},
   kyuso: {},
   only: {},
-  // Keep track of moves for the current round
   moves: {},
   lastMoveBy: null,
   history: {},
-  roundWinner: null, // UID of winner or 'draw'
+  roundWinner: null,
   roundResultText: '',
   roundResultDetail: '',
 };
@@ -153,27 +175,29 @@ const initialDuelGameState = {
 // --- Auto Matchmaking ---
 export const findAndJoinGame = async (user: {uid: string; displayName: string | null; photoURL: string | null}, gameType: GameType): Promise<string> => {
   const gamesRef = collection(db, 'games');
-  // Query for a waiting game of the correct type.
-  const q = query(
-    gamesRef,
-    where('gameType', '==', gameType),
-    where('status', '==', 'waiting'),
-    limit(10)
-  );
-
+  
   return runTransaction(db, async (transaction) => {
+    // Query for a waiting game of the correct type that the user is not already in.
+    const q = query(
+        gamesRef,
+        where('gameType', '==', gameType),
+        where('status', '==', 'waiting'),
+        limit(10)
+      );
+
     const querySnapshot = await getDocs(q);
+    
     let suitableGame: Game | null = null;
     let suitableGameId: string | null = null;
-
-    // Filter out games the user is already in client-side
+    
+    // Find a game the user is not part of
     for (const doc of querySnapshot.docs) {
-      const game = { id: doc.id, ...doc.data() } as Game;
-      if (!game.playerIds.includes(user.uid)) {
-        suitableGame = game;
-        suitableGameId = doc.id;
-        break; // Found a game, stop searching
-      }
+        const game = { id: doc.id, ...doc.data() } as Game;
+        if (!game.playerIds.includes(user.uid)) {
+            suitableGame = game;
+            suitableGameId = doc.id;
+            break;
+        }
     }
 
     if (suitableGame && suitableGameId) {
@@ -207,7 +231,7 @@ export const findAndJoinGame = async (user: {uid: string; displayName: string | 
       return suitableGameId;
     } else {
       // No suitable waiting games found, create a new one
-      const newGameRef = doc(collection(db, "games")); // Create a new ref with an auto-generated ID
+      const newGameRef = doc(collection(db, "games"));
       
       transaction.set(newGameRef, {
         gameType,

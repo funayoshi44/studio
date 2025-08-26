@@ -1,15 +1,17 @@
+
 "use client";
 
 import { useState, useEffect, useContext } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-import { findAndJoinGame, type Game } from '@/lib/firestore';
+import { findAndJoinGame, type Game, findAvailableGames, joinGame } from '@/lib/firestore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Swords, Scissors, Layers, Loader2 } from 'lucide-react';
+import { Swords, Scissors, Layers, Loader2, RefreshCw } from 'lucide-react';
 import type { GameType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 export default function OnlineLobbyPage() {
   const { user } = useAuth();
@@ -18,7 +20,9 @@ export default function OnlineLobbyPage() {
   const { toast } = useToast();
 
   const [isMatching, setIsMatching] = useState(false);
+  const [isJoining, setIsJoining] = useState<string | null>(null);
   const [matchingGameType, setMatchingGameType] = useState<GameType | null>(null);
+  const [availableGames, setAvailableGames] = useState<Game[]>([]);
 
   useEffect(() => {
     if (!user) {
@@ -26,6 +30,19 @@ export default function OnlineLobbyPage() {
       return;
     }
   }, [user, router]);
+
+  const fetchGames = async () => {
+    if(!user) return;
+    const games = await findAvailableGames();
+    // Filter out games created by the current user from the list
+    setAvailableGames(games.filter(g => !g.playerIds.includes(user.uid)));
+  };
+
+  useEffect(() => {
+    fetchGames();
+    const interval = setInterval(fetchGames, 10000); // Refresh every 10 seconds
+    return () => clearInterval(interval);
+  }, []);
   
   const handleMatchmaking = async (gameType: GameType) => {
     if (!user || isMatching) return;
@@ -34,10 +51,7 @@ export default function OnlineLobbyPage() {
     setMatchingGameType(gameType);
 
     try {
-      // This function will now create a new game or join an existing one.
       const gameId = await findAndJoinGame(user, gameType);
-      // Once we have a gameId, we can redirect to the game page.
-      // The game page will handle the "waiting" state.
       router.push(`/${gameType}/${gameId}`);
 
     } catch (error) {
@@ -49,6 +63,24 @@ export default function OnlineLobbyPage() {
       });
       setIsMatching(false);
       setMatchingGameType(null);
+    }
+  };
+
+  const handleJoinGame = async (gameId: string, gameType: GameType) => {
+    if (!user) return;
+    setIsJoining(gameId);
+    try {
+        await joinGame(gameId, user);
+        router.push(`/${gameType}/${gameId}`);
+    } catch (error) {
+        console.error("Failed to join game:", error);
+        toast({
+            title: "Error",
+            description: "Failed to join the game. It might be full or no longer available.",
+            variant: "destructive"
+        });
+        setIsJoining(null);
+        fetchGames(); // Refresh list
     }
   };
 
@@ -90,6 +122,46 @@ export default function OnlineLobbyPage() {
           <GameCard gameType="poker" icon={Layers} disabled />
         </CardContent>
       </Card>
+      
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+                <CardTitle>{t('joinGame')}</CardTitle>
+                <CardDescription>{t('orJoinWaitingGame')}</CardDescription>
+            </div>
+            <Button variant="ghost" size="icon" onClick={fetchGames}><RefreshCw className="h-5 w-5"/></Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            {availableGames.length > 0 ? (
+                availableGames.map(game => (
+                    <div key={game.id} className="flex items-center justify-between p-4 rounded-lg border">
+                        <div className="flex items-center gap-4">
+                            <Avatar>
+                                <AvatarImage src={game.players[game.playerIds[0]].photoURL ?? undefined}/>
+                                <AvatarFallback>{game.players[game.playerIds[0]].displayName?.[0]}</AvatarFallback>
+                            </Avatar>
+                            <div>
+                                <p className="font-bold">{game.players[game.playerIds[0]].displayName}</p>
+                                <p className="text-sm text-muted-foreground">{t(`${game.gameType}Title`)}</p>
+                            </div>
+                        </div>
+                        <Button
+                            onClick={() => handleJoinGame(game.id, game.gameType)}
+                            disabled={isJoining === game.id}
+                        >
+                            {isJoining === game.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                            {t('joinGame')}
+                        </Button>
+                    </div>
+                ))
+            ) : (
+                <p className="text-center text-muted-foreground">{t('noGamesAvailable')}</p>
+            )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
