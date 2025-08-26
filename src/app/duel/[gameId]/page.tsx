@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useContext, useEffect } from 'react';
@@ -268,18 +269,20 @@ export default function OnlineDuelPage() {
     const isImage = card === 6;
 
     const baseClasses = "flex items-center justify-center text-3xl font-bold rounded-lg border-4";
-    const sizeClasses = "w-24 h-32";
+    const sizeClasses = "w-24 h-32 relative overflow-hidden";
     
     if (!revealed) {
       return <div className={`${sizeClasses} ${baseClasses} bg-gray-400 border-gray-500`}>?</div>
     }
 
-    if (isImage) {
-      return <Image src="/cards/duel-6.png" alt="Card 6" width={96} height={128} className="rounded-lg" />;
-    }
+    const cardContent = isImage ? (
+      <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
+    ) : (
+      cardValue
+    );
 
     return (
-        <div className={`${sizeClasses} ${baseClasses} bg-white border-gray-300 text-black`}>{cardValue}</div>
+        <div className={`${sizeClasses} ${baseClasses} bg-white border-gray-300 text-black`}>{cardContent}</div>
     );
   };
 
@@ -408,7 +411,7 @@ export default function OnlineDuelPage() {
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                             {myCards.map(card => (
-                              <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden">
+                              <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
                                 {card === 6 ? (
                                     <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
                                 ) : (
@@ -479,3 +482,5 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
+
+    

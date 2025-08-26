@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useContext, useEffect, useMemo, useCallback } from 'react';
@@ -231,11 +232,22 @@ export default function DuelPage() {
   }
   
   const DisplayCard = ({ card }: { card: number | null }) => {
-    if (card === null) return <div className="w-24 h-32 bg-gray-400 rounded-lg flex items-center justify-center text-3xl font-bold">?</div>;
-    if (card === 6) {
-      return <Image src="/cards/duel-6.png" alt="Card 6" width={96} height={128} className="rounded-lg border-4 border-gray-400" />;
-    }
-    return <div className="w-24 h-32 bg-white text-black rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-400">{card}</div>;
+    const cardValue = card ?? '?';
+    const isImage = card === 6;
+
+    if (card === null) return <div className="w-24 h-32 bg-gray-400 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-500">?</div>;
+    
+    const cardContent = isImage ? (
+      <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
+    ) : (
+      cardValue
+    );
+
+    return (
+        <div className="relative w-24 h-32 bg-white text-black rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-300 overflow-hidden">
+            {cardContent}
+        </div>
+    );
   };
 
   const ScoreDisplay = () => (
@@ -274,8 +286,8 @@ export default function DuelPage() {
               <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
               <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                 {state.playerCards.map(card => (
-                  <Button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110">
-                    {card === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" width={48} height={64}/> : card}
+                  <Button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
+                    {card === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" /> : card}
                   </Button>
                 ))}
               </div>
@@ -287,15 +299,11 @@ export default function DuelPage() {
               <div className="flex justify-center space-x-8">
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('you')}</h4>
-                  <div className={`w-24 h-32 bg-blue-600 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-blue-400 ${state.cpuCard ? '' : 'card-flip'}`}>
-                    {state.playerCard === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" width={80} height={112} /> : state.playerCard}
-                  </div>
+                   <DisplayCard card={state.playerCard} />
                 </div>
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('cpu')}</h4>
-                  <div className={`w-24 h-32 bg-red-600 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-red-400 ${state.cpuCard ? '' : 'card-flip'}`}>
-                    {state.cpuCard === 6 ? <Image src="/cards/duel-6.png" alt="Card 6" width={80} height={112} /> : state.cpuCard ?? '?'}
-                  </div>
+                  <DisplayCard card={state.cpuCard} />
                 </div>
               </div>
             </div>
@@ -350,3 +358,5 @@ export default function DuelPage() {
     </div>
   );
 }
+
+    
