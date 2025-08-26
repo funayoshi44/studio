@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Copy, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import Image from 'next/image';
 
 
 const TOTAL_ROUNDS = 13;
@@ -148,13 +149,19 @@ export default function OnlineDuelPage() {
     // Create a mutable copy of the current game state
     let newGameState = JSON.parse(JSON.stringify(gameState));
 
+    const p1Id = game.playerIds[0];
+    const p2Id = game.playerIds[1];
+    const p1Card = user.uid === p1Id ? playerCard : opponentCard;
+    const p2Card = user.uid === p2Id ? playerCard : opponentCard;
+
     // Determine winner
-    if (playerCard === 1 && opponentCard === 13) { winnerId = user.uid; winType = 'only'; } 
-    else if (opponentCard === 1 && playerCard === 13) { winnerId = opponentId; winType = 'only'; } 
-    else if (playerCard === opponentCard - 1) { winnerId = user.uid; winType = 'kyuso'; }
-    else if (opponentCard === playerCard - 1) { winnerId = opponentId; winType = 'kyuso'; }
-    else if (playerCard > opponentCard) { winnerId = user.uid; }
-    else if (opponentCard > playerCard) { winnerId = opponentId; }
+    if (p1Card === 1 && p2Card === 13) { winnerId = p1Id; winType = 'only'; } 
+    else if (p2Card === 1 && p1Card === 13) { winnerId = p2Id; winType = 'only'; } 
+    else if (p1Card === p2Card - 1) { winnerId = p1Id; winType = 'kyuso'; }
+    else if (p2Card === p1Card - 1) { winnerId = p2Id; winType = 'kyuso'; }
+    else if (p1Card > p2Card) { winnerId = p1Id; }
+    else if (p2Card > p1Card) { winnerId = p2Id; }
+
 
     // Update scores and special win counts
     if (winnerId !== 'draw') {
@@ -198,17 +205,19 @@ export default function OnlineDuelPage() {
   const checkGameEnd = (currentGameState: DuelGameState) => {
      if(!user || !opponentId || !game) return;
 
+      const p1Id = game.playerIds[0];
+      const p2Id = game.playerIds[1];
       let ended = false;
       let finalWinnerId: string | 'draw' | null = null;
       
-      if (currentGameState.only[user.uid] > 0) { ended = true; finalWinnerId = user.uid; }
-      else if (currentGameState.only[opponentId] > 0) { ended = true; finalWinnerId = opponentId; }
-      else if (currentGameState.kyuso[user.uid] >= 3) { ended = true; finalWinnerId = user.uid; }
-      else if (currentGameState.kyuso[opponentId] >= 3) { ended = true; finalWinnerId = opponentId; }
+      if (currentGameState.only[p1Id] > 0) { ended = true; finalWinnerId = p1Id; }
+      else if (currentGameState.only[p2Id] > 0) { ended = true; finalWinnerId = p2Id; }
+      else if (currentGameState.kyuso[p1Id] >= 3) { ended = true; finalWinnerId = p1Id; }
+      else if (currentGameState.kyuso[p2Id] >= 3) { ended = true; finalWinnerId = p2Id; }
       else if (currentGameState.currentRound >= TOTAL_ROUNDS) {
           ended = true;
-          if (currentGameState.scores[user.uid] > currentGameState.scores[opponentId]) finalWinnerId = user.uid;
-          else if (currentGameState.scores[opponentId] > currentGameState.scores[user.uid]) finalWinnerId = opponentId;
+          if (currentGameState.scores[p1Id] > currentGameState.scores[p2Id]) finalWinnerId = p1Id;
+          else if (currentGameState.scores[p2Id] > currentGameState.scores[p1Id]) finalWinnerId = p2Id;
           else finalWinnerId = 'draw';
       }
 
@@ -221,7 +230,7 @@ export default function OnlineDuelPage() {
           const nextRoundState: DuelGameState = {
               ...currentGameState,
               currentRound: currentGameState.currentRound + 1,
-              moves: { [user.uid]: null, [opponentId]: null },
+              moves: { [p1Id]: null, [p2Id]: null },
               roundWinner: null,
               roundResultText: '',
               roundResultDetail: '',
@@ -252,6 +261,28 @@ export default function OnlineDuelPage() {
       toast({ title: "Error", description: "Failed to send message.", variant: 'destructive' });
     }
   };
+  
+  const CardDisplay = ({ card }: { card: number | null }) => {
+    const revealed = card !== null;
+    const cardValue = card ?? '?';
+    const isImage = card === 6;
+
+    const baseClasses = "flex items-center justify-center text-3xl font-bold rounded-lg border-4";
+    const sizeClasses = "w-24 h-32";
+    
+    if (!revealed) {
+      return <div className={`${sizeClasses} ${baseClasses} bg-gray-400 border-gray-500`}>?</div>
+    }
+
+    if (isImage) {
+      return <Image src="/cards/duel-6.png" alt="Card 6" width={96} height={128} className="rounded-lg" />;
+    }
+
+    return (
+        <div className={`${sizeClasses} ${baseClasses} bg-white border-gray-300 text-black`}>{cardValue}</div>
+    );
+  };
+
 
   const ChatBox = () => (
     <Card className="w-full max-w-lg mx-auto">
@@ -335,21 +366,21 @@ export default function OnlineDuelPage() {
   
   const ScoreDisplay = () => (
     <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-      {user && gameState && gameState.scores && (
+      {user && gameState && gameState.scores && game.playerIds[0] &&(
         <Card className="p-4 bg-blue-100 dark:bg-blue-900/50">
-          <p className="font-bold">{t('you')}: {gameState.scores?.[user.uid] ?? 0} {t('wins')}</p>
+          <p className="font-bold">{game.players[game.playerIds[0]].displayName}: {gameState.scores?.[game.playerIds[0]] ?? 0} {t('wins')}</p>
           <div className="text-sm opacity-80">
-            <span>{t('kyuso')}: {gameState.kyuso?.[user.uid] ?? 0} | </span>
-            <span>{t('onlyOne')}: {gameState.only?.[user.uid] ?? 0}</span>
+            <span>{t('kyuso')}: {gameState.kyuso?.[game.playerIds[0]] ?? 0} | </span>
+            <span>{t('onlyOne')}: {gameState.only?.[game.playerIds[0]] ?? 0}</span>
           </div>
         </Card>
       )}
-      {opponentId && gameState && gameState.scores && (
+      {opponentId && gameState && gameState.scores && game.playerIds[1] && (
          <Card className="p-4 bg-red-100 dark:bg-red-900/50">
-            <p className="font-bold">{opponentInfo?.displayName}: {gameState.scores?.[opponentId] ?? 0} {t('wins')}</p>
+            <p className="font-bold">{game.players[game.playerIds[1]].displayName}: {gameState.scores?.[game.playerIds[1]] ?? 0} {t('wins')}</p>
             <div className="text-sm opacity-80">
-                <span>{t('kyuso')}: {gameState.kyuso?.[opponentId] ?? 0} | </span>
-                <span>{t('onlyOne')}: {gameState.only?.[opponentId] ?? 0}</span>
+                <span>{t('kyuso')}: {gameState.kyuso?.[game.playerIds[1]] ?? 0} | </span>
+                <span>{t('onlyOne')}: {gameState.only?.[game.playerIds[1]] ?? 0}</span>
             </div>
         </Card>
       )}
@@ -358,6 +389,7 @@ export default function OnlineDuelPage() {
 
   const myMove = gameState?.moves?.[user.uid];
   const opponentMove = opponentId ? gameState?.moves?.[opponentId] : null;
+  const myCards = gameState.playerHands?.[user.uid] ?? [];
 
   return (
     <div className="text-center">
@@ -375,10 +407,14 @@ export default function OnlineDuelPage() {
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
-                            {gameState.playerHands?.[user.uid]?.map(card => (
-                            <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110">
-                                {card}
-                            </Button>
+                            {myCards.map(card => (
+                              <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-16 h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden">
+                                {card === 6 ? (
+                                    <Image src="/cards/duel-6.png" alt="Card 6" layout="fill" objectFit="cover" />
+                                ) : (
+                                    card
+                                )}
+                              </Button>
                             ))}
                         </div>
                     </>
@@ -393,12 +429,12 @@ export default function OnlineDuelPage() {
               <div className="flex justify-around items-center">
                 <div className="text-center">
                   <PlayerInfo uid={user.uid} />
-                  <div className={`mt-2 w-24 h-32 bg-blue-600 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-blue-400`}>{myMove ?? '?'}</div>
+                  <div className="mt-2"><CardDisplay card={myMove} /></div>
                 </div>
                 <div className="text-2xl font-bold">VS</div>
                 <div className="text-center">
                   {opponentId && <PlayerInfo uid={opponentId} />}
-                  <div className={`mt-2 w-24 h-32 bg-red-600 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-red-400`}>{opponentMove ?? '?'}</div>
+                  <div className="mt-2"><CardDisplay card={opponentMove} /></div>
                 </div>
               </div>
             </div>
