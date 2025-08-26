@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link"
-import { useState, useContext } from "react";
+import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button"
 import {
@@ -22,6 +22,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (user) {
+      router.push('/');
+    }
+  }, [user, router]);
+
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim()) {
@@ -36,7 +42,6 @@ export default function LoginPage() {
   };
 
   if (user) {
-    router.push('/');
     return null;
   }
 
