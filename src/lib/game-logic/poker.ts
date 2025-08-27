@@ -8,6 +8,10 @@ export type HandRank = { name: string; value: number };
 // This function now fetches card data from Firestore.
 export const createPokerDeck = async (): Promise<PokerCard[]> => {
   const pokerCards = await getCards('poker');
+  if (pokerCards.length === 0) {
+      console.error("Could not create poker deck, no cards found in database for game type 'poker'.");
+      return [];
+  }
   return shuffleDeck(pokerCards);
 };
 
@@ -65,7 +69,8 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
     const isFlush = Object.values(finalSuitCounts).some(count => count === 5);
     const is5SuitFlush = new Set(hand.map(c => c.suit)).size === 5;
     const isStraight = checkStraight(sortedRanks);
-    const isRoyal = isStraight && sortedRanks.includes(10) && sortedRanks.includes(14); // Simplified Royal check
+    // A,K,Q,J,10 has values 14,13,12,11,10
+    const isRoyal = isStraight && sortedRanks.every(rankValue => [10, 11, 12, 13, 14].includes(rankValue));
 
     const rankValues = Object.values(rankCounts).sort((a,b) => b-a);
     
@@ -73,15 +78,15 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
     if (isRoyal && isFlush) return { name: 'Royal Straight Flush', value: 13 };
     if (isStraight && is5SuitFlush) return { name: '5-Suit Straight Flush', value: 12 };
     if (isStraight && isFlush) return { name: 'Straight Flush', value: 11 };
-    if (rankValues[0] === 5) return { name: 'Five of a Kind', value: 10 };
-    if (rankValues[0] === 4) return { name: 'Four of a Kind', value: 9 };
-    if (rankValues[0] === 3 && rankValues[1] === 2) return { name: 'Full House', value: 8 };
+    if (rankValues.includes(5)) return { name: 'Five of a Kind', value: 10 };
+    if (rankValues.includes(4)) return { name: 'Four of a Kind', value: 9 };
+    if (rankValues.includes(3) && rankValues.includes(2)) return { name: 'Full House', value: 8 };
     if (isFlush) return { name: 'Flush', value: 7 };
     if (is5SuitFlush) return { name: '5-Suit Flush', value: 6 };
     if (isStraight) return { name: 'Straight', value: 5 };
-    if (rankValues[0] === 3) return { name: 'Three of a Kind', value: 4 };
+    if (rankValues.includes(3)) return { name: 'Three of a Kind', value: 4 };
     if (rankValues[0] === 2 && rankValues[1] === 2) return { name: 'Two Pair', value: 3 };
-    if (rankValues[0] === 2) return { name: 'One Pair', value: 2 };
+    if (rankValues.includes(2)) return { name: 'One Pair', value: 2 };
     
     return { name: 'High Card', value: 1 };
 };

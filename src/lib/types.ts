@@ -1,4 +1,5 @@
 
+
 export type Difficulty = "easy" | "normal" | "hard";
 export type Language = "en" | "ja";
 export type GameType = "duel" | "janken" | "poker";
@@ -37,13 +38,20 @@ export type Post = {
     likeCount: number;
 };
 
-// Represents a single card's data stored in Firestore
+// Represents a single card's data stored in Firestore, based on user's detailed spec
 export type CardData = {
     id: string;
-    name: string; // e.g., "Ace of Spades"
-    gameType: GameType | 'common'; // Which game this card belongs to, or 'common'
-    suit: string; // '♠️', '♥️', '♦️', '♣️', '⭐' or 'duel'
-    rank: string; // 'A', '2', 'K' or '1' to '13'
-    value: number;
+    gameType: GameType | 'common'; // Which game this card belongs to
+    suit: string;
+    number: number;
+    value: number; // For game logic, might be same as number
+    name: string;
+    artist: string;
     imageUrl: string;
+    rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
+    tags: string[];
+    variations?: {
+        designId: string;
+        imageUrl: string;
+    }[];
 };

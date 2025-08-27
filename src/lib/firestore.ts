@@ -1,4 +1,5 @@
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -392,25 +393,54 @@ export const deletePost = async (postId: string): Promise<void> => {
 
 
 // --- Card Management ---
+
+const CARD_CACHE_KEY = 'cardverse-card-cache';
+const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
+
 /**
- * Fetches all card definitions for a specific game from Firestore.
+ * Fetches all card definitions for a specific game from Firestore, with caching.
  * @param gameType The type of game to fetch cards for.
  * @returns A promise that resolves to an array of CardData.
  */
 export const getCards = async (gameType: GameType): Promise<CardData[]> => {
+    // 1. Check localStorage for cached data
+    try {
+        const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
+        if (cachedItem) {
+            const { timestamp, data } = JSON.parse(cachedItem);
+            if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
+                console.log(`Returning cached cards for ${gameType}`);
+                const allCards = data as CardData[];
+                return allCards.filter(card => card.gameType === gameType || card.gameType === 'common');
+            }
+        }
+    } catch (e) {
+        console.error("Error reading from card cache", e);
+    }
+    
+    // 2. If no valid cache, fetch from Firestore
+    console.log("Fetching cards from Firestore...");
     const cardsCollection = collection(db, 'cards');
-    const q = query(cardsCollection, where('gameType', '==', gameType));
-    const querySnapshot = await getDocs(q);
+    // Fetch all cards and filter locally to allow for 'common' cards.
+    const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
     querySnapshot.forEach((doc) => {
         cards.push({ id: doc.id, ...doc.data() } as CardData);
     });
 
-    // In a real scenario, you'd want to handle the case where no cards are found,
-    // perhaps by populating the DB with default cards. For now, we'll assume they exist.
-    if (cards.length === 0) {
-        console.warn(`No cards found in Firestore for game type: ${gameType}. The game may not work correctly.`);
+    // 3. Cache the new data in localStorage
+    try {
+        const cacheItem = { timestamp: Date.now(), data: cards };
+        localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(cacheItem));
+    } catch (e) {
+        console.error("Error writing to card cache", e);
     }
 
-    return cards;
+    if (cards.length === 0) {
+        console.warn(`No cards found in Firestore at all. The game may not work correctly.`);
+        return [];
+    }
+
+    // Return the filtered list for the requested game type
+    return cards.filter(card => card.gameType === gameType || card.gameType === 'common');
 }

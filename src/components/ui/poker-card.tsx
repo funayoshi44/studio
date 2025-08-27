@@ -3,17 +3,17 @@
 
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import type { PokerCard as PokerCardType } from '@/lib/game-logic/poker';
+import type { CardData } from '@/lib/game-logic/poker';
 
 type PokerCardProps = {
-  card: PokerCardType | null;
+  card: CardData | null;
   revealed?: boolean;
   className?: string;
 };
 
 
 export function PokerCard({ card, revealed = false, className }: PokerCardProps) {
-  const cardValue = card ? `${card.rank}${card.suit}` : '?';
+  const cardValue = card ? `${card.number}${card.suit}` : '?';
 
   if (!revealed || !card) {
     return (
@@ -50,7 +50,7 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
          </div>
       )}
       <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-center font-bold text-white backdrop-blur-sm">
-        <span className="text-lg md:text-xl">{card.rank}{card.suit}</span>
+        <span className="text-lg md:text-xl">{card.number}{card.suit}</span>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useContext, useEffect, useCallback } from 'react';
@@ -127,7 +128,7 @@ export default function PokerPage() {
         gameState: {
             exchangeCount: state.exchangeCount,
             // Pass hand as simple strings for the AI
-            cpuHand: state.cpuHand.map(c => `${c.rank}${c.suit}`),
+            cpuHand: state.cpuHand.map(c => `${c.number}${c.suit}`),
             cpuHandRank: t(cpuRankBefore.name as any), // Pass the evaluated rank name
         },
         // AI's available moves are the indices of the cards it can discard
