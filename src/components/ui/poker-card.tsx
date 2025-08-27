@@ -3,7 +3,7 @@
 
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import type { CardData } from '@/lib/game-logic/poker';
+import type { CardData } from '@/lib/types'; // Correctly import CardData from types
 
 type PokerCardProps = {
   card: CardData | null;
@@ -38,7 +38,7 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
       {card.imageUrl ? (
         <Image
           src={card.imageUrl}
-          alt={`Card ${cardValue}`}
+          alt={card.name || `Card ${cardValue}`}
           fill
           style={{ objectFit: 'cover' }}
           data-ai-hint="poker card illustration"
@@ -55,3 +55,5 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
     </div>
   );
 }
+
+    

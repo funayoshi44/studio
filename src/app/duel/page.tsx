@@ -10,15 +10,18 @@ import { getAIMove } from '../actions';
 import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-adjustment';
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Lightbulb } from 'lucide-react';
-import { GameCard } from '@/components/ui/game-card';
+import { Lightbulb, Loader2 } from 'lucide-react';
+import { PokerCard as GameCardComponent } from '@/components/ui/poker-card'; // Re-using poker card for richer data display
+import { getCards } from '@/lib/firestore';
+import type { CardData } from '@/lib/types';
+
 
 const TOTAL_ROUNDS = 13;
 
 type DuelState = {
   currentRound: number;
-  playerCards: number[];
-  cpuCards: number[];
+  playerCards: CardData[];
+  cpuCards: CardData[];
   playerScore: number;
   cpuScore: number;
   playerKyuso: number;
@@ -26,20 +29,19 @@ type DuelState = {
   playerOnly: number;
   cpuOnly: number;
   gameEnded: boolean;
-  playerCard: number | null;
-  cpuCard: number | null;
+  playerCard: CardData | null;
+  cpuCard: CardData | null;
   resultText: string;
   resultDetail: string;
   finalResult: string;
   finalDetail: string;
   history: { player: number; cpu: number }[];
   aiRationale: string | null;
+  isLoading: boolean;
 };
 
-const initialDuelState: DuelState = {
+const initialDuelState: Omit<DuelState, 'playerCards' | 'cpuCards'> = {
   currentRound: 1,
-  playerCards: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
-  cpuCards: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
   playerScore: 0,
   cpuScore: 0,
   playerKyuso: 0,
@@ -55,23 +57,71 @@ const initialDuelState: DuelState = {
   finalDetail: '',
   history: [],
   aiRationale: null,
+  isLoading: true,
 };
 
 export default function DuelPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
   const t = useTranslation();
-  const [state, setState] = useState<DuelState>(initialDuelState);
+  const [state, setState] = useState<DuelState>({ ...initialDuelState, playerCards: [], cpuCards: [], isLoading: true });
   const [loading, setLoading] = useState(false);
 
-  const restartGame = useCallback(() => {
-    setState(initialDuelState);
+  const initializeDecks = useCallback(async () => {
+    setState(prevState => ({ ...prevState, isLoading: true }));
+    try {
+        // Fetch all cards suitable for Duel (1-13)
+        let allCards = await getCards('common'); // Assuming duel cards are 'common'
+        let duelCards = allCards.filter(c => c.number >= 1 && c.number <= 13);
+        
+        // Ensure we have one of each number 1-13
+        const cardMap = new Map<number, CardData>();
+        for (const card of duelCards) {
+            if (!cardMap.has(card.number)) {
+                cardMap.set(card.number, card);
+            }
+        }
+        
+        const finalDeck = Array.from({ length: 13 }, (_, i) => i + 1).map(num => {
+            return cardMap.get(num) || { 
+                id: `fallback-${num}`, name: `Card ${num}`, number: num, value: num, suit: '?', 
+                imageUrl: `https://picsum.photos/seed/card-fallback-${num}/200/300`,
+                gameType: 'common', artist: 'System', rarity: 'common', tags: []
+            };
+        });
+
+        const shuffledPlayerDeck = [...finalDeck].sort(() => Math.random() - 0.5);
+        const shuffledCpuDeck = [...finalDeck].sort(() => Math.random() - 0.5);
+
+        setState(prevState => ({
+            ...prevState,
+            ...initialDuelState,
+            round: prevState.round, // Keep score across resets if any
+            playerScore: prevState.playerScore,
+            cpuScore: prevState.cpuScore,
+            playerCards: shuffledPlayerDeck,
+            cpuCards: shuffledCpuDeck,
+            isLoading: false,
+        }));
+    } catch (error) {
+        console.error("Failed to initialize decks:", error);
+        setState(prevState => ({ ...prevState, isLoading: false, gameEnded: true, finalResult: "Error initializing game." }));
+    }
   }, []);
 
-  const selectPlayerCard = async (card: number) => {
+  useEffect(() => {
+    initializeDecks();
+  }, [initializeDecks]);
+
+  const restartGame = useCallback(() => {
+    setState(prevState => ({...prevState, ...initialDuelState, playerCards: [], cpuCards: []}));
+    initializeDecks();
+  }, [initializeDecks]);
+
+  const selectPlayerCard = async (card: CardData) => {
     if (loading || state.gameEnded) return;
     setLoading(true);
 
-    const newPlayerCards = state.playerCards.filter((c) => c !== card);
+    const newPlayerCards = state.playerCards.filter((c) => c.id !== card.id);
     setState(prev => ({ ...prev, playerCard: card, playerCards: newPlayerCards, aiRationale: null }));
 
     const { player: prevPlayerMove, cpu: prevCpuMove } = state.history[state.history.length - 1] || {};
@@ -86,26 +136,28 @@ export default function DuelPage() {
         playerKyuso: state.playerKyuso,
         cpuKyuso: state.cpuKyuso,
       },
-      availableMoves: state.cpuCards.map(String),
+      availableMoves: state.cpuCards.map(c => String(c.number)),
       playerPreviousMove: prevPlayerMove?.toString(),
       cpuPreviousMove: prevCpuMove?.toString(),
     };
 
     const aiResponse = await getAIMove(aiInput);
-    let cpuCard = parseInt(aiResponse.move, 10);
-    if (isNaN(cpuCard) || !state.cpuCards.includes(cpuCard)) {
+    let cpuCardNumber = parseInt(aiResponse.move, 10);
+    let cpuCard = state.cpuCards.find(c => c.number === cpuCardNumber);
+
+    if (!cpuCard) {
         cpuCard = state.cpuCards[Math.floor(Math.random() * state.cpuCards.length)];
     }
     
-    const newCpuCards = state.cpuCards.filter((c) => c !== cpuCard);
+    const newCpuCards = state.cpuCards.filter((c) => c.id !== cpuCard!.id);
     
     setTimeout(() => {
         setState(prev => ({ ...prev, cpuCard, aiRationale: aiResponse.rationale }));
-        setTimeout(() => evaluateRound(card, cpuCard, newCpuCards), 500);
+        setTimeout(() => evaluateRound(card, cpuCard!, newCpuCards), 500);
     }, 300);
   };
   
-  const evaluateRound = (playerCard: number, cpuCard: number, newCpuCards: number[]) => {
+  const evaluateRound = (playerCard: CardData, cpuCard: CardData, newCpuCards: CardData[]) => {
     let winner: 'player' | 'cpu' | 'draw' = 'draw';
     let resultText = '';
     let resultDetail = '';
@@ -118,35 +170,38 @@ export default function DuelPage() {
     let newPlayerOnly = state.playerOnly;
     let newCpuOnly = state.cpuOnly;
 
-    if (playerCard === 1 && cpuCard === 13) {
+    const pNum = playerCard.number;
+    const cNum = cpuCard.number;
+
+    if (pNum === 1 && cNum === 13) {
       winner = 'player';
       resultDetail = t('duelResultOnlyOne');
       newPlayerOnly++;
       isSpecialWin = true; winType = 'only';
-    } else if (cpuCard === 1 && playerCard === 13) {
+    } else if (cNum === 1 && pNum === 13) {
       winner = 'cpu';
       resultDetail = t('duelResultOnlyOne');
       newCpuOnly++;
       isSpecialWin = true; winType = 'only';
-    } else if (playerCard === cpuCard - 1) {
+    } else if (pNum === cNum - 1) {
       winner = 'player';
       resultDetail = t('duelResultKyuso');
       newPlayerKyuso++;
       isSpecialWin = true; winType = 'kyuso';
-    } else if (cpuCard === playerCard - 1) {
+    } else if (cNum === pNum - 1) {
       winner = 'cpu';
       resultDetail = t('duelResultKyuso');
       newCpuKyuso++;
       isSpecialWin = true; winType = 'kyuso';
-    } else if (playerCard > cpuCard) {
+    } else if (pNum > cNum) {
       winner = 'player';
-      resultDetail = `${playerCard} vs ${cpuCard}`;
-    } else if (cpuCard > playerCard) {
+      resultDetail = `${pNum} vs ${cNum}`;
+    } else if (cNum > pNum) {
         winner = 'cpu';
-        resultDetail = `${cpuCard} vs ${playerCard}`;
+        resultDetail = `${cNum} vs ${pNum}`;
     } else {
         winner = 'draw';
-        resultDetail = `${playerCard} vs ${cpuCard}`;
+        resultDetail = `${pNum} vs ${cNum}`;
     }
 
     if (winner === 'player') {
@@ -159,7 +214,7 @@ export default function DuelPage() {
         resultText = t('draw');
     }
 
-    const newHistory = [...state.history, { player: playerCard, cpu: cpuCard }];
+    const newHistory = [...state.history, { player: pNum, cpu: cNum }];
     const nextRound = state.currentRound + 1;
 
     setState(prev => ({
@@ -250,6 +305,15 @@ export default function DuelPage() {
     </div>
   );
 
+  if (state.isLoading) {
+      return (
+          <div className="text-center py-20">
+              <Loader2 className="w-12 h-12 mx-auto animate-spin" />
+              <p className="mt-4 text-lg text-muted-foreground">Loading cards from database...</p>
+          </div>
+      )
+  }
+
   return (
     <div className="text-center">
       <h2 className="text-3xl font-bold mb-2">{t('duelTitle')}</h2>
@@ -266,9 +330,9 @@ export default function DuelPage() {
             <div className="my-8">
               <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
               <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
-                {state.playerCards.map(card => (
-                  <button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="transition-transform hover:scale-105">
-                     <GameCard number={card} revealed={true} />
+                {state.playerCards.sort((a, b) => a.number - b.number).map(card => (
+                  <button key={card.id} onClick={() => selectPlayerCard(card)} disabled={loading} className="transition-transform hover:scale-105">
+                     <GameCardComponent card={card} revealed={true} />
                   </button>
                 ))}
               </div>
@@ -280,11 +344,11 @@ export default function DuelPage() {
               <div className="flex justify-center space-x-8">
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('you')}</h4>
-                   <GameCard number={state.playerCard} revealed={true} />
+                   <GameCardComponent card={state.playerCard} revealed={true} />
                 </div>
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('cpu')}</h4>
-                  <GameCard number={state.cpuCard} revealed={state.cpuCard !== null} />
+                  <GameCardComponent card={state.cpuCard} revealed={state.cpuCard !== null} />
                 </div>
               </div>
             </div>
@@ -339,3 +403,5 @@ export default function DuelPage() {
     </div>
   );
 }
+
+    
