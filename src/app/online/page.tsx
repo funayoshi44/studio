@@ -167,7 +167,7 @@ export default function OnlineLobbyPage() {
             <CardContent className="grid sm:grid-cols-3 gap-6">
             <GameCard gameType="duel" icon={Swords} />
             <GameCard gameType="janken" icon={Scissors} />
-            <GameCard gameType="poker" icon={Layers} disabled />
+            <GameCard gameType="poker" icon={Layers} />
             </CardContent>
         </Card>
         <Card>

@@ -16,10 +16,15 @@ export const createPokerDeck = async (): Promise<PokerCard[]> => {
   }
 
   // Filter for cards that are relevant for a standard poker deck (or your specific rules)
-  // For now, we'll assume all fetched cards are usable in poker.
   const deck = pokerCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
   if (deck.length < 52) {
-      console.warn(`Poker deck has only ${deck.length} cards. Standard games might not work.`);
+      console.warn(`Poker deck has only ${deck.length} cards. Standard games might not work. Replicating cards to ensure full deck.`);
+      const baseDeck = deck.length > 0 ? deck : createDefaultDeck();
+      const fullDeck: PokerCard[] = [];
+      while(fullDeck.length < 52) {
+          fullDeck.push(...baseDeck);
+      }
+      return shuffleDeck(fullDeck.slice(0, 52));
   }
 
   return shuffleDeck(deck);

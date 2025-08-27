@@ -70,4 +70,5 @@ export interface Game {
   createdAt: Timestamp;
   gameState: any;
   winner?: string | null; // UID of the winner
+  maxPlayers?: number;
 }

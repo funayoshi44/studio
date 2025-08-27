@@ -131,12 +131,10 @@ export default function OnlineJankenPage() {
         let resultText = '';
         
         // Apply penalty rule first
-        if (p1Changed && !checkWin(p1Moves.final, p2Moves.final)) {
-            // Player 1 changed and did not win (loss or draw) -> Player 1 loses
+        if (p1Changed && !checkWin(p1Moves.final, p2Moves.final) && p1Moves.final !== p2Moves.final) {
             resultText = `${game.players[p2Id].displayName} ${t('wins')}! (${game.players[p1Id].displayName}'s penalty)`;
             winner = p2Id;
-        } else if (p2Changed && !checkWin(p2Moves.final, p1Moves.final)) {
-            // Player 2 changed and did not win (loss or draw) -> Player 2 loses
+        } else if (p2Changed && !checkWin(p2Moves.final, p1Moves.final) && p2Moves.final !== p1Moves.final) {
             resultText = `${game.players[p1Id].displayName} ${t('wins')}! (${game.players[p2Id].displayName}'s penalty)`;
             winner = p1Id;
         } else if (checkWin(p1Moves.final, p2Moves.final)) {
@@ -249,19 +247,26 @@ export default function OnlineJankenPage() {
 
         // Initial phase: hide everything until both have moved
         if (phase === 'initial') {
-            if (gameState.phase === 'initial') {
-                 return move ? '✅' : '❓';
-            }
+             if (gameState.phase === 'initial') {
+                if (uid === user.uid) {
+                    return move ? getJankenEmoji(move) : '❓';
+                }
+                return move ? '✅' : '❓';
+             }
              // In final phase, initial moves are public
             return getJankenEmoji(gameState.moves[uid].initial);
         }
         
-        // Final phase: show my move, hide opponent's
+        // Final phase
         if (phase === 'final') {
-            if (uid === user.uid) {
-                return getJankenEmoji(move);
-            }
-            return move ? '✅' : '❓';
+             if (gameState.phase === 'final') {
+                // Show my move if I've made it
+                if (uid === user.uid) {
+                    return move ? getJankenEmoji(move) : '❓';
+                }
+                // Hide opponent's final move until result phase
+                return move ? '✅' : '❓';
+             }
         }
         
         return '❓';
@@ -304,6 +309,7 @@ export default function OnlineJankenPage() {
             {gameState.phase !== 'result' && (
                 <div className="my-8">
                     <h3 className="text-xl font-bold mb-4">{gameState.phase === 'initial' ? t('jankenPhase1Title') : t('jankenPhase2Title')}</h3>
+                    {gameState.phase === 'final' && <p className="text-sm text-muted-foreground mb-4">Opponent's first move was {getJankenEmoji(opponentMoves?.initial)}. Decide your final move!</p>}
                      <div className="flex justify-center space-x-4">
                         {moves.map(move => (
                             <Button key={move} onClick={() => handleSelectMove(move)} size="lg" className="text-4xl w-24 h-24" disabled={loading || myMoves[gameState.phase] != null}>
@@ -321,16 +327,16 @@ export default function OnlineJankenPage() {
                  <div>
                     <h4 className="font-bold">{t('firstMoves')}</h4>
                     <div className="flex justify-around text-4xl mt-2">
-                        <span>{renderMove(user.uid, 'initial')}</span>
-                        <span>{renderMove(opponentId, 'initial')}</span>
+                        <span>{getJankenEmoji(gameState.moves[user.uid]?.initial)}</span>
+                        <span>{opponentId ? getJankenEmoji(gameState.moves[opponentId]?.initial) : '❓'}</span>
                     </div>
                 </div>
                 {gameState.phase === 'result' && (
                     <div>
                         <h4 className="font-bold">{t('finalResult')}</h4>
                         <div className="flex justify-around text-4xl mt-2">
-                            <span>{renderMove(user.uid, 'final')}</span>
-                            <span>{renderMove(opponentId, 'final')}</span>
+                            <span>{getJankenEmoji(gameState.moves[user.uid]?.final)}</span>
+                            <span>{opponentId ? getJankenEmoji(gameState.moves[opponentId]?.final) : '❓'}</span>
                         </div>
                     </div>
                 )}

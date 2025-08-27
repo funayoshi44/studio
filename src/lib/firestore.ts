@@ -1,5 +1,6 @@
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -20,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData } from './types';
+import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
 const TOTAL_ROUNDS = 13;
@@ -84,16 +86,44 @@ const getInitialJankenGameState = (playerIds: string[] = []) => {
     return gameState;
 };
 
+const getInitialPokerGameState = async (playerIds: string[] = []) => {
+    const deck = await createPokerDeck();
+    const gameState: any = {
+        phase: 'dealing', // dealing -> exchanging -> showdown -> finished
+        deck: [],
+        playerHands: {},
+        selectedCards: {},
+        exchangeCounts: {},
+        playerRanks: {},
+        turnOrder: playerIds.sort(() => Math.random() - 0.5), // Randomize turn order
+        currentTurnIndex: 0,
+        winners: null,
+        resultText: '',
+    };
+
+    playerIds.forEach(uid => {
+        gameState.playerHands[uid] = deck.splice(0, 5);
+        gameState.exchangeCounts[uid] = 0;
+        gameState.selectedCards[uid] = [];
+        gameState.playerRanks[uid] = null;
+    });
+
+    gameState.deck = deck;
+    gameState.phase = 'exchanging';
+
+    return gameState;
+};
+
+
 const getInitialStateForGame = async (gameType: GameType, playerIds: string[]) => {
     switch (gameType) {
         case 'duel':
             return getInitialDuelGameState(playerIds);
         case 'janken':
             return getInitialJankenGameState(playerIds);
-        // case 'poker':
-        //     return getInitialPokerGameState(playerIds);
+        case 'poker':
+            return getInitialPokerGameState(playerIds);
         default:
-            // Return a default state or throw an error
             return getInitialDuelGameState(playerIds);
     }
 }
@@ -123,6 +153,7 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
     playerIds: [user.uid],
     status: 'waiting',
     createdAt: serverTimestamp(),
+    maxPlayers: gameType === 'poker' ? 4 : 2,
     // Initialize gameState after creating the document shell
   });
   
@@ -145,14 +176,16 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         }
 
         const gameData = gameSnap.data() as Game;
-        if (gameData.playerIds.length >= 2 || gameData.playerIds.includes(user.uid)) {
-            // Silently ignore if user tries to join a full game or is already in it.
-            // This can happen with fast clicks.
+        const maxPlayers = gameData.maxPlayers || 2;
+        if (gameData.playerIds.length >= maxPlayers || gameData.playerIds.includes(user.uid)) {
             return;
         }
         
         const newPlayerIds = [...gameData.playerIds, user.uid];
-        const newGameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
+        const isGameStarting = newPlayerIds.length === maxPlayers;
+        const newGameState = isGameStarting 
+            ? await getInitialStateForGame(gameData.gameType, newPlayerIds)
+            : gameData.gameState;
 
         transaction.update(gameRef, {
             [`players.${user.uid}`]: {
@@ -161,7 +194,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
                 bio: user.bio || '',
             },
             playerIds: newPlayerIds,
-            status: 'in-progress',
+            status: isGameStarting ? 'in-progress' : 'waiting',
             gameState: newGameState,
         });
     });
@@ -187,7 +220,7 @@ export const updateGameState = async (gameId: string, newGameState: any): Promis
   const updatePayload: { [key: string]: any } = {
     gameState: newGameState,
   };
-
+  
   if (newGameState.status !== undefined) {
     updatePayload.status = newGameState.status;
   }
@@ -204,28 +237,63 @@ export const submitMove = async (gameId: string, userId: string, move: any, phas
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) {
-            throw new Error("Game document does not exist!");
-        }
+        if (!gameDoc.exists()) throw new Error("Game not found!");
 
         const gameData = gameDoc.data() as Game;
-        const currentGameState = gameData.gameState || {};
-        let newGameState;
+        let newGameState = { ...gameData.gameState };
 
         if (gameData.gameType === 'janken' && phase) {
-            // Janken move submission logic
-            const newMoves = { 
-                ...currentGameState.moves,
-                [userId]: {
-                    ...currentGameState.moves[userId],
-                    [phase]: move,
-                }
-            };
-            newGameState = { ...currentGameState, moves: newMoves };
-        } else {
-            // Duel move submission logic (or other games)
-            const newMoves = { ...currentGameState.moves, [userId]: move };
-            newGameState = { ...currentGameState, moves: newMoves, lastMoveBy: userId };
+            newGameState.moves[userId][phase] = move;
+        } else if (gameData.gameType === 'poker') {
+            if (move.action === 'exchange') {
+                const { indices } = move;
+                let playerHand = [...newGameState.playerHands[userId]];
+                let deck = [...newGameState.deck];
+                indices.forEach((index: number) => {
+                    if (deck.length > 0) {
+                        playerHand[index] = deck.pop()!;
+                    }
+                });
+                newGameState.playerHands[userId] = playerHand;
+                newGameState.deck = deck;
+                newGameState.exchangeCounts[userId]++;
+            }
+            
+            // Advance turn or go to showdown
+            const currentIndex = newGameState.turnOrder.indexOf(userId);
+            const nextIndex = (currentIndex + 1) % gameData.playerIds.length;
+            newGameState.currentTurnIndex = nextIndex;
+
+            // If it's back to the first player, or if showdown is triggered, evaluate.
+            if (nextIndex === 0 || move.action === 'showdown' || newGameState.exchangeCounts[userId] >= 2) {
+                newGameState.phase = 'showdown';
+                // Evaluate all hands
+                gameData.playerIds.forEach(pid => {
+                    newGameState.playerRanks[pid] = evaluatePokerHand(newGameState.playerHands[pid]);
+                });
+
+                // Find winner(s)
+                let highestRank = { name: '', value: 0 };
+                let winners: string[] = [];
+                gameData.playerIds.forEach(pid => {
+                    const rank = newGameState.playerRanks[pid];
+                    if (rank.value > highestRank.value) {
+                        highestRank = rank;
+                        winners = [pid];
+                    } else if (rank.value === highestRank.value) {
+                        winners.push(pid);
+                    }
+                });
+                newGameState.winners = winners;
+                newGameState.resultText = winners.length > 1 
+                    ? `Draw between ${winners.map(w => gameData.players[w]?.displayName).join(', ')}!`
+                    : `${gameData.players[winners[0]]?.displayName} wins with a ${highestRank.name}!`;
+                newGameState.phase = 'finished';
+            }
+
+        } else { // Duel
+            newGameState.moves[userId] = move;
+            newGameState.lastMoveBy = userId;
         }
         
         transaction.update(gameRef, { gameState: newGameState });
@@ -253,9 +321,9 @@ export const findAvailableGames = async (): Promise<Game[]> => {
 // --- Auto Matchmaking ---
 export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promise<string> => {
   const gamesRef = collection(db, 'games');
+  const maxPlayers = gameType === 'poker' ? 4 : 2;
   
   return runTransaction(db, async (transaction) => {
-    // Query for a waiting game of the correct type that the user is not already in.
     const q = query(
         gamesRef,
         where('gameType', '==', gameType),
@@ -270,7 +338,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     
     for (const doc of querySnapshot.docs) {
         const game = { id: doc.id, ...doc.data() } as Game;
-        if (!game.playerIds.includes(user.uid)) {
+        if (!game.playerIds.includes(user.uid) && game.playerIds.length < maxPlayers) {
             suitableGame = game;
             suitableGameId = doc.id;
             break;
@@ -278,19 +346,18 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     }
 
     if (suitableGame && suitableGameId) {
-      // Found a game, join it
       const gameRef = doc(db, 'games', suitableGameId);
       const newPlayerIds = [...suitableGame.playerIds, user.uid];
-      const newGameState = await getInitialStateForGame(gameType, newPlayerIds);
+      const isGameStarting = newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
+      
+      const newGameState = isGameStarting
+        ? await getInitialStateForGame(gameType, newPlayerIds)
+        : suitableGame.gameState;
 
       transaction.update(gameRef, {
-        [`players.${user.uid}`]: {
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          bio: user.bio || '',
-        },
+        [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' },
         playerIds: newPlayerIds,
-        status: 'in-progress',
+        status: isGameStarting ? 'in-progress' : 'waiting',
         gameState: newGameState,
       });
       return suitableGameId;
@@ -301,17 +368,12 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       
       transaction.set(newGameRef, {
         gameType,
-        players: {
-          [user.uid]: {
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            bio: user.bio || '',
-          },
-        },
+        players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' } },
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
         gameState: newGameState,
+        maxPlayers: maxPlayers,
       });
       return newGameRef.id;
     }
@@ -330,18 +392,31 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
             }
 
             const gameData = gameSnap.data() as Game;
+            if (gameData.status === 'finished') return;
 
-            // Don't do anything if game is already finished
-            if (gameData.status === 'finished') {
-                return;
+            const remainingPlayers = gameData.playerIds.filter(p => p !== leavingPlayerId);
+
+            if (remainingPlayers.length < 2 && gameData.status === 'in-progress') {
+                // If only one player is left, they are the winner.
+                transaction.update(gameRef, {
+                    status: 'finished',
+                    winner: remainingPlayers[0] || null,
+                });
+            } else if (remainingPlayers.length > 0) {
+                 // The game continues with the remaining players
+                 const newPlayerIds = remainingPlayers;
+                 const newPlayersObject: { [uid: string]: any } = {};
+                 newPlayerIds.forEach(pid => {
+                     newPlayersObject[pid] = gameData.players[pid];
+                 });
+                 transaction.update(gameRef, {
+                     playerIds: newPlayerIds,
+                     players: newPlayersObject
+                 })
+            } else {
+                // No players left, just mark as finished
+                transaction.update(gameRef, { status: 'finished', winner: null });
             }
-
-            const winnerId = gameData.playerIds.find(p => p !== leavingPlayerId) || null;
-
-            transaction.update(gameRef, {
-                status: 'finished',
-                winner: winnerId,
-            });
         });
     } catch (error) {
         console.error("Failed to leave game:", error);
@@ -399,6 +474,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId), 
+        // orderBy('createdAt', 'desc'), // This requires a composite index
         limit(50)
     );
 
