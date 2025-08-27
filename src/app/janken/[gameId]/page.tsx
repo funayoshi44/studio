@@ -129,19 +129,25 @@ export default function OnlineJankenPage() {
         let winner: string | 'draw' = 'draw';
         let resultText = '';
         
-        if (p1Changed && !checkWin(p1Moves.final, p2Moves.final) && p1Moves.final !== p2Moves.final) {
+        // Apply penalty rule first
+        if (p1Changed && !checkWin(p1Moves.final, p2Moves.final)) {
+            // Player 1 changed and did not win (loss or draw) -> Player 1 loses
             resultText = `${game.players[p2Id].displayName} ${t('wins')}! (${game.players[p1Id].displayName}'s penalty)`;
             winner = p2Id;
-        } else if (p2Changed && !checkWin(p2Moves.final, p1Moves.final) && p2Moves.final !== p1Moves.final) {
+        } else if (p2Changed && !checkWin(p2Moves.final, p1Moves.final)) {
+            // Player 2 changed and did not win (loss or draw) -> Player 2 loses
             resultText = `${game.players[p1Id].displayName} ${t('wins')}! (${game.players[p2Id].displayName}'s penalty)`;
             winner = p1Id;
         } else if (checkWin(p1Moves.final, p2Moves.final)) {
+            // Standard win for Player 1
             resultText = `${game.players[p1Id].displayName} ${t('wins')}!`;
             winner = p1Id;
         } else if (checkWin(p2Moves.final, p1Moves.final)) {
+            // Standard win for Player 2
             resultText = `${game.players[p2Id].displayName} ${t('wins')}!`;
             winner = p2Id;
         } else {
+            // Draw without any penalties
             resultText = t('draw');
         }
         
@@ -319,6 +325,3 @@ export default function OnlineJankenPage() {
         </div>
     );
 }
-
-
-    
