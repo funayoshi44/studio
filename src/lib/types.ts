@@ -71,14 +71,3 @@ export interface Game {
   gameState: any;
   winner?: string | null; // UID of the winner
 }
-
-export interface Message {
-  id: string;
-  uid: string;
-  displayName: string | null;
-  photoURL: string | null;
-  text: string;
-  createdAt: Timestamp;
-}
-
-    

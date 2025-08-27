@@ -19,7 +19,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { Game, GameType, MockUser, Post, CardData, Message } from './types';
+import type { Game, GameType, MockUser, Post, CardData } from './types';
 
 
 const TOTAL_ROUNDS = 13;
@@ -235,29 +235,6 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       });
       return newGameRef.id;
     }
-  });
-};
-
-// Send a message in a game chat
-export const sendMessage = async (gameId: string, message: Omit<Message, 'id' | 'createdAt'>) => {
-  const messagesCol = collection(db, 'games', gameId, 'messages');
-  await addDoc(messagesCol, {
-    ...message,
-    createdAt: serverTimestamp(),
-  });
-};
-
-// Listen for messages in a game chat
-export const subscribeToMessages = (gameId: string, callback: (messages: Message[]) => void) => {
-  const messagesCol = collection(db, 'games', gameId, 'messages');
-  const q = query(messagesCol, orderBy('createdAt', 'desc'), limit(50));
-
-  return onSnapshot(q, (querySnapshot) => {
-    const messages: Message[] = [];
-    querySnapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() } as Message);
-    });
-    callback(messages);
   });
 };
 
@@ -487,5 +464,3 @@ export const deleteCard = async (card: CardData): Promise<void> => {
     // 3. Force refresh the cache
     await getCards(true);
 };
-
-    

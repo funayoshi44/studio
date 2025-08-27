@@ -1,18 +1,17 @@
 
 "use client";
 
-import { useState, useContext, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message, leaveGame } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, Send, Flag } from 'lucide-react';
+import { Copy, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { GameCard } from '@/components/ui/game-card';
 
@@ -43,8 +42,6 @@ export default function OnlineDuelPage() {
 
   const t = useTranslation();
   const [game, setGame] = useState<Game | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const gameState = game?.gameState as DuelGameState | undefined;
@@ -67,7 +64,7 @@ export default function OnlineDuelPage() {
   }, [gameId, user, game?.status]);
 
 
-  // Subscribe to game and message updates
+  // Subscribe to game updates
   useEffect(() => {
     if (!gameId || !user) return;
     const unsubscribeGame = subscribeToGame(gameId, (gameData) => {
@@ -91,11 +88,8 @@ export default function OnlineDuelPage() {
       }
     });
 
-    const unsubscribeMessages = subscribeToMessages(gameId, setMessages);
-
     return () => {
       unsubscribeGame();
-      unsubscribeMessages();
     };
   }, [gameId, user, router, toast, game?.status, t]);
 
@@ -253,60 +247,6 @@ export default function OnlineDuelPage() {
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !gameId || !newMessage.trim()) return;
-
-    try {
-      await sendMessage(gameId, {
-        uid: user.uid,
-        displayName: user.displayName,
-        photoURL: user.photoURL,
-        text: newMessage.trim(),
-      });
-      setNewMessage('');
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({ title: "Error", description: "Failed to send message.", variant: 'destructive' });
-    }
-  };
-
-  const ChatBox = () => (
-    <Card className="w-full max-w-lg mx-auto">
-      <CardHeader>
-        <CardTitle>{t('chat')}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="h-64 overflow-y-auto p-4 border rounded-md mb-4 flex flex-col-reverse bg-muted/50">
-          <div className="flex flex-col-reverse gap-4">
-          {messages.map(msg => (
-            <div key={msg.id} className="flex items-start gap-3">
-              <Avatar className="w-8 h-8">
-                <AvatarImage src={msg.photoURL ?? undefined} />
-                <AvatarFallback>{msg.displayName?.[0]}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <p className="font-bold text-sm">{msg.displayName}</p>
-                <p className="text-sm bg-background p-2 rounded-lg">{msg.text}</p>
-              </div>
-            </div>
-          ))}
-          </div>
-        </div>
-        <form onSubmit={handleSendMessage} className="flex gap-2">
-          <Input
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder={t('sendAMessage')}
-          />
-          <Button type="submit" size="icon" disabled={!newMessage.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
-  
   if (!user || !game) {
     return <div className="text-center py-10">Loading game...</div>;
   }
@@ -322,7 +262,6 @@ export default function OnlineDuelPage() {
             </div>
             <p className="mb-4">{t('orShareUrl')}</p>
             <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-8"></div>
-            <ChatBox />
         </div>
     );
   }
@@ -478,8 +417,6 @@ export default function OnlineDuelPage() {
         </div>
       )}
 
-      <ChatBox />
-
       <Card className="max-w-4xl mx-auto mt-12 text-left bg-card/50">
         <CardHeader><CardTitle>📖 {t('duelTitle')} Rules</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm text-muted-foreground">
@@ -492,5 +429,3 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
-
-    
