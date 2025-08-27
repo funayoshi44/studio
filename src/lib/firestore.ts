@@ -399,7 +399,6 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId), 
-        orderBy('createdAt', 'desc'),
         limit(50)
     );
 
@@ -408,7 +407,13 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
         snapshot.forEach((doc) => {
             posts.push({ id: doc.id, ...doc.data() } as Post);
         });
-        callback(posts);
+        // Sort posts on the client-side to avoid needing a composite index
+        const sortedPosts = posts.sort((a, b) => {
+            const dateA = a.createdAt?.toDate() || new Date(0);
+            const dateB = b.createdAt?.toDate() || new Date(0);
+            return dateB.getTime() - dateA.getTime();
+        });
+        callback(sortedPosts);
     });
 };
 
