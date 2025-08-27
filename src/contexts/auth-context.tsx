@@ -186,7 +186,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateUser = async (data: UpdateUserInput) => {
     if (!user) return;
 
-    setIsLoading(true);
+    setLoading(true);
     let newPhotoURL = user.photoURL;
 
     try {
