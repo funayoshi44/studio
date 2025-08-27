@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { getStorage, ref, getDownloadURL } from 'firebase/storage';
 import { useEffect, useState } from 'react';
+import { CARD_6_IMAGE_PATH } from '@/lib/constants';
 
 type GameCardProps = {
   number: number | null;
@@ -23,8 +24,9 @@ export function GameCard({ number, revealed = false, className }: GameCardProps)
         setLoading(true);
         try {
           const storage = getStorage();
-          // Updated path to reflect the new storage structure
-          const imageRef = ref(storage, `cards/duel/${number}.png`);
+          // Use a specific constant for card 6, and a generic path for others as an example
+          const imagePath = number === 6 ? CARD_6_IMAGE_PATH : `cards/duel/${number}.png`;
+          const imageRef = ref(storage, imagePath);
           const url = await getDownloadURL(imageRef);
           setImageUrl(url);
         } catch (error) {
