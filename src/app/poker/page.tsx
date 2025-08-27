@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { evaluatePokerHand, type PokerCard, createPokerDeck } from '@/lib/game-logic/poker';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Lightbulb } from 'lucide-react';
+import { Lightbulb, Loader2 } from 'lucide-react';
 import { PokerCard as PokerCardComponent } from '@/components/ui/poker-card';
 
 
@@ -20,7 +20,7 @@ type PokerState = {
   round: number;
   playerScore: number;
   cpuScore: number;
-  phase: 'betting' | 'result';
+  phase: 'betting' | 'result' | 'loading';
   playerHand: PokerCard[];
   cpuHand: PokerCard[];
   deck: PokerCard[];
@@ -36,7 +36,7 @@ const initialPokerState: PokerState = {
   round: 1,
   playerScore: 0,
   cpuScore: 0,
-  phase: 'betting',
+  phase: 'loading',
   playerHand: [],
   cpuHand: [],
   deck: [],
@@ -54,8 +54,14 @@ export default function PokerPage() {
   const [state, setState] = useState<PokerState>(initialPokerState);
   const [loading, setLoading] = useState(false);
 
-  const dealNewHand = useCallback(() => {
-    const deck = createPokerDeck();
+  const dealNewHand = useCallback(async () => {
+    setState(prev => ({ ...prev, phase: 'loading' }));
+    const deck = await createPokerDeck();
+    if (deck.length < 10) {
+      console.error("Not enough cards to deal.");
+      // Here you might want to set an error state in the UI
+      return;
+    }
     const playerHand = deck.splice(0, 5);
     const cpuHand = deck.splice(0, 5);
     setState(prev => ({
@@ -63,16 +69,20 @@ export default function PokerPage() {
         round: prev.round,
         playerScore: prev.playerScore,
         cpuScore: prev.cpuScore,
-        deck, playerHand, cpuHand
+        deck, 
+        playerHand, 
+        cpuHand,
+        phase: 'betting'
     }));
   }, []);
+
 
   useEffect(() => {
     dealNewHand();
   }, [dealNewHand]);
 
   const toggleCardSelection = (index: number) => {
-    if (state.exchangeCount >= 2 || state.phase === 'result') return;
+    if (state.exchangeCount >= 2 || state.phase !== 'betting') return;
     setState(prev => {
         const selectedIndices = [...prev.selectedIndices];
         const cardIndex = selectedIndices.indexOf(index);
@@ -172,7 +182,7 @@ export default function PokerPage() {
         const isSelected = owner === 'player' && state.selectedIndices.includes(index);
         return (
           <div
-            key={index}
+            key={card.id || index}
             className={cn(
               "transition-transform duration-300",
               owner === 'player' && state.phase === 'betting' && "cursor-pointer",
@@ -186,6 +196,15 @@ export default function PokerPage() {
       })}
     </div>
   );
+
+  if (state.phase === 'loading') {
+    return (
+        <div className="text-center py-20">
+            <Loader2 className="w-12 h-12 mx-auto animate-spin" />
+            <p className="mt-4 text-lg text-muted-foreground">Shuffling the deck...</p>
+        </div>
+    )
+  }
 
   return (
     <div className="text-center">

@@ -1,29 +1,14 @@
-export type Suit = '♠️' | '♥️' | '♦️' | '♣️' | '⭐';
-export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
-export type PokerCard = { suit: Suit; rank: Rank; value: number };
+import type { CardData } from '@/lib/types';
+import { getCards } from '@/lib/firestore';
+
+// Re-exporting CardData as PokerCard for semantic clarity in the Poker game context.
+export type PokerCard = CardData;
 export type HandRank = { name: string; value: number };
 
-const suits: Suit[] = ['♠️', '♥️', '♦️', '♣️', '⭐'];
-const ranks: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-
-const getRankValue = (rank: Rank): number => {
-  if (rank === 'A') return 14;
-  if (rank === 'K') return 13;
-  if (rank === 'Q') return 12;
-  if (rank === 'J') return 11;
-  return parseInt(rank);
-};
-
-export const createPokerDeck = (): PokerCard[] => {
-  let deck: PokerCard[] = [];
-  // For a 5-suit poker, we need more cards. A standard 52-card deck is used per suit for simplicity, leading to a large deck.
-  // In a real game, card distribution might be different. Here we use 5 full sets.
-  for (const suit of suits) {
-    for (const rank of ranks) {
-      deck.push({ suit, rank, value: getRankValue(rank) });
-    }
-  }
-  return shuffleDeck(deck);
+// This function now fetches card data from Firestore.
+export const createPokerDeck = async (): Promise<PokerCard[]> => {
+  const pokerCards = await getCards('poker');
+  return shuffleDeck(pokerCards);
 };
 
 const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
@@ -36,8 +21,9 @@ const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
 
 const checkStraight = (sortedRanks: number[]): boolean => {
     if (sortedRanks.length !== 5) return false;
-    // Ace-low straight (A-2-3-4-5)
-    if (JSON.stringify(sortedRanks) === JSON.stringify([2,3,4,5,14])) return true;
+    // Ace-low straight (A-2-3-4-5) where Ace (14) is treated as 1
+    const isAceLow = JSON.stringify(sortedRanks) === JSON.stringify([2, 3, 4, 5, 14]);
+    if (isAceLow) return true;
     
     let isStraight = true;
     for (let i = 0; i < sortedRanks.length - 1; i++) {
@@ -64,7 +50,6 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
     });
 
     const sortedRanks = hand.map(c => c.value).sort((a,b) => a-b);
-    const uniqueRanks = Object.keys(rankCounts).length;
     
     // effective suit counts for flush checks
     const finalSuitCounts = {...suitCounts};
@@ -80,7 +65,7 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
     const isFlush = Object.values(finalSuitCounts).some(count => count === 5);
     const is5SuitFlush = new Set(hand.map(c => c.suit)).size === 5;
     const isStraight = checkStraight(sortedRanks);
-    const isRoyal = isStraight && sortedRanks[0] === 10 && sortedRanks[4] === 14;
+    const isRoyal = isStraight && sortedRanks.includes(10) && sortedRanks.includes(14); // Simplified Royal check
 
     const rankValues = Object.values(rankCounts).sort((a,b) => b-a);
     

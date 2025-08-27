@@ -18,7 +18,7 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { GameType, MockUser, Post } from './types';
+import type { GameType, MockUser, Post, CardData } from './types';
 
 
 export interface Game {
@@ -389,3 +389,28 @@ export const deletePost = async (postId: string): Promise<void> => {
     const postRef = doc(db, 'posts', postId);
     await deleteDoc(postRef);
 };
+
+
+// --- Card Management ---
+/**
+ * Fetches all card definitions for a specific game from Firestore.
+ * @param gameType The type of game to fetch cards for.
+ * @returns A promise that resolves to an array of CardData.
+ */
+export const getCards = async (gameType: GameType): Promise<CardData[]> => {
+    const cardsCollection = collection(db, 'cards');
+    const q = query(cardsCollection, where('gameType', '==', gameType));
+    const querySnapshot = await getDocs(q);
+    const cards: CardData[] = [];
+    querySnapshot.forEach((doc) => {
+        cards.push({ id: doc.id, ...doc.data() } as CardData);
+    });
+
+    // In a real scenario, you'd want to handle the case where no cards are found,
+    // perhaps by populating the DB with default cards. For now, we'll assume they exist.
+    if (cards.length === 0) {
+        console.warn(`No cards found in Firestore for game type: ${gameType}. The game may not work correctly.`);
+    }
+
+    return cards;
+}

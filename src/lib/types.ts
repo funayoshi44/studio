@@ -35,4 +35,15 @@ export type Post = {
     createdAt: any; // Firestore Timestamp
     likes: string[]; // Array of user UIDs who liked it
     likeCount: number;
-}
+};
+
+// Represents a single card's data stored in Firestore
+export type CardData = {
+    id: string;
+    name: string; // e.g., "Ace of Spades"
+    gameType: GameType | 'common'; // Which game this card belongs to, or 'common'
+    suit: string; // '♠️', '♥️', '♦️', '♣️', '⭐' or 'duel'
+    rank: string; // 'A', '2', 'K' or '1' to '13'
+    value: number;
+    imageUrl: string;
+};
