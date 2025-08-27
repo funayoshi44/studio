@@ -74,8 +74,8 @@ const getInitialJankenGameState = (playerIds: string[] = []) => {
         scores: {},
         moves: {}, // { initial: { uid: move }, final: { uid: move } }
         phase: 'initial', // 'initial', 'final', 'result'
+        roundWinner: null,
         roundResultText: '',
-        lastMoveBy: null,
     };
     playerIds.forEach(uid => {
         gameState.scores[uid] = 0;
@@ -348,6 +348,16 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
     }
 };
 
+// Get a single user's profile
+export const getUserProfile = async (userId: string): Promise<MockUser | null> => {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+        return userSnap.data() as MockUser;
+    }
+    return null;
+}
+
 // --- Posts (Bulletin Board) ---
 
 // Create a new post
@@ -389,7 +399,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId), 
-        orderBy('author.uid'), // Use the field from the where clause for ordering
+        orderBy('createdAt', 'desc'),
         limit(50)
     );
 
@@ -398,13 +408,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
         snapshot.forEach((doc) => {
             posts.push({ id: doc.id, ...doc.data() } as Post);
         });
-        // Manual sort on the client-side as a fallback, since we can't order by timestamp without an index
-        callback(posts.sort((a, b) => {
-            if (a.createdAt && b.createdAt) {
-                return b.createdAt.toMillis() - a.createdAt.toMillis();
-            }
-            return 0;
-        }));
+        callback(posts);
     });
 };
 

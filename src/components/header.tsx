@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus, CircleUser } from 'lucide-react';
 import { AuthContext } from '@/contexts/auth-context';
 import {
   DropdownMenu,
@@ -90,12 +90,20 @@ export function Header() {
                         </DropdownMenuItem>
                      </Link>
                   ) : (
+                    <>
+                    <Link href={`/profile/${user.uid}`} passHref>
+                        <DropdownMenuItem>
+                            <CircleUser className="mr-2 h-4 w-4" />
+                            <span>Profile</span>
+                        </DropdownMenuItem>
+                    </Link>
                     <Link href="/settings" passHref>
                         <DropdownMenuItem>
                             <Settings className="mr-2 h-4 w-4" />
                             <span>Settings</span>
                         </DropdownMenuItem>
                     </Link>
+                    </>
                   )}
                   <DropdownMenuItem onClick={() => logOut()}>
                     <LogOut className="mr-2 h-4 w-4" />

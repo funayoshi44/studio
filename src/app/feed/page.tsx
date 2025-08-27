@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Heart, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import Link from 'next/link';
 
 export default function FeedPage() {
     const { user, loading: authLoading } = useAuth();
@@ -81,10 +82,12 @@ export default function FeedPage() {
             <Card className="mb-6">
                 <CardHeader>
                     <div className="flex items-center gap-4">
-                        <Avatar>
-                            <AvatarImage src={user.photoURL ?? undefined} />
-                            <AvatarFallback>{user.displayName?.[0]}</AvatarFallback>
-                        </Avatar>
+                        <Link href={`/profile/${user.uid}`}>
+                            <Avatar>
+                                <AvatarImage src={user.photoURL ?? undefined} />
+                                <AvatarFallback>{user.displayName?.[0]}</AvatarFallback>
+                            </Avatar>
+                        </Link>
                         <h2 className="text-xl font-semibold">What's on your mind?</h2>
                     </div>
                 </CardHeader>
@@ -111,12 +114,14 @@ export default function FeedPage() {
                     posts.map(post => (
                         <Card key={post.id}>
                             <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                                <Avatar>
-                                    <AvatarImage src={post.author.photoURL ?? undefined} />
-                                    <AvatarFallback>{post.author.displayName?.[0]}</AvatarFallback>
-                                </Avatar>
+                               <Link href={`/profile/${post.author.uid}`}>
+                                    <Avatar>
+                                        <AvatarImage src={post.author.photoURL ?? undefined} />
+                                        <AvatarFallback>{post.author.displayName?.[0]}</AvatarFallback>
+                                    </Avatar>
+                               </Link>
                                 <div className="flex-1">
-                                    <p className="font-bold">{post.author.displayName}</p>
+                                    <Link href={`/profile/${post.author.uid}`} className="font-bold hover:underline">{post.author.displayName}</Link>
                                     <p className="text-xs text-muted-foreground">
                                         {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
                                     </p>
