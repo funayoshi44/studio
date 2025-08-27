@@ -278,8 +278,8 @@ export default function OnlineDuelPage() {
       </CardHeader>
       <CardContent>
         <div className="h-64 overflow-y-auto p-4 border rounded-md mb-4 flex flex-col-reverse bg-muted/50">
-          <div className="flex flex-col gap-4">
-          {messages.slice().reverse().map(msg => (
+          <div className="flex flex-col-reverse gap-4">
+          {messages.map(msg => (
             <div key={msg.id} className="flex items-start gap-3">
               <Avatar className="w-8 h-8">
                 <AvatarImage src={msg.photoURL ?? undefined} />
