@@ -19,28 +19,8 @@ import {
   deleteDoc,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { GameType, MockUser, Post, CardData } from './types';
+import type { Game, GameType, MockUser, Post, CardData, Message } from './types';
 
-
-export interface Game {
-  id: string;
-  gameType: GameType;
-  players: { [uid: string]: Partial<MockUser> };
-  playerIds: string[];
-  status: 'waiting' | 'in-progress' | 'finished';
-  createdAt: Timestamp;
-  gameState: any;
-  winner?: string | null; // UID of the winner
-}
-
-export interface Message {
-  id: string;
-  uid: string;
-  displayName: string | null;
-  photoURL: string | null;
-  text: string;
-  createdAt: Timestamp;
-}
 
 const TOTAL_ROUNDS = 13;
 
@@ -145,8 +125,16 @@ export const subscribeToGame = (gameId: string, callback: (game: Game | null) =>
 // Update game state
 export const updateGameState = async (gameId: string, newGameState: any): Promise<void> => {
   const gameRef = doc(db, 'games', gameId);
-  await updateDoc(gameRef, { gameState: newGameState });
+  // This is a simplified update. For nested objects, you might need to use dot notation
+  // or merge options if you only want to update parts of the gameState.
+  // For this game's logic, overwriting the whole gameState is often intended.
+  await updateDoc(gameRef, { 
+      status: newGameState.status, // Also update top-level status if present
+      winner: newGameState.winner, // Also update winner if present
+      gameState: newGameState 
+  });
 };
+
 
 // Submit a move
 export const submitMove = async (gameId: string, userId: string, move: any) => {
@@ -499,3 +487,5 @@ export const deleteCard = async (card: CardData): Promise<void> => {
     // 3. Force refresh the cache
     await getCards(true);
 };
+
+    

@@ -97,7 +97,7 @@ export default function OnlineDuelPage() {
       unsubscribeGame();
       unsubscribeMessages();
     };
-  }, [gameId, user, router, toast, game?.status]);
+  }, [gameId, user, router, toast, game?.status, t]);
 
   // Evaluate round when both players have moved
   useEffect(() => {
@@ -492,3 +492,5 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
+
+    

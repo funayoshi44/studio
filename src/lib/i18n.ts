@@ -230,3 +230,5 @@ export const translations = {
     opponentDisconnectedBody: 'You win by default! Returning to the lobby.',
   },
 };
+
+    

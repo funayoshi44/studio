@@ -1,5 +1,7 @@
 
 
+import type { Timestamp } from 'firebase/firestore';
+
 export type Difficulty = "easy" | "normal" | "hard";
 export type Language = "en" | "ja";
 export type GameType = "duel" | "janken" | "poker";
@@ -56,3 +58,27 @@ export type CardData = {
         imageUrl: string;
     }[];
 };
+
+// --- Online Game Types ---
+
+export interface Game {
+  id: string;
+  gameType: GameType;
+  players: { [uid: string]: Partial<MockUser> };
+  playerIds: string[];
+  status: 'waiting' | 'in-progress' | 'finished';
+  createdAt: Timestamp;
+  gameState: any;
+  winner?: string | null; // UID of the winner
+}
+
+export interface Message {
+  id: string;
+  uid: string;
+  displayName: string | null;
+  photoURL: string | null;
+  text: string;
+  createdAt: Timestamp;
+}
+
+    
