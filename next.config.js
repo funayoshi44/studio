@@ -27,12 +27,6 @@ const nextConfig = {
         port: '',
         pathname: '/**',
       },
-      {
-        protocol: 'https',
-        hostname: 'poetryfactory.jp',
-        port: '',
-        pathname: '/**',
-      },
     ],
   },
   env: {
