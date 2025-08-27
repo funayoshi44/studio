@@ -67,6 +67,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             email: `${username.toLowerCase().replace(/\s+/g, '.')}@example.com`,
             photoURL: photoURL,
             bio: '',
+            // Check for admin username
+            isAdmin: username.toLowerCase() === 'admin',
         };
     
         localStorage.setItem('mockUser', JSON.stringify(mockUser));

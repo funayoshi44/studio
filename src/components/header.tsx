@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield } from 'lucide-react';
 import { AuthContext } from '@/contexts/auth-context';
 import {
   DropdownMenu,
@@ -33,6 +33,14 @@ export function Header() {
           </Link>
         </div>
         <div className="flex flex-1 items-center justify-end space-x-2">
+            {user?.isAdmin && (
+              <Link href="/admin" passHref>
+                <Button variant="destructive">
+                  <Shield className="h-4 w-4 mr-2"/>
+                  Admin
+                </Button>
+              </Link>
+            )}
             <Link href="/feed" passHref>
               <Button variant="ghost">
                 <MessageSquare className="h-4 w-4 mr-2"/>

@@ -443,4 +443,29 @@ export const getCards = async (gameType: GameType): Promise<CardData[]> => {
 
     // Return the filtered list for the requested game type
     return cards.filter(card => card.gameType === gameType || card.gameType === 'common');
-}
+};
+
+
+/**
+ * Uploads a card image and adds the card data to Firestore.
+ * @param cardData The card data to add, without id and imageUrl.
+ * @param imageFile The image file to upload for the card.
+ */
+export const addCard = async (
+  cardData: Omit<CardData, 'id' | 'imageUrl'>,
+  imageFile: File
+): Promise<void> => {
+  // 1. Upload image to Firebase Storage
+  const filePath = `cards/${Date.now()}_${imageFile.name}`;
+  const imageRef = ref(storage, filePath);
+  const uploadResult = await uploadBytes(imageRef, imageFile);
+  const imageUrl = await getDownloadURL(uploadResult.ref);
+
+  // 2. Add card data to Firestore
+  const cardsCollection = collection(db, 'cards');
+  await addDoc(cardsCollection, {
+    ...cardData,
+    imageUrl: imageUrl, // Add the retrieved image URL
+    createdAt: serverTimestamp(),
+  });
+};

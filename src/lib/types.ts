@@ -22,6 +22,7 @@ export type MockUser = {
   email: string;
   photoURL: string;
   bio?: string; // Optional bio field
+  isAdmin?: boolean; // Admin flag
 };
 
 // Represents a post on the bulletin board
