@@ -41,7 +41,7 @@ export function Header() {
                 </Button>
               </Link>
             )}
-             {!user?.isGuest && user && (
+             {user && !user.isGuest && (
               <Link href="/feed" passHref>
                 <Button variant="ghost">
                   <MessageSquare className="h-4 w-4 mr-2"/>
