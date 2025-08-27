@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ReactNode } from 'react';
@@ -96,10 +97,6 @@ export function GameProvider({ children }: { children: ReactNode }) {
     recordGameResult,
     clearHistory,
   };
-
-  if (!isMounted) {
-    return null; 
-  }
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }
