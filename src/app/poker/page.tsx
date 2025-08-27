@@ -13,6 +13,8 @@ import { evaluatePokerHand, type PokerCard, createPokerDeck } from '@/lib/game-l
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb } from 'lucide-react';
+import { PokerCard as PokerCardComponent } from '@/components/ui/poker-card';
+
 
 type PokerState = {
   round: number;
@@ -172,21 +174,13 @@ export default function PokerPage() {
           <div
             key={index}
             className={cn(
-              "w-14 h-20 md:w-20 md:h-28 rounded-lg flex flex-col items-center justify-center text-sm md:text-lg font-bold border-2 transition-all duration-300",
-              show ? "bg-white text-black" : "bg-primary text-primary-foreground",
+              "transition-transform duration-300",
               owner === 'player' && state.phase === 'betting' && "cursor-pointer",
-              isSelected ? 'border-accent bg-amber-100 transform -translate-y-2' : 'border-gray-300'
+              isSelected && 'transform -translate-y-2'
             )}
             onClick={() => owner === 'player' && toggleCardSelection(index)}
           >
-            {show ? (
-              <>
-                <div className="text-base md:text-lg">{card.rank}</div>
-                <div className="text-lg md:text-2xl">{card.suit}</div>
-              </>
-            ) : (
-               <div className="text-2xl">?</div>
-            )}
+            <PokerCardComponent card={card} revealed={show} />
           </div>
         );
       })}
