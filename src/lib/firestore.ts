@@ -146,7 +146,9 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
 
         const gameData = gameSnap.data() as Game;
         if (gameData.playerIds.length >= 2 || gameData.playerIds.includes(user.uid)) {
-            throw new Error('Game is full or you are already in it');
+            // Silently ignore if user tries to join a full game or is already in it.
+            // This can happen with fast clicks.
+            return;
         }
         
         const newPlayerIds = [...gameData.playerIds, user.uid];
@@ -181,14 +183,19 @@ export const subscribeToGame = (gameId: string, callback: (game: Game | null) =>
 // Update game state
 export const updateGameState = async (gameId: string, newGameState: any): Promise<void> => {
   const gameRef = doc(db, 'games', gameId);
-  // This is a simplified update. For nested objects, you might need to use dot notation
-  // or merge options if you only want to update parts of the gameState.
-  // For this game's logic, overwriting the whole gameState is often intended.
-  await updateDoc(gameRef, { 
-      status: newGameState.status, // Also update top-level status if present
-      winner: newGameState.winner, // Also update winner if present
-      gameState: newGameState 
-  });
+  
+  const updatePayload: { [key: string]: any } = {
+    gameState: newGameState,
+  };
+
+  if (newGameState.status !== undefined) {
+    updatePayload.status = newGameState.status;
+  }
+  if (newGameState.winner !== undefined) {
+    updatePayload.winner = newGameState.winner;
+  }
+
+  await updateDoc(gameRef, updatePayload);
 };
 
 
@@ -544,5 +551,3 @@ export const deleteCard = async (card: CardData): Promise<void> => {
     // 3. Force refresh the cache
     await getCards(true);
 };
-
-    
