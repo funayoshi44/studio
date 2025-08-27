@@ -22,3 +22,17 @@ export type MockUser = {
   photoURL: string;
   bio?: string; // Optional bio field
 };
+
+// Represents a post on the bulletin board
+export type Post = {
+    id: string;
+    author: {
+        uid: string;
+        displayName: string;
+        photoURL: string;
+    };
+    content: string;
+    createdAt: any; // Firestore Timestamp
+    likes: string[]; // Array of user UIDs who liked it
+    likeCount: number;
+}

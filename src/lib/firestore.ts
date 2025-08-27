@@ -15,9 +15,10 @@ import {
   limit,
   runTransaction,
   orderBy,
+  deleteDoc,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import type { GameType, MockUser } from './types';
+import type { GameType, MockUser, Post } from './types';
 
 
 export interface Game {
@@ -300,4 +301,91 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
         console.error("Failed to leave game:", error);
     }
 };
-    
+
+// --- Posts (Bulletin Board) ---
+
+// Create a new post
+export const createPost = async (author: MockUser, content: string): Promise<void> => {
+  if (!content.trim()) {
+    throw new Error("Post content cannot be empty.");
+  }
+  const postsCollection = collection(db, 'posts');
+  await addDoc(postsCollection, {
+    author: {
+      uid: author.uid,
+      displayName: author.displayName,
+      photoURL: author.photoURL,
+    },
+    content,
+    createdAt: serverTimestamp(),
+    likes: [],
+    likeCount: 0,
+  });
+};
+
+// Listen for all posts
+export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
+  const postsCollection = collection(db, 'posts');
+  const q = query(postsCollection, orderBy('createdAt', 'desc'), limit(50));
+
+  return onSnapshot(q, (querySnapshot) => {
+    const posts: Post[] = [];
+    querySnapshot.forEach((doc) => {
+      posts.push({ id: doc.id, ...doc.data() } as Post);
+    });
+    callback(posts);
+  });
+};
+
+// Listen for posts by a specific user
+export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) => void) => {
+    const postsCollection = collection(db, 'posts');
+    const q = query(
+        postsCollection, 
+        where('author.uid', '==', userId), 
+        orderBy('createdAt', 'desc'), 
+        limit(50)
+    );
+
+    return onSnapshot(q, (querySnapshot) => {
+        const posts: Post[] = [];
+        querySnapshot.forEach((doc) => {
+            posts.push({ id: doc.id, ...doc.data() } as Post);
+        });
+        callback(posts);
+    });
+};
+
+// Like/Unlike a post
+export const togglePostLike = async (postId: string, userId: string): Promise<void> => {
+    const postRef = doc(db, 'posts', postId);
+    await runTransaction(db, async (transaction) => {
+        const postSnap = await transaction.get(postRef);
+        if (!postSnap.exists()) {
+            throw new Error("Post not found");
+        }
+
+        const postData = postSnap.data();
+        const likes = (postData.likes || []) as string[];
+        let newLikes;
+
+        if (likes.includes(userId)) {
+            // User has liked, so unlike
+            newLikes = likes.filter(uid => uid !== userId);
+        } else {
+            // User has not liked, so like
+            newLikes = [...likes, userId];
+        }
+
+        transaction.update(postRef, {
+            likes: newLikes,
+            likeCount: newLikes.length
+        });
+    });
+};
+
+// Delete a post
+export const deletePost = async (postId: string): Promise<void> => {
+    const postRef = doc(db, 'posts', postId);
+    await deleteDoc(postRef);
+};
