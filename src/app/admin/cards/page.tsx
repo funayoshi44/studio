@@ -96,9 +96,27 @@ export default function AddCardPage() {
 
                 {/* Suit */}
                 <div className="space-y-2">
-                <Label htmlFor="suit">Suit</Label>
-                <Input id="suit" {...register("suit", { required: "Suit is required" })} />
-                {errors.suit && <p className="text-xs text-destructive">{errors.suit.message}</p>}
+                    <Label htmlFor="suit">Suit</Label>
+                    <Controller
+                        name="suit"
+                        control={control}
+                        rules={{ required: "Suit is required" }}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select suit" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="spade">Spade ♠️</SelectItem>
+                                    <SelectItem value="heart">Heart ♥️</SelectItem>
+                                    <SelectItem value="diamond">Diamond ♦️</SelectItem>
+                                    <SelectItem value="club">Club ♣️</SelectItem>
+                                    <SelectItem value="star">Star ⭐</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                    {errors.suit && <p className="text-xs text-destructive">{errors.suit.message}</p>}
                 </div>
 
                 {/* Rarity */}
