@@ -11,9 +11,7 @@ import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-ad
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb } from 'lucide-react';
-import Image from 'next/image';
-import { getStorageUrl } from '@/lib/firestore';
-import { CARD_6_IMAGE_PATH } from '@/lib/constants';
+import { GameCard } from '@/components/ui/game-card';
 
 const TOTAL_ROUNDS = 13;
 
@@ -64,11 +62,6 @@ export default function DuelPage() {
   const t = useTranslation();
   const [state, setState] = useState<DuelState>(initialDuelState);
   const [loading, setLoading] = useState(false);
-  const [card6ImageUrl, setCard6ImageUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    getStorageUrl(CARD_6_IMAGE_PATH).then(setCard6ImageUrl);
-  }, []);
 
   const restartGame = useCallback(() => {
     setState(initialDuelState);
@@ -237,25 +230,6 @@ export default function DuelPage() {
         aiRationale: null,
     }));
   }
-  
-  const DisplayCard = ({ card }: { card: number | null }) => {
-    const cardValue = card ?? '?';
-    const isImage = card === 6;
-
-    if (card === null) return <div className="w-20 h-28 md:w-24 md:h-32 bg-gray-400 rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-500">?</div>;
-    
-    const cardContent = isImage && card6ImageUrl ? (
-      <Image src={card6ImageUrl} alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
-    ) : (
-      cardValue
-    );
-
-    return (
-        <div className="relative w-20 h-28 md:w-24 md:h-32 bg-white text-black rounded-lg flex items-center justify-center text-3xl font-bold border-4 border-gray-300 overflow-hidden">
-            {cardContent}
-        </div>
-    );
-  };
 
   const ScoreDisplay = () => (
     <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
@@ -293,9 +267,9 @@ export default function DuelPage() {
               <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
               <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                 {state.playerCards.map(card => (
-                  <Button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="w-14 h-16 md:w-16 md:h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
-                    {card === 6 && card6ImageUrl ? <Image src={card6ImageUrl} alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" /> : card}
-                  </Button>
+                  <button key={card} onClick={() => selectPlayerCard(card)} disabled={loading} className="transition-transform hover:scale-105">
+                     <GameCard number={card} revealed={true} />
+                  </button>
                 ))}
               </div>
             </div>
@@ -306,11 +280,11 @@ export default function DuelPage() {
               <div className="flex justify-center space-x-8">
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('you')}</h4>
-                   <DisplayCard card={state.playerCard} />
+                   <GameCard number={state.playerCard} revealed={true} />
                 </div>
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('cpu')}</h4>
-                  <DisplayCard card={state.cpuCard} />
+                  <GameCard number={state.cpuCard} revealed={state.cpuCard !== null} />
                 </div>
               </div>
             </div>

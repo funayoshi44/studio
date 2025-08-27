@@ -8,15 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message, leaveGame, getStorageUrl } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message, leaveGame } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Send, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
-import Image from 'next/image';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { CARD_6_IMAGE_PATH } from '@/lib/constants';
-
+import { GameCard } from '@/components/ui/game-card';
 
 const TOTAL_ROUNDS = 13;
 
@@ -56,17 +54,12 @@ export default function OnlineDuelPage() {
   const params = useParams();
   const gameId = params.gameId as string;
   const { toast } = useToast();
-  const [card6ImageUrl, setCard6ImageUrl] = useState<string | null>(null);
 
   const t = useTranslation();
   const [game, setGame] = useState<Game | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    getStorageUrl(CARD_6_IMAGE_PATH).then(setCard6ImageUrl);
-  }, []);
 
   const gameState = game?.gameState as DuelGameState | undefined;
   const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
@@ -325,30 +318,6 @@ export default function OnlineDuelPage() {
       toast({ title: "Error", description: "Failed to send message.", variant: 'destructive' });
     }
   };
-  
-  const CardDisplay = ({ card }: { card: number | null }) => {
-    const revealed = card !== null;
-    const cardValue = card ?? '?';
-    const isImage = card === 6;
-
-    const baseClasses = "flex items-center justify-center text-xl md:text-3xl font-bold rounded-lg border-4";
-    const sizeClasses = "w-20 h-28 md:w-24 md:h-32 relative overflow-hidden";
-    
-    if (!revealed) {
-      return <div className={`${sizeClasses} ${baseClasses} bg-gray-400 border-gray-500`}>?</div>
-    }
-
-    const cardContent = isImage && card6ImageUrl ? (
-      <Image src={card6ImageUrl} alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
-    ) : (
-      cardValue
-    );
-
-    return (
-        <div className={`${sizeClasses} ${baseClasses} bg-white border-gray-300 text-black`}>{cardContent}</div>
-    );
-  };
-
 
   const ChatBox = () => (
     <Card className="w-full max-w-lg mx-auto">
@@ -505,13 +474,9 @@ export default function OnlineDuelPage() {
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                             {myCards.sort((a,b) => a-b).map(card => (
-                              <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-14 h-16 md:w-16 md:h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
-                                {card === 6 && card6ImageUrl ? (
-                                    <Image src={card6ImageUrl} alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
-                                ) : (
-                                    card
-                                )}
-                              </Button>
+                              <button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="transition-transform hover:scale-105">
+                                  <GameCard number={card} revealed={true} />
+                              </button>
                             ))}
                         </div>
                     </>
@@ -526,12 +491,12 @@ export default function OnlineDuelPage() {
               <div className="flex justify-around items-center">
                 <div className="text-center">
                   <PlayerInfo uid={user.uid} />
-                  <div className="mt-2"><CardDisplay card={myMove} /></div>
+                  <div className="mt-2"><GameCard number={myMove} revealed={true}/></div>
                 </div>
                 <div className="text-2xl font-bold">VS</div>
                 <div className="text-center">
                   {opponentId && <PlayerInfo uid={opponentId} />}
-                  <div className="mt-2"><CardDisplay card={opponentMove} /></div>
+                  <div className="mt-2"><GameCard number={opponentMove} revealed={opponentMove !== null}/></div>
                 </div>
               </div>
             </div>
