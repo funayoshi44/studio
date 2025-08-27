@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
@@ -31,18 +31,23 @@ export default function OnlineLobbyPage() {
     }
   }, [user, router]);
 
-  const fetchGames = async () => {
+  const fetchGames = useCallback(async () => {
     if(!user) return;
-    const games = await findAvailableGames();
-    // Filter out games created by the current user from the list
-    setAvailableGames(games.filter(g => !g.playerIds.includes(user.uid)));
-  };
+    try {
+      const games = await findAvailableGames();
+      setAvailableGames(games.filter(g => g.playerIds[0] !== user.uid));
+    } catch (error) {
+      console.error("Failed to fetch available games:", error);
+      toast({ title: "Error", description: "Could not fetch games list."});
+    }
+  }, [user, toast]);
+
 
   useEffect(() => {
     fetchGames();
     const interval = setInterval(fetchGames, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchGames]);
   
   const handleMatchmaking = async (gameType: GameType) => {
     if (!user || isMatching) return;
@@ -135,27 +140,31 @@ export default function OnlineLobbyPage() {
         </CardHeader>
         <CardContent className="space-y-4">
             {availableGames.length > 0 ? (
-                availableGames.map(game => (
-                    <div key={game.id} className="flex items-center justify-between p-4 rounded-lg border">
-                        <div className="flex items-center gap-4">
-                            <Avatar>
-                                <AvatarImage src={game.players[game.playerIds[0]].photoURL ?? undefined}/>
-                                <AvatarFallback>{game.players[game.playerIds[0]].displayName?.[0]}</AvatarFallback>
-                            </Avatar>
-                            <div>
-                                <p className="font-bold">{game.players[game.playerIds[0]].displayName}</p>
-                                <p className="text-sm text-muted-foreground">{t(`${game.gameType}Title`)}</p>
+                availableGames.map(game => {
+                    const host = game.players[game.playerIds[0]];
+                    if (!host) return null;
+                    return (
+                        <div key={game.id} className="flex items-center justify-between p-4 rounded-lg border">
+                            <div className="flex items-center gap-4">
+                                <Avatar>
+                                    <AvatarImage src={host.photoURL ?? undefined}/>
+                                    <AvatarFallback>{host.displayName?.[0]}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                    <p className="font-bold">{host.displayName}</p>
+                                    <p className="text-sm text-muted-foreground">{t(`${game.gameType}Title`)}</p>
+                                </div>
                             </div>
+                            <Button
+                                onClick={() => handleJoinGame(game.id, game.gameType)}
+                                disabled={isJoining === game.id}
+                            >
+                                {isJoining === game.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                {t('joinGame')}
+                            </Button>
                         </div>
-                        <Button
-                            onClick={() => handleJoinGame(game.id, game.gameType)}
-                            disabled={isJoining === game.id}
-                        >
-                            {isJoining === game.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                            {t('joinGame')}
-                        </Button>
-                    </div>
-                ))
+                    );
+                })
             ) : (
                 <p className="text-center text-muted-foreground">{t('noGamesAvailable')}</p>
             )}
