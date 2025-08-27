@@ -1,6 +1,4 @@
 
-
-
 import type { Timestamp } from 'firebase/firestore';
 
 export type Difficulty = "easy" | "normal" | "hard";
@@ -26,6 +24,7 @@ export type MockUser = {
   photoURL: string;
   bio?: string; // Optional bio field
   isAdmin?: boolean; // Admin flag
+  isGuest?: boolean; // Guest flag
 };
 
 // Represents a post on the bulletin board
@@ -37,7 +36,7 @@ export type Post = {
         photoURL: string;
     };
     content: string;
-    createdAt: any; // Firestore Timestamp
+    createdAt: Timestamp;
     likes: string[]; // Array of user UIDs who liked it
     likeCount: number;
 };

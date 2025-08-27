@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus } from 'lucide-react';
 import { AuthContext } from '@/contexts/auth-context';
 import {
   DropdownMenu,
@@ -41,12 +41,14 @@ export function Header() {
                 </Button>
               </Link>
             )}
-            <Link href="/feed" passHref>
-              <Button variant="ghost">
-                <MessageSquare className="h-4 w-4 mr-2"/>
-                Feed
-              </Button>
-            </Link>
+             {!user?.isGuest && user && (
+              <Link href="/feed" passHref>
+                <Button variant="ghost">
+                  <MessageSquare className="h-4 w-4 mr-2"/>
+                  Feed
+                </Button>
+              </Link>
+            )}
             <Link href="/online" passHref>
               <Button variant="ghost">
                 <Users className="h-4 w-4 mr-2"/>
@@ -75,17 +77,26 @@ export function Header() {
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">{user.displayName}</p>
                       <p className="text-xs leading-none text-muted-foreground">
-                        {user.email}
+                        {user.isGuest ? "Guest User" : user.email}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                   <Link href="/settings" passHref>
-                    <DropdownMenuItem>
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
-                    </DropdownMenuItem>
-                   </Link>
+                  {user.isGuest ? (
+                     <Link href="/register" passHref>
+                        <DropdownMenuItem>
+                            <UserPlus className="mr-2 h-4 w-4" />
+                            <span>Register Account</span>
+                        </DropdownMenuItem>
+                     </Link>
+                  ) : (
+                    <Link href="/settings" passHref>
+                        <DropdownMenuItem>
+                            <Settings className="mr-2 h-4 w-4" />
+                            <span>Settings</span>
+                        </DropdownMenuItem>
+                    </Link>
+                  )}
                   <DropdownMenuItem onClick={() => logOut()}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>

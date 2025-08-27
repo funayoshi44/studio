@@ -4,11 +4,26 @@
 import { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { auth, db, googleProvider } from '@/lib/firebase';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signOut, 
+  type User,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signInAnonymously,
+} from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { uploadProfileImage } from '@/lib/firestore';
 import type { MockUser } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+
+type EmailPassCredentials = {
+  email: string;
+  password?: string; // Password is required for sign-up, optional for sign-in if not used.
+  displayName?: string; // Display name is for sign-up
+};
+
 
 type UpdateUserInput = {
   displayName: string;
@@ -21,6 +36,9 @@ type AuthContextType = {
   firebaseUser: User | null;
   loading: boolean;
   logInWithGoogle: () => Promise<void>;
+  logInWithEmail: (credentials: EmailPassCredentials) => Promise<void>;
+  signUpWithEmail: (credentials: EmailPassCredentials) => Promise<void>;
+  logInAsGuest: () => Promise<void>;
   logOut: () => void;
   updateUser: (data: UpdateUserInput) => Promise<void>;
 };
@@ -30,6 +48,9 @@ export const AuthContext = createContext<AuthContextType>({
   firebaseUser: null,
   loading: true,
   logInWithGoogle: async () => {},
+  logInWithEmail: async () => {},
+  signUpWithEmail: async () => {},
+  logInAsGuest: async () => {},
   logOut: () => {},
   updateUser: async () => {},
 });
@@ -42,21 +63,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setFirebaseUser(user);
-        const userDocRef = doc(db, 'users', user.uid);
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setLoading(true);
+      if (fbUser) {
+        setFirebaseUser(fbUser);
+        const userDocRef = doc(db, 'users', fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
           setUser(userDocSnap.data() as MockUser);
-        } else {
-          // Create a new user profile in Firestore if it doesn't exist
-          const newUserProfile: MockUser = {
-            uid: user.uid,
-            displayName: user.displayName || 'Anonymous',
-            email: user.email || '',
-            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`,
+        } else if (fbUser.isAnonymous) {
+           const guestProfile: MockUser = {
+            uid: fbUser.uid,
+            displayName: 'Guest',
+            email: '',
+            photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`,
+            bio: 'A guest user.',
+            isGuest: true,
+            isAdmin: false,
+          };
+          await setDoc(userDocRef, { ...guestProfile, createdAt: serverTimestamp() });
+          setUser(guestProfile);
+        }
+        // User is authenticated with a provider (e.g. Google) but doc doesn't exist.
+        else if (fbUser.providerData.length > 0) {
+           const newUserProfile: MockUser = {
+            uid: fbUser.uid,
+            displayName: fbUser.displayName || 'Anonymous',
+            email: fbUser.email || '',
+            photoURL: fbUser.photoURL || `https://i.pravatar.cc/150?u=${fbUser.uid}`,
             bio: '',
+            isGuest: false,
             isAdmin: false, // Default value
           };
           await setDoc(userDocRef, { ...newUserProfile, createdAt: serverTimestamp() });
@@ -72,24 +108,85 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return () => unsubscribe();
   }, []);
   
+  const handleAuthSuccess = (message: string) => {
+      router.push('/');
+      toast({ title: message, description: "Welcome to CardVerse!" });
+  }
+
+  const handleAuthError = (error: any, message: string) => {
+      console.error(`${message} failed:`, error);
+      toast({ title: `${message} Failed`, description: error.message || `Could not complete the action.`, variant: 'destructive' });
+  }
+
   const logInWithGoogle = async () => {
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      // onAuthStateChanged will handle the rest
-      router.push('/');
-      toast({ title: "Login Successful", description: "Welcome back!" });
+      // onAuthStateChanged handles success
     } catch (error) {
-      console.error("Google login failed:", error);
-      toast({ title: "Login Failed", description: "Could not log in with Google.", variant: 'destructive' });
+      handleAuthError(error, "Google Login");
+    } finally {
       setLoading(false);
     }
   };
+  
+  const logInWithEmail = async ({ email, password }: EmailPassCredentials) => {
+    if(!password) return;
+    setLoading(true);
+    try {
+        await signInWithEmailAndPassword(auth, email, password);
+        handleAuthSuccess("Login Successful");
+    } catch (error) {
+        handleAuthError(error, "Email/Password Login");
+    } finally {
+        setLoading(false);
+    }
+  }
+
+  const signUpWithEmail = async ({ email, password, displayName }: EmailPassCredentials) => {
+      if(!password || !displayName) return;
+      setLoading(true);
+      try {
+          const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+          const fbUser = userCredential.user;
+          // Create user profile in Firestore
+          const newUserProfile: MockUser = {
+            uid: fbUser.uid,
+            displayName: displayName,
+            email: fbUser.email || '',
+            photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`, // Default avatar
+            bio: '',
+            isGuest: false,
+            isAdmin: false,
+          };
+          await setDoc(doc(db, 'users', fbUser.uid), { ...newUserProfile, createdAt: serverTimestamp() });
+          setUser(newUserProfile);
+          handleAuthSuccess("Sign-up Successful");
+      } catch (error) {
+          handleAuthError(error, "Email/Password Sign-up");
+      } finally {
+          setLoading(false);
+      }
+  }
+
+  const logInAsGuest = async () => {
+      setLoading(true);
+      try {
+          await signInAnonymously(auth);
+          // onAuthStateChanged will handle profile creation
+          handleAuthSuccess("Logged in as Guest");
+      } catch (error) {
+          handleAuthError(error, "Guest Login");
+      } finally {
+          setLoading(false);
+      }
+  }
+
 
   const updateUser = async (data: UpdateUserInput) => {
     if (!user) return;
 
-    setLoading(true);
+    setIsLoading(true);
     let newPhotoURL = user.photoURL;
 
     try {
@@ -112,14 +209,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.error("Failed to update user:", error);
         throw error;
     } finally {
-        setLoading(false);
+        setIsLoading(false);
     }
   };
 
 
   const logOut = async () => {
+    const wasGuest = user?.isGuest;
+    const userToDelete = firebaseUser; // Capture before state changes
     try {
         await signOut(auth);
+        if (wasGuest && userToDelete) {
+           // Optionally delete guest data from firestore upon logout
+           // await deleteDoc(doc(db, 'users', userToDelete.uid));
+           // await userToDelete.delete(); // This deletes the auth user
+        }
         router.push('/login');
     } catch (error) {
         console.error("Failed to log out", error);
@@ -131,6 +235,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     firebaseUser,
     loading,
     logInWithGoogle,
+    logInWithEmail,
+    signUpWithEmail,
+    logInAsGuest,
     logOut,
     updateUser,
   };

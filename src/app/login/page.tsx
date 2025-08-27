@@ -1,7 +1,7 @@
+
 "use client";
 
-import { useContext, useEffect } from "react";
-import { AuthContext, useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -9,9 +9,15 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  CardFooter
 } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
+import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+import { Separator } from "@/components/ui/separator";
 
 // Simple SVG for Google Icon
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -25,8 +31,10 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 
 export default function LoginPage() {
-  const { logInWithGoogle, user, loading } = useAuth();
+  const { logInWithEmail, logInWithGoogle, logInAsGuest, user, loading } = useAuth();
   const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   useEffect(() => {
     if (!loading && user) {
@@ -34,9 +42,15 @@ export default function LoginPage() {
     }
   }, [user, loading, router]);
 
+  const handleEmailLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    await logInWithEmail({ email, password });
+  }
+
   if (loading || user) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[calc(100vh-10rem)]">
         <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
@@ -46,21 +60,71 @@ export default function LoginPage() {
     <div className="flex items-center justify-center py-12">
       <Card className="mx-auto max-w-sm w-full">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Welcome!</CardTitle>
+          <CardTitle className="text-2xl">Welcome Back!</CardTitle>
           <CardDescription>
-            Sign in with your Google account to continue.
+            Choose your login method to continue.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button onClick={logInWithGoogle} className="w-full" variant="outline" disabled={loading}>
-            {loading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-                <GoogleIcon className="mr-2 h-5 w-5" />
-            )}
-             Sign in with Google
-          </Button>
+          <form onSubmit={handleEmailLogin} className="space-y-4">
+             <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="m@example.com" 
+                    required 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input 
+                    id="password" 
+                    type="password" 
+                    required 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                 {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Sign In"}
+              </Button>
+          </form>
+
+           <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with
+                  </span>
+              </div>
+            </div>
+
+          <div className="space-y-2">
+            <Button onClick={logInWithGoogle} className="w-full" variant="outline" disabled={loading}>
+              <GoogleIcon className="mr-2 h-5 w-5" />
+              Sign in with Google
+            </Button>
+            <Button onClick={logInAsGuest} className="w-full" variant="secondary" disabled={loading}>
+               Continue as Guest
+            </Button>
+          </div>
+
         </CardContent>
+         <CardFooter className="text-center text-sm">
+            <p className="w-full">
+                Don't have an account?{" "}
+                <Link href="/register" className="underline">
+                    Sign up
+                </Link>
+            </p>
+         </CardFooter>
       </Card>
     </div>
   )
