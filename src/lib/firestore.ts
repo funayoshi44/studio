@@ -398,20 +398,19 @@ const CARD_CACHE_KEY = 'cardverse-card-cache';
 const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 
 /**
- * Fetches all card definitions for a specific game from Firestore, with caching.
- * @param gameType The type of game to fetch cards for.
+ * Fetches all card definitions from Firestore, with caching.
+ * @param gameType The type of game to fetch cards for (can be used for filtering, but here we fetch all).
  * @returns A promise that resolves to an array of CardData.
  */
-export const getCards = async (gameType: GameType): Promise<CardData[]> => {
+export const getCards = async (gameType: GameType | 'common'): Promise<CardData[]> => {
     // 1. Check localStorage for cached data
     try {
         const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
         if (cachedItem) {
             const { timestamp, data } = JSON.parse(cachedItem);
             if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
-                console.log(`Returning cached cards for ${gameType}`);
-                const allCards = data as CardData[];
-                return allCards.filter(card => card.gameType === gameType || card.gameType === 'common');
+                console.log(`Returning all cached cards`);
+                return data as CardData[];
             }
         }
     } catch (e) {
@@ -419,9 +418,8 @@ export const getCards = async (gameType: GameType): Promise<CardData[]> => {
     }
     
     // 2. If no valid cache, fetch from Firestore
-    console.log("Fetching cards from Firestore...");
+    console.log("Fetching all cards from Firestore...");
     const cardsCollection = collection(db, 'cards');
-    // Fetch all cards and filter locally to allow for 'common' cards.
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
     querySnapshot.forEach((doc) => {
@@ -438,11 +436,9 @@ export const getCards = async (gameType: GameType): Promise<CardData[]> => {
 
     if (cards.length === 0) {
         console.warn(`No cards found in Firestore at all. The game may not work correctly.`);
-        return [];
     }
 
-    // Return the filtered list for the requested game type
-    return cards.filter(card => card.gameType === gameType || card.gameType === 'common');
+    return cards;
 };
 
 

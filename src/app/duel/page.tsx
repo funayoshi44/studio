@@ -69,18 +69,19 @@ export default function DuelPage() {
   const initializeDecks = useCallback(async () => {
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
-        // Fetch all cards suitable for Duel (1-13)
-        let allCards = await getCards('common'); // Assuming duel cards are 'common'
-        let duelCards = allCards.filter(c => c.number >= 1 && c.number <= 13);
+        // Fetch all cards from the database, regardless of gameType
+        const allCards = await getCards('common'); // 'common' will now fetch all and filter later
         
-        // Ensure we have one of each number 1-13
+        // Create a unique deck of 13 cards, one for each number from 1 to 13
         const cardMap = new Map<number, CardData>();
-        for (const card of duelCards) {
-            if (!cardMap.has(card.number)) {
+        for (const card of allCards) {
+            // If we don't have a card for this number yet, and it's a valid number
+            if (card.number >= 1 && card.number <= 13 && !cardMap.has(card.number)) {
                 cardMap.set(card.number, card);
             }
         }
         
+        // Fill any missing numbers with fallback cards
         const finalDeck = Array.from({ length: 13 }, (_, i) => i + 1).map(num => {
             return cardMap.get(num) || { 
                 id: `fallback-${num}`, name: `Card ${num}`, number: num, value: num, suit: '?', 
@@ -88,6 +89,10 @@ export default function DuelPage() {
                 gameType: 'common', artist: 'System', rarity: 'common', tags: []
             };
         });
+
+        if (finalDeck.length < 13) {
+            throw new Error("Could not assemble a full deck of 13 cards.");
+        }
 
         const shuffledPlayerDeck = [...finalDeck].sort(() => Math.random() - 0.5);
         const shuffledCpuDeck = [...finalDeck].sort(() => Math.random() - 0.5);
@@ -403,5 +408,3 @@ export default function DuelPage() {
     </div>
   );
 }
-
-    
