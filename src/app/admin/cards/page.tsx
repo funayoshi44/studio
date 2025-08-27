@@ -24,10 +24,8 @@ type Inputs = {
   name: string;
   artist: string;
   suit: string;
-  number: number;
-  value: number;
+  number: string; // Changed to string to accommodate "Joker"
   rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
-  gameType: GameType | 'common';
   tags: string; // Comma-separated
   image: FileList;
 };
@@ -41,15 +39,23 @@ export default function AddCardPage() {
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
     setIsLoading(true);
     try {
-      const { image, tags, ...cardData } = data;
+      const { image, tags, number, ...cardDetails } = data;
       const imageFile = image[0];
       const tagsArray = tags.split(',').map(tag => tag.trim()).filter(Boolean);
 
       if (!imageFile) {
         throw new Error("Image file is required.");
       }
+      
+      const cardData = {
+          ...cardDetails,
+          number: number === 'Joker' ? 0 : parseInt(number, 10), // Joker is 0, others are parsed
+          value: number === 'Joker' ? 0 : parseInt(number, 10), // Value derived from number
+          gameType: 'common' as const, // Default to common
+          tags: tagsArray,
+      }
 
-      await addCard({ ...cardData, tags: tagsArray }, imageFile);
+      await addCard(cardData, imageFile);
 
       toast({
         title: "Success!",
@@ -118,6 +124,30 @@ export default function AddCardPage() {
                     />
                     {errors.suit && <p className="text-xs text-destructive">{errors.suit.message}</p>}
                 </div>
+                
+                {/* Number */}
+                <div className="space-y-2">
+                    <Label htmlFor="number">Number</Label>
+                    <Controller
+                        name="number"
+                        control={control}
+                        rules={{ required: "Number is required" }}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select number" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {Array.from({ length: 13 }, (_, i) => i + 1).map(n => (
+                                        <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                                    ))}
+                                    <SelectItem value="Joker">Joker</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
+                    {errors.number && <p className="text-xs text-destructive">{errors.number.message}</p>}
+                </div>
 
                 {/* Rarity */}
                 <div className="space-y-2">
@@ -141,44 +171,6 @@ export default function AddCardPage() {
                         )}
                     />
                     {errors.rarity && <p className="text-xs text-destructive">{errors.rarity.message}</p>}
-                </div>
-
-                {/* Number */}
-                <div className="space-y-2">
-                <Label htmlFor="number">Number</Label>
-                <Input id="number" type="number" {...register("number", { required: "Number is required", valueAsNumber: true })} />
-                {errors.number && <p className="text-xs text-destructive">{errors.number.message}</p>}
-                </div>
-
-                {/* Value */}
-                <div className="space-y-2">
-                <Label htmlFor="value">Value</Label>
-                <Input id="value" type="number" {...register("value", { required: "Value is required", valueAsNumber: true })} />
-                {errors.value && <p className="text-xs text-destructive">{errors.value.message}</p>}
-                </div>
-
-                {/* Game Type */}
-                <div className="space-y-2">
-                    <Label htmlFor="gameType">Game Type</Label>
-                     <Controller
-                        name="gameType"
-                        control={control}
-                        rules={{ required: "Game type is required" }}
-                        render={({ field }) => (
-                             <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select game type" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="common">Common</SelectItem>
-                                    <SelectItem value="duel">Duel</SelectItem>
-                                    <SelectItem value="poker">Poker</SelectItem>
-                                    <SelectItem value="janken">Janken</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        )}
-                    />
-                    {errors.gameType && <p className="text-xs text-destructive">{errors.gameType.message}</p>}
                 </div>
 
                  {/* Tags */}
