@@ -3,9 +3,12 @@
 
 import { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
+import { auth, db, googleProvider } from '@/lib/firebase';
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { uploadProfileImage } from '@/lib/firestore';
 import type { MockUser } from '@/lib/types';
-
+import { useToast } from '@/hooks/use-toast';
 
 type UpdateUserInput = {
   displayName: string;
@@ -15,69 +18,71 @@ type UpdateUserInput = {
 
 type AuthContextType = {
   user: MockUser | null;
+  firebaseUser: User | null;
   loading: boolean;
-  logIn: (username: string, profileImage?: File | null) => Promise<void>;
+  logInWithGoogle: () => Promise<void>;
   logOut: () => void;
   updateUser: (data: UpdateUserInput) => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
+  firebaseUser: null,
   loading: true,
-  logIn: async () => {},
+  logInWithGoogle: async () => {},
   logOut: () => {},
   updateUser: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [user, setUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const { toast } = useToast();
 
   useEffect(() => {
-    // localStorageからユーザー情報を読み込む
-    try {
-      const storedUser = localStorage.getItem('mockUser');
-      if (storedUser) {
-        setUser(JSON.parse(storedUser));
-      }
-    } catch (error) {
-      console.error("Failed to parse user from localStorage", error);
-      localStorage.removeItem('mockUser');
-    }
-    setLoading(false);
-  }, []);
-
-  const logIn = async (username: string, profileImage: File | null = null) => {
-    if (!username.trim()) return;
-
-    setLoading(true);
-    // Use a more robust UID, e.g., combining username and timestamp
-    const userId = `${username.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
-    let photoURL = `https://i.pravatar.cc/150?u=${userId}`; 
-
-    try {
-        if (profileImage) {
-            photoURL = await uploadProfileImage(userId, profileImage);
-        }
-
-        const mockUser: MockUser = {
-            uid: userId,
-            displayName: username,
-            email: `${username.toLowerCase().replace(/\s+/g, '.')}@example.com`,
-            photoURL: photoURL,
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setFirebaseUser(user);
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          setUser(userDocSnap.data() as MockUser);
+        } else {
+          // Create a new user profile in Firestore if it doesn't exist
+          const newUserProfile: MockUser = {
+            uid: user.uid,
+            displayName: user.displayName || 'Anonymous',
+            email: user.email || '',
+            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.uid}`,
             bio: '',
-            // Check for admin username
-            isAdmin: username.toLowerCase() === 'admin',
-        };
-    
-        localStorage.setItem('mockUser', JSON.stringify(mockUser));
-        setUser(mockUser);
-        router.push('/');
+            isAdmin: false, // Default value
+          };
+          await setDoc(userDocRef, { ...newUserProfile, createdAt: serverTimestamp() });
+          setUser(newUserProfile);
+        }
+      } else {
+        setFirebaseUser(null);
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+  
+  const logInWithGoogle = async () => {
+    setLoading(true);
+    try {
+      await signInWithPopup(auth, googleProvider);
+      // onAuthStateChanged will handle the rest
+      router.push('/');
+      toast({ title: "Login Successful", description: "Welcome back!" });
     } catch (error) {
-        console.error("Failed to login or upload image", error);
-    } finally {
-        setLoading(false);
+      console.error("Google login failed:", error);
+      toast({ title: "Login Failed", description: "Could not log in with Google.", variant: 'destructive' });
+      setLoading(false);
     }
   };
 
@@ -89,7 +94,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     try {
         if (data.profileImage) {
-            // Use the existing UID for the upload to overwrite the old image if necessary
             newPhotoURL = await uploadProfileImage(user.uid, data.profileImage);
         }
 
@@ -99,33 +103,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             photoURL: newPhotoURL,
             bio: data.bio,
         };
-
-        localStorage.setItem('mockUser', JSON.stringify(updatedUser));
+        
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(userDocRef, updatedUser, { merge: true });
         setUser(updatedUser);
 
     } catch (error) {
         console.error("Failed to update user:", error);
-        throw error; // Re-throw to be caught in the component
+        throw error;
     } finally {
         setLoading(false);
     }
   };
 
 
-  const logOut = () => {
+  const logOut = async () => {
     try {
-        localStorage.removeItem('mockUser');
-        setUser(null);
+        await signOut(auth);
         router.push('/login');
     } catch (error) {
-        console.error("Failed to remove user from localStorage", error);
+        console.error("Failed to log out", error);
     }
   };
 
   const value = {
     user,
+    firebaseUser,
     loading,
-    logIn,
+    logInWithGoogle,
     logOut,
     updateUser,
   };

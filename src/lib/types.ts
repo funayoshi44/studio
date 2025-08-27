@@ -1,5 +1,6 @@
 
 
+
 import type { Timestamp } from 'firebase/firestore';
 
 export type Difficulty = "easy" | "normal" | "hard";
@@ -17,7 +18,7 @@ export type GameHistory = {
   };
 };
 
-// Represents the user profile
+// Represents the user profile stored in Firestore
 export type MockUser = {
   uid: string;
   displayName: string;
