@@ -18,7 +18,7 @@ import {
   orderBy,
   deleteDoc,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { GameType, MockUser, Post, CardData } from './types';
 
 
@@ -472,4 +472,30 @@ export const addCard = async (
 
   // 3. Force refresh the cache after adding a new card
   await getCards(true);
+};
+
+
+/**
+ * Deletes a card from Firestore and its image from Storage.
+ * @param card The card object to delete.
+ */
+export const deleteCard = async (card: CardData): Promise<void> => {
+    // 1. Delete the document from Firestore
+    const cardRef = doc(db, 'cards', card.id);
+    await deleteDoc(cardRef);
+
+    // 2. Delete the image from Firebase Storage
+    // It's important to handle cases where imageUrl might not be a Firebase Storage URL
+    if (card.imageUrl && card.imageUrl.includes('firebasestorage.googleapis.com')) {
+        try {
+            const imageRef = ref(storage, card.imageUrl);
+            await deleteObject(imageRef);
+        } catch (error) {
+            // If the image doesn't exist, Storage throws an error. We can often ignore this.
+            console.warn(`Could not delete image ${card.imageUrl} from Storage. It might not exist.`, error);
+        }
+    }
+
+    // 3. Force refresh the cache
+    await getCards(true);
 };
