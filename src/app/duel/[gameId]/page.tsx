@@ -8,26 +8,24 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { GameCard } from '@/components/ui/game-card';
+import { PokerCard as GameCard } from '@/components/ui/poker-card';
 
 const TOTAL_ROUNDS = 13;
 
 type DuelGameState = {
   currentRound: number;
-  // Cards are now indexed by player UID
-  playerHands: { [uid: string]: number[] };
+  playerHands: { [uid: string]: CardData[] };
   scores: { [uid:string]: number };
   kyuso: { [uid:string]: number };
   only: { [uid:string]: number };
-  // Keep track of moves for the current round
-  moves: { [uid: string]: number | null };
+  moves: { [uid: string]: CardData | null };
   lastMoveBy: string | null;
-  history: { [round: number]: { [uid: string]: number } };
+  history: { [round: number]: { [uid: string]: CardData } };
   roundWinner: string | null; // UID of winner or 'draw'
   roundResultText: string;
   roundResultDetail: string;
@@ -110,7 +108,7 @@ export default function OnlineDuelPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.gameState, game?.playerIds, user, opponentId]);
   
-  const handleSelectCard = async (card: number) => {
+  const handleSelectCard = async (card: CardData) => {
     if (loading || !user || !game || !gameState) return;
     if (gameState.moves?.[user.uid]) return; // Already moved
 
@@ -124,7 +122,7 @@ export default function OnlineDuelPage() {
     setLoading(false);
   };
   
-  const evaluateRound = (playerCard: number, opponentCard: number) => {
+  const evaluateRound = (playerCard: CardData, opponentCard: CardData) => {
     if (!user || !opponentId || !gameState || !game) return;
 
     let winnerId: string | 'draw' = 'draw';
@@ -143,14 +141,17 @@ export default function OnlineDuelPage() {
     const p2Card = newGameState.moves[p2Id];
 
     if (p1Card === null || p2Card === null) return; // Should not happen, but a safeguard
+    
+    const p1Num = p1Card.number;
+    const p2Num = p2Card.number;
 
     // Determine winner
-    if (p1Card === 1 && p2Card === 13) { winnerId = p1Id; winType = 'only'; } 
-    else if (p2Card === 1 && p1Card === 13) { winnerId = p2Id; winType = 'only'; } 
-    else if (p1Card === p2Card - 1) { winnerId = p1Id; winType = 'kyuso'; }
-    else if (p2Card === p1Card - 1) { winnerId = p2Id; winType = 'kyuso'; }
-    else if (p1Card > p2Card) { winnerId = p1Id; }
-    else if (p2Card > p1Card) { winnerId = p2Id; }
+    if (p1Num === 1 && p2Num === 13) { winnerId = p1Id; winType = 'only'; } 
+    else if (p2Num === 1 && p1Num === 13) { winnerId = p2Id; winType = 'only'; } 
+    else if (p1Num === p2Num - 1) { winnerId = p1Id; winType = 'kyuso'; }
+    else if (p2Num === p1Num - 1) { winnerId = p2Id; winType = 'kyuso'; }
+    else if (p1Num > p2Num) { winnerId = p1Id; }
+    else if (p2Num > p1Num) { winnerId = p2Id; }
 
 
     // Update scores and special win counts
@@ -172,13 +173,13 @@ export default function OnlineDuelPage() {
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${game.players[p1Id]?.displayName ?? 'P1'}: ${p1Card} vs ${game.players[p2Id]?.displayName ?? 'P2'}: ${p2Card}`;
+    if(!resultDetail) resultDetail = `${game.players[p1Id]?.displayName ?? 'P1'}: ${p1Num} vs ${game.players[p2Id]?.displayName ?? 'P2'}: ${p2Num}`;
 
     // Update game state for UI before checking game end
     const roundHistory = { [p1Id]: p1Card, [p2Id]: p2Card };
     newGameState.history[newGameState.currentRound] = roundHistory;
-    newGameState.playerHands[p1Id] = newGameState.playerHands[p1Id].filter((c:number) => c !== p1Card);
-    newGameState.playerHands[p2Id] = newGameState.playerHands[p2Id].filter((c:number) => c !== p2Card);
+    newGameState.playerHands[p1Id] = newGameState.playerHands[p1Id].filter((c:CardData) => c.id !== p1Card.id);
+    newGameState.playerHands[p2Id] = newGameState.playerHands[p2Id].filter((c:CardData) => c.id !== p2Card.id);
     newGameState.roundWinner = winnerId;
     newGameState.roundResultText = resultText;
     newGameState.roundResultDetail = resultDetail;
@@ -364,9 +365,9 @@ export default function OnlineDuelPage() {
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
-                            {myCards.sort((a,b) => a-b).map(card => (
-                              <button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="transition-transform hover:scale-105">
-                                  <GameCard number={card} revealed={true} />
+                            {myCards.sort((a,b) => a.number - b.number).map(card => (
+                              <button key={card.id} onClick={() => handleSelectCard(card)} disabled={loading} className="transition-transform hover:scale-105">
+                                  <GameCard card={card} revealed={true} />
                               </button>
                             ))}
                         </div>
@@ -382,12 +383,12 @@ export default function OnlineDuelPage() {
               <div className="flex justify-around items-center">
                 <div className="text-center">
                   <PlayerInfo uid={user.uid} />
-                  <div className="mt-2"><GameCard number={myMove} revealed={true}/></div>
+                  <div className="mt-2"><GameCard card={myMove} revealed={true}/></div>
                 </div>
                 <div className="text-2xl font-bold">VS</div>
                 <div className="text-center">
                   {opponentId && <PlayerInfo uid={opponentId} />}
-                  <div className="mt-2"><GameCard number={opponentMove} revealed={opponentMove !== null}/></div>
+                  <div className="mt-2"><GameCard card={opponentMove} revealed={opponentMove !== null}/></div>
                 </div>
               </div>
             </div>

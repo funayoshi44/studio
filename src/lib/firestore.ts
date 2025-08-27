@@ -24,22 +24,42 @@ import type { Game, GameType, MockUser, Post, CardData } from './types';
 
 const TOTAL_ROUNDS = 13;
 
-const getInitialDuelGameState = (playerIds: string[] = []) => {
+const getInitialDuelGameState = async (playerIds: string[] = []) => {
+    // Fetch all cards from the database
+    const allCards = await getCards();
+
+    // Create a unique deck of 13 cards, one for each number from 1 to 13
+    const cardMap = new Map<number, CardData>();
+    for (const card of allCards) {
+        if (card.number >= 1 && card.number <= 13 && !cardMap.has(card.number)) {
+            cardMap.set(card.number, card);
+        }
+    }
+    const baseDeck = Array.from({ length: 13 }, (_, i) => i + 1).map(num => {
+        return cardMap.get(num) || {
+            id: `fallback-${num}`, name: `Card ${num}`, number: num, value: num, suit: '?',
+            imageUrl: `https://picsum.photos/seed/card-fallback-${num}/200/300`,
+            gameType: 'common', artist: 'System', rarity: 'common', tags: []
+        };
+    });
+
     const gameState: any = {
         currentRound: 1,
         playerHands: {},
         scores: {},
         kyuso: {},
         only: {},
-        moves: {},
+        moves: {}, // Stores the played card object
         lastMoveBy: null,
         history: {},
         roundWinner: null,
         roundResultText: '',
         roundResultDetail: '',
     };
+
     playerIds.forEach(uid => {
-        gameState.playerHands[uid] = Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1);
+        // Each player gets a shuffled full deck of CardData objects
+        gameState.playerHands[uid] = [...baseDeck].sort(() => Math.random() - 0.5);
         gameState.scores[uid] = 0;
         gameState.kyuso[uid] = 0;
         gameState.only[uid] = 0;
@@ -73,8 +93,13 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
     playerIds: [user.uid],
     status: 'waiting',
     createdAt: serverTimestamp(),
-    gameState: gameType === 'duel' ? getInitialDuelGameState([user.uid]) : {},
+    // Initialize gameState after creating the document shell
   });
+  
+  // Now initialize gameState with async call
+  const initialGameState = await getInitialDuelGameState([user.uid]);
+  await updateDoc(docRef, { gameState: initialGameState });
+
   return docRef.id;
 };
 
@@ -95,6 +120,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         }
         
         const newPlayerIds = [...gameData.playerIds, user.uid];
+        const newGameState = await getInitialDuelGameState(newPlayerIds);
 
         transaction.update(gameRef, {
             [`players.${user.uid}`]: {
@@ -104,7 +130,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
             },
             playerIds: newPlayerIds,
             status: 'in-progress',
-            gameState: getInitialDuelGameState(newPlayerIds),
+            gameState: newGameState,
         });
     });
 };
@@ -203,6 +229,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       // Found a game, join it
       const gameRef = doc(db, 'games', suitableGameId);
       const newPlayerIds = [...suitableGame.playerIds, user.uid];
+      const newGameState = await getInitialDuelGameState(newPlayerIds);
 
       transaction.update(gameRef, {
         [`players.${user.uid}`]: {
@@ -212,12 +239,13 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         },
         playerIds: newPlayerIds,
         status: 'in-progress',
-        gameState: getInitialDuelGameState(newPlayerIds),
+        gameState: newGameState,
       });
       return suitableGameId;
     } else {
       // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games"));
+      const newGameState = await getInitialDuelGameState([user.uid]);
       
       transaction.set(newGameRef, {
         gameType,
@@ -231,7 +259,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
-        gameState: gameType === 'duel' ? getInitialDuelGameState([user.uid]) : {},
+        gameState: newGameState,
       });
       return newGameRef.id;
     }
@@ -309,33 +337,22 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId), 
-        orderBy('createdAt', 'desc'),
+        orderBy('author.uid'), // Use the field from the where clause for ordering
         limit(50)
     );
 
-    return onSnapshot(q, (querySnapshot) => {
+    return onSnapshot(q, (snapshot) => {
         const posts: Post[] = [];
-        querySnapshot.forEach((doc) => {
+        snapshot.forEach((doc) => {
             posts.push({ id: doc.id, ...doc.data() } as Post);
         });
-        callback(posts.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
-    }, (error) => {
-        // Fallback query if index is missing
-        console.warn("Firestore query with composite index failed. Falling back to a simpler query. Please create the required index in your Firebase console for optimal performance.", error);
-        const fallbackQuery = query(postsCollection, where('author.uid', '==', userId), limit(50));
-        onSnapshot(fallbackQuery, (snapshot) => {
-            const posts: Post[] = [];
-            snapshot.forEach((doc) => {
-                posts.push({ id: doc.id, ...doc.data() } as Post);
-            });
-            // Manual sort on the client-side as a fallback
-            callback(posts.sort((a, b) => {
-                if (a.createdAt && b.createdAt) {
-                    return b.createdAt.toMillis() - a.createdAt.toMillis();
-                }
-                return 0;
-            }));
-        })
+        // Manual sort on the client-side as a fallback, since we can't order by timestamp without an index
+        callback(posts.sort((a, b) => {
+            if (a.createdAt && b.createdAt) {
+                return b.createdAt.toMillis() - a.createdAt.toMillis();
+            }
+            return 0;
+        }));
     });
 };
 
