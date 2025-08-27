@@ -23,7 +23,7 @@ export type MockUser = {
   email: string;
   photoURL: string;
   bio?: string; // Optional bio field
-  isAdmin?: boolean; // Admin flag
+  isAdmin: boolean; // Admin flag
   isGuest?: boolean; // Guest flag
 };
 

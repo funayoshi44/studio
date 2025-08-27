@@ -33,7 +33,6 @@ type UpdateUserInput = {
 
 type AuthContextType = {
   user: MockUser | null;
-  firebaseUser: User | null; // Kept for potential future use but decoupled from re-renders
   loading: boolean;
   logInWithGoogle: () => Promise<void>;
   logInWithEmail: (credentials: EmailPassCredentials) => Promise<void>;
@@ -45,7 +44,6 @@ type AuthContextType = {
 
 export const AuthContext = createContext<AuthContextType>({
   user: null,
-  firebaseUser: null,
   loading: true,
   logInWithGoogle: async () => {},
   logInWithEmail: async () => {},
@@ -56,7 +54,6 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [user, setUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -64,35 +61,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setFirebaseUser(fbUser); // Keep track of the raw firebase user
       if (fbUser) {
         const userDocRef = doc(db, 'users', fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
+        
+        const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
         if (userDocSnap.exists()) {
-          setUser(userDocSnap.data() as MockUser);
-        } else if (fbUser.isAnonymous) {
-           const guestProfile: MockUser = {
-            uid: fbUser.uid,
-            displayName: 'Guest',
-            email: '',
-            photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`,
-            bio: 'A guest user.',
-            isGuest: true,
-            isAdmin: false,
-          };
-          await setDoc(userDocRef, { ...guestProfile, createdAt: serverTimestamp() });
-          setUser(guestProfile);
-        }
-        else if (fbUser.providerData.length > 0) {
-           const newUserProfile: MockUser = {
-            uid: fbUser.uid,
-            displayName: fbUser.displayName || 'Anonymous',
-            email: fbUser.email || '',
-            photoURL: fbUser.photoURL || `https://i.pravatar.cc/150?u=${fbUser.uid}`,
-            bio: '',
-            isGuest: false,
-            isAdmin: false, // Default value
-          };
+          const userData = userDocSnap.data() as MockUser;
+          // Ensure isAdmin status is correctly updated on login
+          const isAdmin = userData.email === adminEmail;
+          if (userData.isAdmin !== isAdmin) {
+            await setDoc(userDocRef, { isAdmin }, { merge: true });
+            setUser({ ...userData, isAdmin });
+          } else {
+            setUser(userData);
+          }
+        } else {
+          // New user (or guest) profile creation
+          let newUserProfile: MockUser;
+          const isAdmin = fbUser.email === adminEmail;
+
+          if (fbUser.isAnonymous) {
+             newUserProfile = {
+              uid: fbUser.uid,
+              displayName: 'Guest',
+              email: '',
+              photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`,
+              bio: 'A guest user.',
+              isGuest: true,
+              isAdmin: false, // Guests can't be admins
+            };
+          } else {
+             newUserProfile = {
+              uid: fbUser.uid,
+              displayName: fbUser.displayName || 'Anonymous',
+              email: fbUser.email || '',
+              photoURL: fbUser.photoURL || `https://i.pravatar.cc/150?u=${fbUser.uid}`,
+              bio: '',
+              isGuest: false,
+              isAdmin: isAdmin,
+            };
+          }
           await setDoc(userDocRef, { ...newUserProfile, createdAt: serverTimestamp() });
           setUser(newUserProfile);
         }
@@ -119,11 +129,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      // onAuthStateChanged handles success
+      handleAuthSuccess("Logged in with Google");
     } catch (error) {
       handleAuthError(error, "Google Login");
     } finally {
-      // setLoading will be handled by onAuthStateChanged
+       setLoading(false);
     }
   };
   
@@ -132,9 +142,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
         await signInWithEmailAndPassword(auth, email, password);
-        // onAuthStateChanged handles success
+        handleAuthSuccess("Logged In");
     } catch (error) {
         handleAuthError(error, "Email/Password Login");
+    } finally {
         setLoading(false);
     }
   }
@@ -145,6 +156,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
           const userCredential = await createUserWithEmailAndPassword(auth, email, password);
           const fbUser = userCredential.user;
+          
+          const isAdmin = fbUser.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
           // Create user profile in Firestore
           const newUserProfile: MockUser = {
             uid: fbUser.uid,
@@ -153,14 +167,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`, // Default avatar
             bio: '',
             isGuest: false,
-            isAdmin: false,
+            isAdmin: isAdmin,
           };
           await setDoc(doc(db, 'users', fbUser.uid), { ...newUserProfile, createdAt: serverTimestamp() });
-          // onAuthStateChanged will set the user state.
+          
+          setUser(newUserProfile);
           handleAuthSuccess("Sign-up Successful");
       } catch (error) {
           handleAuthError(error, "Email/Password Sign-up");
-          setLoading(false);
+      } finally {
+        setLoading(false);
       }
   }
 
@@ -168,10 +184,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       try {
           await signInAnonymously(auth);
-          // onAuthStateChanged will handle profile creation
+          handleAuthSuccess("Logged in as Guest");
       } catch (error) {
           handleAuthError(error, "Guest Login");
-          setLoading(false);
+      } finally {
+        setLoading(false);
       }
   }
 
@@ -179,7 +196,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateUser = async (data: UpdateUserInput) => {
     if (!user) return;
 
-    setIsLoading(true);
+    setLoading(true);
     let newPhotoURL = user.photoURL;
 
     try {
@@ -202,7 +219,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.error("Failed to update user:", error);
         throw error;
     } finally {
-        setIsLoading(false);
+        setLoading(false);
     }
   };
 
@@ -225,7 +242,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const value = {
     user,
-    firebaseUser,
     loading,
     logInWithGoogle,
     logInWithEmail,
