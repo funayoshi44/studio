@@ -1,3 +1,4 @@
+
 "use server";
 
 import {
@@ -5,6 +6,7 @@ import {
   type AdjustDifficultyInput,
   type AdjustDifficultyOutput,
 } from '@/ai/flows/ai-opponent-difficulty-adjustment';
+import { startGame as startGameInFirestore } from '@/lib/firestore';
 import { z } from 'zod';
 
 export async function getAIMove(input: AdjustDifficultyInput): Promise<AdjustDifficultyOutput> {
@@ -28,4 +30,14 @@ export async function getAIMove(input: AdjustDifficultyInput): Promise<AdjustDif
       rationale: 'A fallback move was selected due to an AI generation error. This was a random choice.',
     };
   }
+}
+
+export async function startGameAction(gameId: string) {
+    try {
+        await startGameInFirestore(gameId);
+    } catch (error) {
+        console.error("Failed to start game:", error);
+        // We might want to throw the error to be handled by the client
+        throw new Error("Failed to start game.");
+    }
 }

@@ -1,6 +1,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -154,12 +155,8 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
     status: 'waiting',
     createdAt: serverTimestamp(),
     maxPlayers: gameType === 'poker' ? 4 : 2,
-    // Initialize gameState after creating the document shell
+    gameState: {}, // Initialize with an empty object
   });
-  
-  // Now initialize gameState with async call
-  const initialGameState = await getInitialStateForGame(gameType, [user.uid]);
-  await updateDoc(docRef, { gameState: initialGameState });
 
   return docRef.id;
 };
@@ -177,25 +174,53 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
 
         const gameData = gameSnap.data() as Game;
         const maxPlayers = gameData.maxPlayers || 2;
-        if (gameData.playerIds.length >= maxPlayers || gameData.playerIds.includes(user.uid)) {
+        
+        // Prevent joining if game is full, or already started, or user is already in
+        if (gameData.playerIds.length >= maxPlayers || gameData.status !== 'waiting' || gameData.playerIds.includes(user.uid)) {
             return;
         }
         
         const newPlayerIds = [...gameData.playerIds, user.uid];
-        const isGameStarting = newPlayerIds.length === maxPlayers;
-        const newGameState = isGameStarting 
-            ? await getInitialStateForGame(gameData.gameType, newPlayerIds)
-            : gameData.gameState;
 
-        transaction.update(gameRef, {
-            [`players.${user.uid}`]: {
+        // For Duel and Janken, start the game when lobby is full
+        const isGameStarting = (gameData.gameType === 'duel' || gameData.gameType === 'janken') && newPlayerIds.length === maxPlayers;
+        
+        const updates: any = {
+             [`players.${user.uid}`]: {
                 displayName: user.displayName,
                 photoURL: user.photoURL,
                 bio: user.bio || '',
             },
             playerIds: newPlayerIds,
-            status: isGameStarting ? 'in-progress' : 'waiting',
-            gameState: newGameState,
+        };
+
+        if (isGameStarting) {
+            updates.status = 'in-progress';
+            updates.gameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
+        }
+
+        transaction.update(gameRef, updates);
+    });
+};
+
+// Manually start a game (for Poker)
+export const startGame = async (gameId: string) => {
+    const gameRef = doc(db, 'games', gameId);
+    await runTransaction(db, async (transaction) => {
+        const gameSnap = await transaction.get(gameRef);
+        if (!gameSnap.exists()) {
+            throw new Error("Game not found");
+        }
+        const gameData = gameSnap.data() as Game;
+        if (gameData.status !== 'waiting' || gameData.playerIds.length < 2) {
+            throw new Error("Game cannot be started.");
+        }
+
+        const initialGameState = await getInitialStateForGame(gameData.gameType, gameData.playerIds);
+
+        transaction.update(gameRef, {
+            status: 'in-progress',
+            gameState: initialGameState
         });
     });
 };
@@ -217,10 +242,13 @@ export const subscribeToGame = (gameId: string, callback: (game: Game | null) =>
 export const updateGameState = async (gameId: string, newGameState: any): Promise<void> => {
   const gameRef = doc(db, 'games', gameId);
   
-  const updatePayload: { [key: string]: any } = {
-    gameState: newGameState,
-  };
+  const updatePayload: { [key: string]: any } = {};
+
+  if (newGameState !== undefined) {
+    updatePayload.gameState = newGameState;
+  }
   
+  // Conditionally add status and winner to the payload if they exist in newGameState
   if (newGameState.status !== undefined) {
     updatePayload.status = newGameState.status;
   }
@@ -228,7 +256,9 @@ export const updateGameState = async (gameId: string, newGameState: any): Promis
     updatePayload.winner = newGameState.winner;
   }
 
-  await updateDoc(gameRef, updatePayload);
+  if (Object.keys(updatePayload).length > 0) {
+    await updateDoc(gameRef, updatePayload);
+  }
 };
 
 
@@ -348,23 +378,23 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     if (suitableGame && suitableGameId) {
       const gameRef = doc(db, 'games', suitableGameId);
       const newPlayerIds = [...suitableGame.playerIds, user.uid];
-      const isGameStarting = newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
+      const isGameStarting = (gameType === 'duel' || gameType === 'janken') && newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
       
-      const newGameState = isGameStarting
-        ? await getInitialStateForGame(gameType, newPlayerIds)
-        : suitableGame.gameState;
-
-      transaction.update(gameRef, {
+      const updates: any = {
         [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' },
-        playerIds: newPlayerIds,
-        status: isGameStarting ? 'in-progress' : 'waiting',
-        gameState: newGameState,
-      });
+        playerIds: newPlayerIds
+      };
+
+      if (isGameStarting) {
+        updates.status = 'in-progress';
+        updates.gameState = await getInitialStateForGame(gameType, newPlayerIds);
+      }
+      
+      transaction.update(gameRef, updates);
       return suitableGameId;
     } else {
       // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games"));
-      const newGameState = await getInitialStateForGame(gameType, [user.uid]);
       
       transaction.set(newGameRef, {
         gameType,
@@ -372,7 +402,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
-        gameState: newGameState,
+        gameState: {},
         maxPlayers: maxPlayers,
       });
       return newGameRef.id;

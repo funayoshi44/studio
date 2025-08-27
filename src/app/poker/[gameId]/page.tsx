@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData } from '@/lib/firestore';
+import { startGameAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -43,7 +44,8 @@ export default function OnlinePokerPage() {
   const [localSelected, setLocalSelected] = useState<number[]>([]);
 
   const gameState = game?.gameState as PokerGameState | undefined;
-  const isMyTurn = user && gameState && gameState.turnOrder[gameState.currentTurnIndex] === user.uid;
+  const isMyTurn = user && gameState && gameState.turnOrder && gameState.turnOrder[gameState.currentTurnIndex] === user.uid;
+  const isHost = user && game && game.playerIds[0] === user.uid;
 
   useEffect(() => {
     if (!gameId || !user) return;
@@ -114,6 +116,19 @@ export default function OnlinePokerPage() {
     toast({ title: t('gameIdCopied') });
   };
   
+  const handleStartGame = async () => {
+      if (!isHost || !game || game.playerIds.length < 2) return;
+      setLoading(true);
+      try {
+        await startGameAction(gameId);
+      } catch (error) {
+        console.error(error);
+        toast({ title: "Error", description: "Failed to start the game.", variant: 'destructive'})
+      } finally {
+        setLoading(false);
+      }
+  }
+
   const handleNextRound = async () => {
     if (!user || game?.playerIds[0] !== user.uid) return;
     await updateGameState(gameId, { ...game.gameState, phase: 'dealing', winners: null, resultText: '' });
@@ -156,16 +171,42 @@ export default function OnlinePokerPage() {
 
   if (game.status === 'waiting') {
     return (
-        <div className="text-center py-10">
+        <div className="text-center py-10 max-w-2xl mx-auto">
             <h2 className="text-2xl font-bold mb-4">{t('waitingForPlayer')}</h2>
-            <p className="mb-2">Game needs 2-4 players to start.</p>
             <p className="mb-4 text-muted-foreground">{t('shareGameId')}</p>
             <div className="flex items-center justify-center gap-2 mb-6">
                 <code className="p-2 bg-muted rounded-md">{gameId}</code>
                 <Button onClick={handleCopyGameId} size="icon" variant="ghost"><Copy className="h-4 w-4"/></Button>
             </div>
-            <p>Current Players: {game.playerIds.length}/4</p>
-            <Loader2 className="animate-spin h-8 w-8 mx-auto my-8" />
+            <Card className="my-6">
+              <CardHeader><CardTitle>Players in Lobby ({game.playerIds.length}/{game.maxPlayers})</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {game.playerIds.map(uid => (
+                  <div key={uid} className="flex items-center gap-2 p-2 bg-background rounded-md">
+                    <Avatar>
+                      <AvatarImage src={game.players[uid]?.photoURL ?? undefined} />
+                      <AvatarFallback>{game.players[uid]?.displayName?.[0]}</AvatarFallback>
+                    </Avatar>
+                    <span>{game.players[uid]?.displayName} {uid === game.playerIds[0] ? '(Host)' : ''}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {isHost ? (
+              <>
+                <p className="mb-4">You are the host. You can start the game when there are 2-4 players.</p>
+                <Button onClick={handleStartGame} disabled={loading || game.playerIds.length < 2}>
+                  {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Start Game
+                </Button>
+              </>
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                <Loader2 className="animate-spin h-6 w-6" />
+                <p>Waiting for the host to start the game...</p>
+              </div>
+            )}
         </div>
     );
   }
