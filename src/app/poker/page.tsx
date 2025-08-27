@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAIMove } from '../actions';
 import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-adjustment';
 import Link from 'next/link';
-import { evaluatePokerHand, type PokerCard, createPokerDeck } from '@/lib/game-logic/poker';
+import { evaluatePokerHand, createPokerDeck, type PokerCard } from '@/lib/game-logic/poker';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
@@ -56,11 +56,11 @@ export default function PokerPage() {
   const [loading, setLoading] = useState(false);
 
   const dealNewHand = useCallback(async () => {
-    setState(prev => ({ ...prev, phase: 'loading' }));
+    setState(prev => ({ ...prev, phase: 'loading', resultText: '', playerHandRank: null, cpuHandRank: null, aiRationale: null, selectedIndices: [] }));
     const deck = await createPokerDeck();
     if (deck.length < 10) {
       console.error("Not enough cards to deal.");
-      // Here you might want to set an error state in the UI
+       setState(prev => ({ ...prev, resultText: "Error: Could not create a deck."}));
       return;
     }
     const playerHand = deck.splice(0, 5);

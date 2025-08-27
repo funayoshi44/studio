@@ -1,3 +1,4 @@
+
 import type { CardData } from '@/lib/types';
 import { getCards } from '@/lib/firestore';
 
@@ -7,13 +8,46 @@ export type HandRank = { name: string; value: number };
 
 // This function now fetches card data from Firestore.
 export const createPokerDeck = async (): Promise<PokerCard[]> => {
-  const pokerCards = await getCards('poker');
+  let pokerCards = await getCards('poker');
+  
   if (pokerCards.length === 0) {
-      console.error("Could not create poker deck, no cards found in database for game type 'poker'.");
-      return [];
+      console.warn("Could not create poker deck from Firestore. Falling back to default deck.");
+      pokerCards = createDefaultDeck();
   }
+
   return shuffleDeck(pokerCards);
 };
+
+// A fallback function to create a default deck if Firestore is empty
+const createDefaultDeck = (): PokerCard[] => {
+    const suits = ['♠️', '♥️', '♦️', '♣️'];
+    const ranks = [
+        { name: 'A', value: 14, number: 1 }, { name: '2', value: 2, number: 2 }, { name: '3', value: 3, number: 3 }, 
+        { name: '4', value: 4, number: 4 }, { name: '5', value: 5, number: 5 }, { name: '6', value: 6, number: 6 }, 
+        { name: '7', value: 7, number: 7 }, { name: '8', value: 8, number: 8 }, { name: '9', value: 9, number: 9 }, 
+        { name: '10', value: 10, number: 10 }, { name: 'J', value: 11, number: 11 }, { name: 'Q', value: 12, number: 12 }, 
+        { name: 'K', value: 13, number: 13 }
+    ];
+    const deck: PokerCard[] = [];
+    for (const suit of suits) {
+        for (const rank of ranks) {
+            deck.push({
+                id: `${rank.name}${suit}`,
+                gameType: 'poker',
+                suit: suit,
+                number: rank.number,
+                value: rank.value,
+                name: `${rank.name} of ${suit}`,
+                artist: 'System',
+                imageUrl: `https://picsum.photos/seed/${rank.name}${suit}/200/300`,
+                rarity: 'common',
+                tags: []
+            });
+        }
+    }
+    return deck;
+}
+
 
 const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
   for (let i = deck.length - 1; i > 0; i--) {
@@ -40,6 +74,9 @@ const checkStraight = (sortedRanks: number[]): boolean => {
 }
 
 export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
+    if (!hand || hand.length !== 5) {
+        return { name: 'High Card', value: 0 };
+    }
     const rankCounts: { [key: number]: number } = {};
     const suitCounts: { [key: string]: number } = {};
     let starSuitCount = 0;
@@ -66,7 +103,7 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
         }
     }
 
-    const isFlush = Object.values(finalSuitCounts).some(count => count === 5);
+    const isFlush = Object.values(finalSuitCounts).some(count => count >= 5);
     const is5SuitFlush = new Set(hand.map(c => c.suit)).size === 5;
     const isStraight = checkStraight(sortedRanks);
     // A,K,Q,J,10 has values 14,13,12,11,10
