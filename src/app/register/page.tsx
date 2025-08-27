@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link"
+import Image from "next/image"
 import { useState, useContext, useEffect } from "react";
 import { AuthContext } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
@@ -15,10 +16,16 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Loader2 } from "lucide-react";
+
 
 export default function RegisterPage() {
   const { logIn, user } = useContext(AuthContext);
   const [username, setUsername] = useState('');
+  const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
@@ -28,7 +35,15 @@ export default function RegisterPage() {
     }
   }, [user, router]);
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setProfileImage(file);
+      setPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
      if (!username.trim()) {
       toast({
@@ -38,7 +53,9 @@ export default function RegisterPage() {
       });
       return;
     }
-    logIn(username);
+    setIsLoading(true);
+    await logIn(username, profileImage);
+    setIsLoading(false);
   };
   
   if (user) {
@@ -66,7 +83,25 @@ export default function RegisterPage() {
                         onChange={(e) => setUsername(e.target.value)}
                     />
                 </div>
-                <Button type="submit" className="w-full">
+                 <div className="grid gap-2">
+                    <Label htmlFor="profile-image">Profile Picture (Optional)</Label>
+                    <div className="flex items-center gap-4">
+                        <Avatar className="h-16 w-16">
+                            <AvatarImage src={preview ?? undefined} alt="Preview" />
+                            <AvatarFallback>{username?.[0]}</AvatarFallback>
+                        </Avatar>
+                        <Input
+                            id="profile-image"
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageChange}
+                            className="text-sm"
+                        />
+                    </div>
+                </div>
+
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Sign Up
                 </Button>
             </form>

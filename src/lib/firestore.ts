@@ -1,5 +1,5 @@
 
-import { db } from './firebase';
+import { db, storage } from './firebase';
 import {
   collection,
   addDoc,
@@ -16,6 +16,7 @@ import {
   runTransaction,
   orderBy,
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type { GameType } from './types';
 
 
@@ -51,6 +52,14 @@ const initialDuelGameState = {
   roundWinner: null,
   roundResultText: '',
   roundResultDetail: '',
+};
+
+// Upload a profile image and get the URL
+export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {
+    const storageRef = ref(storage, `profileImages/${userId}/${file.name}`);
+    const snapshot = await uploadBytes(storageRef, file);
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    return downloadURL;
 };
 
 // Create a new game
