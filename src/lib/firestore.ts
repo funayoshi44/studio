@@ -68,6 +68,36 @@ const getInitialDuelGameState = async (playerIds: string[] = []) => {
     return gameState;
 };
 
+const getInitialJankenGameState = (playerIds: string[] = []) => {
+    const gameState: any = {
+        currentRound: 1,
+        scores: {},
+        moves: {}, // { initial: { uid: move }, final: { uid: move } }
+        phase: 'initial', // 'initial', 'final', 'result'
+        roundResultText: '',
+        lastMoveBy: null,
+    };
+    playerIds.forEach(uid => {
+        gameState.scores[uid] = 0;
+        gameState.moves[uid] = { initial: null, final: null };
+    });
+    return gameState;
+};
+
+const getInitialStateForGame = async (gameType: GameType, playerIds: string[]) => {
+    switch (gameType) {
+        case 'duel':
+            return getInitialDuelGameState(playerIds);
+        case 'janken':
+            return getInitialJankenGameState(playerIds);
+        // case 'poker':
+        //     return getInitialPokerGameState(playerIds);
+        default:
+            // Return a default state or throw an error
+            return getInitialDuelGameState(playerIds);
+    }
+}
+
 
 // Upload a profile image and get the URL
 export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {
@@ -97,7 +127,7 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
   });
   
   // Now initialize gameState with async call
-  const initialGameState = await getInitialDuelGameState([user.uid]);
+  const initialGameState = await getInitialStateForGame(gameType, [user.uid]);
   await updateDoc(docRef, { gameState: initialGameState });
 
   return docRef.id;
@@ -120,7 +150,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         }
         
         const newPlayerIds = [...gameData.playerIds, user.uid];
-        const newGameState = await getInitialDuelGameState(newPlayerIds);
+        const newGameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
 
         transaction.update(gameRef, {
             [`players.${user.uid}`]: {
@@ -163,23 +193,38 @@ export const updateGameState = async (gameId: string, newGameState: any): Promis
 
 
 // Submit a move
-export const submitMove = async (gameId: string, userId: string, move: any) => {
+export const submitMove = async (gameId: string, userId: string, move: any, phase?: 'initial' | 'final') => {
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
-      const gameDoc = await transaction.get(gameRef);
-      if (!gameDoc.exists()) {
-        throw "Document does not exist!";
-      }
-      const currentGameState = gameDoc.data().gameState || {};
-      const newMoves = { ...currentGameState.moves, [userId]: move };
-      const newGameState = {
-        ...currentGameState,
-        moves: newMoves,
-        lastMoveBy: userId,
-      };
-      transaction.update(gameRef, { gameState: newGameState });
+        const gameDoc = await transaction.get(gameRef);
+        if (!gameDoc.exists()) {
+            throw new Error("Game document does not exist!");
+        }
+
+        const gameData = gameDoc.data() as Game;
+        const currentGameState = gameData.gameState || {};
+        let newGameState;
+
+        if (gameData.gameType === 'janken' && phase) {
+            // Janken move submission logic
+            const newMoves = { 
+                ...currentGameState.moves,
+                [userId]: {
+                    ...currentGameState.moves[userId],
+                    [phase]: move,
+                }
+            };
+            newGameState = { ...currentGameState, moves: newMoves };
+        } else {
+            // Duel move submission logic (or other games)
+            const newMoves = { ...currentGameState.moves, [userId]: move };
+            newGameState = { ...currentGameState, moves: newMoves, lastMoveBy: userId };
+        }
+        
+        transaction.update(gameRef, { gameState: newGameState });
     });
 };
+
 
 
 // Find available games
@@ -229,7 +274,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       // Found a game, join it
       const gameRef = doc(db, 'games', suitableGameId);
       const newPlayerIds = [...suitableGame.playerIds, user.uid];
-      const newGameState = await getInitialDuelGameState(newPlayerIds);
+      const newGameState = await getInitialStateForGame(gameType, newPlayerIds);
 
       transaction.update(gameRef, {
         [`players.${user.uid}`]: {
@@ -245,7 +290,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     } else {
       // No suitable waiting games found, create a new one
       const newGameRef = doc(collection(db, "games"));
-      const newGameState = await getInitialDuelGameState([user.uid]);
+      const newGameState = await getInitialStateForGame(gameType, [user.uid]);
       
       transaction.set(newGameRef, {
         gameType,
@@ -499,3 +544,5 @@ export const deleteCard = async (card: CardData): Promise<void> => {
     // 3. Force refresh the cache
     await getCards(true);
 };
+
+    

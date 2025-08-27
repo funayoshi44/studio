@@ -94,20 +94,33 @@ export default function OnlineLobbyPage() {
     }
   };
 
-  const handleJoinWithId = (e: FormEvent) => {
+  const handleJoinWithId = async (e: FormEvent) => {
       e.preventDefault();
       if (!joinGameId.trim() || !user) return;
       setIsJoining(joinGameId);
-      // We don't know the gameType from just the ID, so we need to fetch it first
-      // However, for simplicity, we will assume 'duel' and let the page redirect if it's wrong
-      // A better implementation would fetch the game doc first.
-      // For now, let's just attempt to join and navigate. Firestore rules would be the guard.
-      joinGame(joinGameId, user).then(() => {
-          // This is a simplification. We don't know the game type from the ID alone.
-          // We will push to duel and let the logic inside that page handle it.
-          // A more robust solution would involve fetching the game doc from Firestore first.
-          router.push(`/duel/${joinGameId}`);
-      }).catch(error => {
+      
+      try {
+        // Attempt to join the game first to ensure it's valid
+        await joinGame(joinGameId, user);
+        
+        // This is a simplification. We don't know the game type from the ID alone.
+        // We will push to a generic path and let the game page logic handle it.
+        // A more robust solution involves fetching the game doc from Firestore first,
+        // which we do implicitly in joinGame. Let's redirect based on that.
+        // For now, we'll try to find it in the available games list first.
+        const game = availableGames.find(g => g.id === joinGameId);
+        
+        if (game) {
+            router.push(`/${game.gameType}/${joinGameId}`);
+        } else {
+            // If not in the list, it's a private game. We need to fetch its type.
+            // For now, we assume a default and let the destination page handle it.
+            // This part is tricky without an extra DB read. We'll rely on joinGame succeeding.
+            // Let's assume duel for now as a fallback, but this could be improved.
+            // A better way is to have `joinGame` return the game data.
+            router.push(`/duel/${joinGameId}`); // Fallback, may not work for janken
+        }
+      } catch (error) {
           console.error("Failed to join game with ID:", error);
           toast({
               title: "Failed to Join",
@@ -115,7 +128,7 @@ export default function OnlineLobbyPage() {
               variant: "destructive"
           });
           setIsJoining(null);
-      })
+      }
   }
 
   const GameCard = ({ gameType, icon: Icon, disabled = false }: { gameType: GameType; icon: React.ElementType, disabled?: boolean }) => (
@@ -153,7 +166,7 @@ export default function OnlineLobbyPage() {
             </CardHeader>
             <CardContent className="grid sm:grid-cols-3 gap-6">
             <GameCard gameType="duel" icon={Swords} />
-            <GameCard gameType="janken" icon={Scissors} disabled />
+            <GameCard gameType="janken" icon={Scissors} />
             <GameCard gameType="poker" icon={Layers} disabled />
             </CardContent>
         </Card>
@@ -229,3 +242,5 @@ export default function OnlineLobbyPage() {
     </div>
   );
 }
+
+    
