@@ -309,7 +309,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId), 
-        orderBy('createdAt', 'desc'), 
+        orderBy('createdAt', 'desc'),
         limit(50)
     );
 
@@ -318,9 +318,27 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
         querySnapshot.forEach((doc) => {
             posts.push({ id: doc.id, ...doc.data() } as Post);
         });
-        callback(posts);
+        callback(posts.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
+    }, (error) => {
+        // Fallback query if index is missing
+        console.warn("Firestore query with composite index failed. Falling back to a simpler query. Please create the required index in your Firebase console for optimal performance.", error);
+        const fallbackQuery = query(postsCollection, where('author.uid', '==', userId), limit(50));
+        onSnapshot(fallbackQuery, (snapshot) => {
+            const posts: Post[] = [];
+            snapshot.forEach((doc) => {
+                posts.push({ id: doc.id, ...doc.data() } as Post);
+            });
+            // Manual sort on the client-side as a fallback
+            callback(posts.sort((a, b) => {
+                if (a.createdAt && b.createdAt) {
+                    return b.createdAt.toMillis() - a.createdAt.toMillis();
+                }
+                return 0;
+            }));
+        })
     });
 };
+
 
 // Like/Unlike a post
 export const togglePostLike = async (postId: string, userId: string): Promise<void> => {
