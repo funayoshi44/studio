@@ -72,7 +72,7 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
       [user.uid]: {
         displayName: user.displayName,
         photoURL: user.photoURL,
-        bio: user.bio,
+        bio: user.bio || '',
       },
     },
     playerIds: [user.uid],
@@ -120,7 +120,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
             [`players.${user.uid}`]: {
                 displayName: user.displayName,
                 photoURL: user.photoURL,
-                bio: user.bio,
+                bio: user.bio || '',
             },
             playerIds: [...gameData.playerIds, user.uid],
             status: 'in-progress',
@@ -236,7 +236,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         [`players.${user.uid}`]: {
           displayName: user.displayName,
           photoURL: user.photoURL,
-          bio: user.bio,
+          bio: user.bio || '',
         },
         playerIds: [...suitableGame.playerIds, user.uid],
         status: 'in-progress',
@@ -253,7 +253,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
           [user.uid]: {
             displayName: user.displayName,
             photoURL: user.photoURL,
-            bio: user.bio,
+            bio: user.bio || '',
           },
         },
         playerIds: [user.uid],
