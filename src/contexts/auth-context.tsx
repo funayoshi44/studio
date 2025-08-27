@@ -33,7 +33,7 @@ type UpdateUserInput = {
 
 type AuthContextType = {
   user: MockUser | null;
-  firebaseUser: User | null;
+  firebaseUser: User | null; // Kept for potential future use but decoupled from re-renders
   loading: boolean;
   logInWithGoogle: () => Promise<void>;
   logInWithEmail: (credentials: EmailPassCredentials) => Promise<void>;
@@ -64,9 +64,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setLoading(true);
+      setFirebaseUser(fbUser); // Keep track of the raw firebase user
       if (fbUser) {
-        setFirebaseUser(fbUser);
         const userDocRef = doc(db, 'users', fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
         if (userDocSnap.exists()) {
@@ -84,7 +83,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           await setDoc(userDocRef, { ...guestProfile, createdAt: serverTimestamp() });
           setUser(guestProfile);
         }
-        // User is authenticated with a provider (e.g. Google) but doc doesn't exist.
         else if (fbUser.providerData.length > 0) {
            const newUserProfile: MockUser = {
             uid: fbUser.uid,
@@ -99,7 +97,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setUser(newUserProfile);
         }
       } else {
-        setFirebaseUser(null);
         setUser(null);
       }
       setLoading(false);
@@ -126,7 +123,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error) {
       handleAuthError(error, "Google Login");
     } finally {
-      setLoading(false);
+      // setLoading will be handled by onAuthStateChanged
     }
   };
   
@@ -135,10 +132,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
         await signInWithEmailAndPassword(auth, email, password);
-        handleAuthSuccess("Login Successful");
+        // onAuthStateChanged handles success
     } catch (error) {
         handleAuthError(error, "Email/Password Login");
-    } finally {
         setLoading(false);
     }
   }
@@ -160,11 +156,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             isAdmin: false,
           };
           await setDoc(doc(db, 'users', fbUser.uid), { ...newUserProfile, createdAt: serverTimestamp() });
-          setUser(newUserProfile);
+          // onAuthStateChanged will set the user state.
           handleAuthSuccess("Sign-up Successful");
       } catch (error) {
           handleAuthError(error, "Email/Password Sign-up");
-      } finally {
           setLoading(false);
       }
   }
@@ -174,10 +169,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
           await signInAnonymously(auth);
           // onAuthStateChanged will handle profile creation
-          handleAuthSuccess("Logged in as Guest");
       } catch (error) {
           handleAuthError(error, "Guest Login");
-      } finally {
           setLoading(false);
       }
   }
@@ -186,7 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateUser = async (data: UpdateUserInput) => {
     if (!user) return;
 
-    setLoading(true);
+    setIsLoading(true);
     let newPhotoURL = user.photoURL;
 
     try {
@@ -216,7 +209,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logOut = async () => {
     const wasGuest = user?.isGuest;
-    const userToDelete = firebaseUser; // Capture before state changes
+    const userToDelete = auth.currentUser; // Capture before state changes
     try {
         await signOut(auth);
         if (wasGuest && userToDelete) {
