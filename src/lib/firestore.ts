@@ -399,25 +399,29 @@ const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 
 /**
  * Fetches all card definitions from Firestore, with caching.
- * @param gameType The type of game to fetch cards for (can be used for filtering, but here we fetch all).
+ * @param forceRefresh If true, bypasses the cache and fetches fresh data from Firestore.
  * @returns A promise that resolves to an array of CardData.
  */
-export const getCards = async (gameType: GameType | 'common'): Promise<CardData[]> => {
-    // 1. Check localStorage for cached data
-    try {
-        const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
-        if (cachedItem) {
-            const { timestamp, data } = JSON.parse(cachedItem);
-            if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
-                console.log(`Returning all cached cards`);
-                return data as CardData[];
+export const getCards = async (forceRefresh: boolean = false): Promise<CardData[]> => {
+    // 1. Check localStorage for cached data if not forcing a refresh
+    if (!forceRefresh) {
+        try {
+            const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
+            if (cachedItem) {
+                const { timestamp, data } = JSON.parse(cachedItem);
+                if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
+                    console.log(`Returning all cached cards`);
+                    return data as CardData[];
+                } else {
+                    console.log("Card cache expired.");
+                }
             }
+        } catch (e) {
+            console.error("Error reading from card cache", e);
         }
-    } catch (e) {
-        console.error("Error reading from card cache", e);
     }
     
-    // 2. If no valid cache, fetch from Firestore
+    // 2. If no valid cache or forcing refresh, fetch from Firestore
     console.log("Fetching all cards from Firestore...");
     const cardsCollection = collection(db, 'cards');
     const querySnapshot = await getDocs(cardsCollection);
@@ -430,6 +434,7 @@ export const getCards = async (gameType: GameType | 'common'): Promise<CardData[
     try {
         const cacheItem = { timestamp: Date.now(), data: cards };
         localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(cacheItem));
+        console.log(`Cached ${cards.length} cards.`);
     } catch (e) {
         console.error("Error writing to card cache", e);
     }
@@ -464,4 +469,7 @@ export const addCard = async (
     imageUrl: imageUrl, // Add the retrieved image URL
     createdAt: serverTimestamp(),
   });
+
+  // 3. Force refresh the cache after adding a new card
+  await getCards(true);
 };

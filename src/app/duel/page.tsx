@@ -70,7 +70,7 @@ export default function DuelPage() {
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
         // Fetch all cards from the database, regardless of gameType
-        const allCards = await getCards('common'); // 'common' will now fetch all and filter later
+        const allCards = await getCards(); 
         
         // Create a unique deck of 13 cards, one for each number from 1 to 13
         const cardMap = new Map<number, CardData>();

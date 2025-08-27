@@ -8,14 +8,21 @@ export type HandRank = { name: string; value: number };
 
 // This function now fetches card data from Firestore.
 export const createPokerDeck = async (): Promise<PokerCard[]> => {
-  let pokerCards = await getCards('poker');
+  let pokerCards = await getCards();
   
   if (pokerCards.length === 0) {
       console.warn("Could not create poker deck from Firestore. Falling back to default deck.");
       pokerCards = createDefaultDeck();
   }
 
-  return shuffleDeck(pokerCards);
+  // Filter for cards that are relevant for a standard poker deck (or your specific rules)
+  // For now, we'll assume all fetched cards are usable in poker.
+  const deck = pokerCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
+  if (deck.length < 52) {
+      console.warn(`Poker deck has only ${deck.length} cards. Standard games might not work.`);
+  }
+
+  return shuffleDeck(deck);
 };
 
 // A fallback function to create a default deck if Firestore is empty
