@@ -62,6 +62,23 @@ export const uploadProfileImage = async (userId: string, file: File): Promise<st
     return downloadURL;
 };
 
+// Generic function to get a download URL for a file in storage
+export const getStorageUrl = async (path: string): Promise<string | null> => {
+  try {
+    const storageRef = ref(storage, path);
+    const downloadURL = await getDownloadURL(storageRef);
+    return downloadURL;
+  } catch (error: any) {
+    // If the file doesn't exist, this will throw an error. We can catch it and return null.
+    if (error.code === 'storage/object-not-found') {
+      console.warn(`Storage object not found at path: ${path}`);
+      return null;
+    }
+    console.error(`Failed to get storage URL for path: ${path}`, error);
+    return null;
+  }
+}
+
 // Create a new game
 export const createGame = async (user: MockUser, gameType: GameType): Promise<string> => {
   const gameCollection = collection(db, 'games');

@@ -17,12 +17,6 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'picsum.photos',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
         hostname: 'i.pravatar.cc',
         port: '',
         pathname: '/**',
@@ -32,7 +26,13 @@ const nextConfig = {
         hostname: 'poetryfactory.jp',
         port: '',
         pathname: '/**',
-      }
+      },
+      {
+        protocol: "https",
+        hostname: "firebasestorage.googleapis.com",
+        port: "",
+        pathname: "**",
+      },
     ],
   },
   env: {

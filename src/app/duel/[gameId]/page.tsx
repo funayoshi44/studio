@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message, leaveGame } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, subscribeToMessages, sendMessage, type Message, leaveGame, getStorageUrl } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Send, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import Image from 'next/image';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { CARD_6_IMAGE_PATH } from '@/lib/constants';
 
 
 const TOTAL_ROUNDS = 13;
@@ -55,12 +56,17 @@ export default function OnlineDuelPage() {
   const params = useParams();
   const gameId = params.gameId as string;
   const { toast } = useToast();
+  const [card6ImageUrl, setCard6ImageUrl] = useState<string | null>(null);
 
   const t = useTranslation();
   const [game, setGame] = useState<Game | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getStorageUrl(CARD_6_IMAGE_PATH).then(setCard6ImageUrl);
+  }, []);
 
   const gameState = game?.gameState as DuelGameState | undefined;
   const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
@@ -332,8 +338,8 @@ export default function OnlineDuelPage() {
       return <div className={`${sizeClasses} ${baseClasses} bg-gray-400 border-gray-500`}>?</div>
     }
 
-    const cardContent = isImage ? (
-      <Image src="https://picsum.photos/seed/duel-6/100/140" alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
+    const cardContent = isImage && card6ImageUrl ? (
+      <Image src={card6ImageUrl} alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
     ) : (
       cardValue
     );
@@ -500,8 +506,8 @@ export default function OnlineDuelPage() {
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                             {myCards.sort((a,b) => a-b).map(card => (
                               <Button key={card} onClick={() => handleSelectCard(card)} disabled={loading} className="w-14 h-16 md:w-16 md:h-20 text-lg font-bold transition-transform hover:scale-110 p-0 overflow-hidden relative">
-                                {card === 6 ? (
-                                    <Image src="https://picsum.photos/seed/duel-6/100/140" alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
+                                {card === 6 && card6ImageUrl ? (
+                                    <Image src={card6ImageUrl} alt="Card 6" fill style={{ objectFit: 'cover' }} data-ai-hint="card design" />
                                 ) : (
                                     card
                                 )}
