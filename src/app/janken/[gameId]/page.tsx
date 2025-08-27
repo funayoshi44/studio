@@ -122,6 +122,7 @@ export default function OnlineJankenPage() {
         const p2Moves = gameState.moves[p2Id];
 
         if (!p1Moves.final || !p2Moves.final) return;
+        if (!p1Moves.initial || !p2Moves.initial) return; // safeguard
 
         const p1Changed = p1Moves.initial !== p1Moves.final;
         const p2Changed = p2Moves.initial !== p2Moves.final;
@@ -234,18 +235,36 @@ export default function OnlineJankenPage() {
     const myMoves = gameState.moves[user.uid];
     const opponentMoves = opponentId ? gameState.moves[opponentId] : null;
 
-    const renderMove = (uid: string, phase: 'initial' | 'final') => {
+    const renderMove = (uid: string | null, phase: 'initial' | 'final') => {
+        if (!uid || !gameState) return '❓';
+
         const playerMoves = gameState.moves[uid];
         if (!playerMoves) return '❓';
+        const move = playerMoves[phase];
 
+        // Result phase: always reveal everything
         if (gameState.phase === 'result') {
-            return getJankenEmoji(playerMoves[phase]);
+            return getJankenEmoji(move);
         }
-        if (uid === user.uid) {
-            return getJankenEmoji(playerMoves[phase]);
+
+        // Initial phase: hide everything until both have moved
+        if (phase === 'initial') {
+            if (gameState.phase === 'initial') {
+                 return move ? '✅' : '❓';
+            }
+             // In final phase, initial moves are public
+            return getJankenEmoji(gameState.moves[uid].initial);
         }
-        // Hide opponent's move until result phase
-        return playerMoves[phase] ? '✅' : '❓';
+        
+        // Final phase: show my move, hide opponent's
+        if (phase === 'final') {
+            if (uid === user.uid) {
+                return getJankenEmoji(move);
+            }
+            return move ? '✅' : '❓';
+        }
+        
+        return '❓';
     }
 
 
@@ -303,16 +322,18 @@ export default function OnlineJankenPage() {
                     <h4 className="font-bold">{t('firstMoves')}</h4>
                     <div className="flex justify-around text-4xl mt-2">
                         <span>{renderMove(user.uid, 'initial')}</span>
-                        <span>{opponentId && renderMove(opponentId, 'initial')}</span>
+                        <span>{renderMove(opponentId, 'initial')}</span>
                     </div>
                 </div>
-                 <div>
-                    <h4 className="font-bold">{t('finalResult')}</h4>
-                    <div className="flex justify-around text-4xl mt-2">
-                        <span>{renderMove(user.uid, 'final')}</span>
-                        <span>{opponentId && renderMove(opponentId, 'final')}</span>
+                {gameState.phase === 'result' && (
+                    <div>
+                        <h4 className="font-bold">{t('finalResult')}</h4>
+                        <div className="flex justify-around text-4xl mt-2">
+                            <span>{renderMove(user.uid, 'final')}</span>
+                            <span>{renderMove(opponentId, 'final')}</span>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {gameState.phase === 'result' && (
