@@ -40,19 +40,32 @@ export interface Message {
   createdAt: Timestamp;
 }
 
-const initialDuelGameState = {
-  currentRound: 1,
-  playerHands: {},
-  scores: {},
-  kyuso: {},
-  only: {},
-  moves: {},
-  lastMoveBy: null,
-  history: {},
-  roundWinner: null,
-  roundResultText: '',
-  roundResultDetail: '',
+const TOTAL_ROUNDS = 13;
+
+const getInitialDuelGameState = (playerIds: string[] = []) => {
+    const gameState: any = {
+        currentRound: 1,
+        playerHands: {},
+        scores: {},
+        kyuso: {},
+        only: {},
+        moves: {},
+        lastMoveBy: null,
+        history: {},
+        roundWinner: null,
+        roundResultText: '',
+        roundResultDetail: '',
+    };
+    playerIds.forEach(uid => {
+        gameState.playerHands[uid] = Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1);
+        gameState.scores[uid] = 0;
+        gameState.kyuso[uid] = 0;
+        gameState.only[uid] = 0;
+        gameState.moves[uid] = null;
+    });
+    return gameState;
 };
+
 
 // Upload a profile image and get the URL
 export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {
@@ -61,23 +74,6 @@ export const uploadProfileImage = async (userId: string, file: File): Promise<st
     const downloadURL = await getDownloadURL(snapshot.ref);
     return downloadURL;
 };
-
-// Generic function to get a download URL for a file in storage
-export const getStorageUrl = async (path: string): Promise<string | null> => {
-  try {
-    const storageRef = ref(storage, path);
-    const downloadURL = await getDownloadURL(storageRef);
-    return downloadURL;
-  } catch (error: any) {
-    // If the file doesn't exist, this will throw an error. We can catch it and return null.
-    if (error.code === 'storage/object-not-found') {
-      console.warn(`Storage object not found at path: ${path}`);
-      return null;
-    }
-    console.error(`Failed to get storage URL for path: ${path}`, error);
-    return null;
-  }
-}
 
 // Create a new game
 export const createGame = async (user: MockUser, gameType: GameType): Promise<string> => {
@@ -95,7 +91,7 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
     playerIds: [user.uid],
     status: 'waiting',
     createdAt: serverTimestamp(),
-    gameState: gameType === 'duel' ? initialDuelGameState : {},
+    gameState: gameType === 'duel' ? getInitialDuelGameState([user.uid]) : {},
   });
   return docRef.id;
 };
@@ -116,22 +112,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
             throw new Error('Game is full or you are already in it');
         }
         
-        const p2 = user.uid;
-        const TOTAL_ROUNDS = 13;
-        
-        const existingGameState = gameData.gameState || initialDuelGameState;
-
-        const newGameState = {
-          ...existingGameState,
-          playerHands: {
-              ...existingGameState.playerHands,
-              [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
-          },
-          scores: { ...existingGameState.scores, [p2]: 0 },
-          kyuso: { ...existingGameState.kyuso, [p2]: 0 },
-          only: { ...existingGameState.only, [p2]: 0 },
-          moves: { ...existingGameState.moves, [p2]: null },
-        };
+        const newPlayerIds = [...gameData.playerIds, user.uid];
 
         transaction.update(gameRef, {
             [`players.${user.uid}`]: {
@@ -139,9 +120,9 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
                 photoURL: user.photoURL,
                 bio: user.bio || '',
             },
-            playerIds: [...gameData.playerIds, user.uid],
+            playerIds: newPlayerIds,
             status: 'in-progress',
-            gameState: newGameState,
+            gameState: getInitialDuelGameState(newPlayerIds),
         });
     });
 };
@@ -231,23 +212,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     if (suitableGame && suitableGameId) {
       // Found a game, join it
       const gameRef = doc(db, 'games', suitableGameId);
-      const p2 = user.uid;
-      const TOTAL_ROUNDS = 13;
-      
-      const existingGameState = suitableGame.gameState || initialDuelGameState;
-
-      const newGameState = {
-        ...existingGameState,
-        playerHands: {
-            ...existingGameState.playerHands,
-            [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
-        },
-        scores: { ...existingGameState.scores, [p2]: 0 },
-        kyuso: { ...existingGameState.kyuso, [p2]: 0 },
-        only: { ...existingGameState.only, [p2]: 0 },
-        moves: { ...existingGameState.moves, [p2]: null },
-      };
-
+      const newPlayerIds = [...suitableGame.playerIds, user.uid];
 
       transaction.update(gameRef, {
         [`players.${user.uid}`]: {
@@ -255,9 +220,9 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
           photoURL: user.photoURL,
           bio: user.bio || '',
         },
-        playerIds: [...suitableGame.playerIds, user.uid],
+        playerIds: newPlayerIds,
         status: 'in-progress',
-        gameState: newGameState,
+        gameState: getInitialDuelGameState(newPlayerIds),
       });
       return suitableGameId;
     } else {
@@ -276,7 +241,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
-        gameState: gameType === 'duel' ? initialDuelGameState : {},
+        gameState: gameType === 'duel' ? getInitialDuelGameState([user.uid]) : {},
       });
       return newGameRef.id;
     }

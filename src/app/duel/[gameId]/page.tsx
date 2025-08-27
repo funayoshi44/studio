@@ -34,20 +34,6 @@ type DuelGameState = {
   roundResultDetail: string;
 };
 
-const initialDuelGameState: DuelGameState = {
-  currentRound: 1,
-  playerHands: {},
-  scores: {},
-  kyuso: {},
-  only: {},
-  moves: {},
-  lastMoveBy: null,
-  history: {},
-  roundWinner: null,
-  roundResultText: '',
-  roundResultDetail: '',
-};
-
 export default function OnlineDuelPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -129,40 +115,6 @@ export default function OnlineDuelPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.gameState, game?.playerIds, user, opponentId]);
-
-
-  const initializeGameStateIfHost = async () => {
-    if (!game || !user || game.playerIds[0] !== user.uid || game.status !== 'in-progress') return;
-    
-    // Only initialize if the game state is not set up yet
-    if (game.gameState && game.gameState.playerHands && Object.keys(game.gameState.playerHands).length > 0) return;
-
-    console.log("Host is initializing game state...");
-    const p1 = game.playerIds[0];
-    const p2 = game.playerIds[1];
-    if (!p1 || !p2) return;
-
-    const newGameState: DuelGameState = {
-        ...initialDuelGameState,
-        playerHands: {
-            [p1]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1),
-            [p2]: Array.from({ length: TOTAL_ROUNDS }, (_, i) => i + 1)
-        },
-        scores: { [p1]: 0, [p2]: 0 },
-        kyuso: { [p1]: 0, [p2]: 0 },
-        only: { [p1]: 0, [p2]: 0 },
-        moves: { [p1]: null, [p2]: null },
-    };
-    
-    await updateGameState(game.id, newGameState);
-  };
-
-  // Run initialization check when game data changes
-  useEffect(() => {
-    initializeGameStateIfHost();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game]);
-
   
   const handleSelectCard = async (card: number) => {
     if (loading || !user || !game || !gameState) return;
@@ -525,6 +477,8 @@ export default function OnlineDuelPage() {
           </div>
         </div>
       )}
+
+      <ChatBox />
 
       <Card className="max-w-4xl mx-auto mt-12 text-left bg-card/50">
         <CardHeader><CardTitle>📖 {t('duelTitle')} Rules</CardTitle></CardHeader>
