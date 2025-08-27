@@ -1,22 +1,24 @@
+
 "use client";
 
 import { createContext, useState, useEffect, useContext, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { uploadProfileImage } from '@/lib/firestore';
+import type { MockUser } from '@/lib/types';
 
-// 仮のユーザー情報の型
-type MockUser = {
-  uid: string;
+
+type UpdateUserInput = {
   displayName: string;
-  email: string;
-  photoURL: string;
-};
+  bio: string;
+  profileImage?: File | null;
+}
 
 type AuthContextType = {
   user: MockUser | null;
   loading: boolean;
   logIn: (username: string, profileImage?: File | null) => Promise<void>;
   logOut: () => void;
+  updateUser: (data: UpdateUserInput) => Promise<void>;
 };
 
 export const AuthContext = createContext<AuthContextType>({
@@ -24,6 +26,7 @@ export const AuthContext = createContext<AuthContextType>({
   loading: true,
   logIn: async () => {},
   logOut: () => {},
+  updateUser: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -48,8 +51,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const logIn = async (username: string, profileImage: File | null = null) => {
     if (!username.trim()) return;
 
-    const userId = `${username.toLowerCase()}-${Date.now()}`; // 簡単な一意のID
-    let photoURL = `https://i.pravatar.cc/150?u=${userId}`; // デフォルトアバター
+    setLoading(true);
+    // Use a more robust UID, e.g., combining username and timestamp
+    const userId = `${username.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`;
+    let photoURL = `https://i.pravatar.cc/150?u=${userId}`; 
 
     try {
         if (profileImage) {
@@ -59,8 +64,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const mockUser: MockUser = {
             uid: userId,
             displayName: username,
-            email: `${username.toLowerCase()}@example.com`,
+            email: `${username.toLowerCase().replace(/\s+/g, '.')}@example.com`,
             photoURL: photoURL,
+            bio: '',
         };
     
         localStorage.setItem('mockUser', JSON.stringify(mockUser));
@@ -68,8 +74,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         router.push('/');
     } catch (error) {
         console.error("Failed to login or upload image", error);
+    } finally {
+        setLoading(false);
     }
   };
+
+  const updateUser = async (data: UpdateUserInput) => {
+    if (!user) return;
+
+    setLoading(true);
+    let newPhotoURL = user.photoURL;
+
+    try {
+        if (data.profileImage) {
+            // Use the existing UID for the upload to overwrite the old image if necessary
+            newPhotoURL = await uploadProfileImage(user.uid, data.profileImage);
+        }
+
+        const updatedUser: MockUser = {
+            ...user,
+            displayName: data.displayName,
+            photoURL: newPhotoURL,
+            bio: data.bio,
+        };
+
+        localStorage.setItem('mockUser', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+
+    } catch (error) {
+        console.error("Failed to update user:", error);
+        throw error; // Re-throw to be caught in the component
+    } finally {
+        setLoading(false);
+    }
+  };
+
 
   const logOut = () => {
     try {
@@ -86,9 +125,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loading,
     logIn,
     logOut,
+    updateUser,
   };
 
-  return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

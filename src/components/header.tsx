@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useContext } from 'react';
@@ -65,6 +66,12 @@ export function Header() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                   <Link href="/settings" passHref>
+                    <DropdownMenuItem>
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Settings</span>
+                    </DropdownMenuItem>
+                   </Link>
                   <DropdownMenuItem onClick={() => logOut()}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Log out</span>
