@@ -2,6 +2,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -122,7 +123,7 @@ const getInitialJankenGameState = (playerIds: string[] = []) => {
     const gameState: any = {
         currentRound: 1,
         scores: {},
-        moves: {}, // { initial: { uid: move }, final: { uid: move } }
+        moves: {}, // { uid: { initial: null, final: null } }
         phase: 'initial', // 'initial', 'final', 'result'
         roundWinner: null,
         roundResultText: '',
