@@ -77,6 +77,7 @@ export default function OnlineDuelPage() {
         // Check if opponent has disconnected
         if (game?.status === 'in-progress' && gameData.status === 'finished' && gameData.winner === user.uid) {
             toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+            setTimeout(() => router.push('/online'), 3000);
         }
 
         setGame(gameData);

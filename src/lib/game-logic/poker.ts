@@ -6,45 +6,26 @@ import { getCards } from '@/lib/firestore';
 export type PokerCard = CardData;
 export type HandRank = { name: string; value: number };
 
-// This function now fetches card data from Firestore.
-export const createPokerDeck = async (): Promise<PokerCard[]> => {
-  let pokerCards = await getCards();
-  
-  if (pokerCards.length === 0) {
-      console.warn("Could not create poker deck from Firestore. Falling back to default deck.");
-      pokerCards = createDefaultDeck();
-  }
-
-  // Filter for cards that are relevant for a standard poker deck (or your specific rules)
-  const deck = pokerCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
-  if (deck.length < 52) {
-      console.warn(`Poker deck has only ${deck.length} cards. Standard games might not work. Replicating cards to ensure full deck.`);
-      const baseDeck = deck.length > 0 ? deck : createDefaultDeck();
-      const fullDeck: PokerCard[] = [];
-      while(fullDeck.length < 52) {
-          fullDeck.push(...baseDeck);
-      }
-      return shuffleDeck(fullDeck.slice(0, 52));
-  }
-
-  return shuffleDeck(deck);
-};
-
 // A fallback function to create a default deck if Firestore is empty
-const createDefaultDeck = (): PokerCard[] => {
-    const suits = ['♠️', '♥️', '♦️', '♣️'];
+const createDefaultDeck = (addStarSuit: boolean = false): PokerCard[] => {
+    const suits = ['spade', 'heart', 'diamond', 'club'];
+    if (addStarSuit) {
+        suits.push('star');
+    }
     const ranks = [
-        { name: 'A', value: 14, number: 1 }, { name: '2', value: 2, number: 2 }, { name: '3', value: 3, number: 3 }, 
-        { name: '4', value: 4, number: 4 }, { name: '5', value: 5, number: 5 }, { name: '6', value: 6, number: 6 }, 
-        { name: '7', value: 7, number: 7 }, { name: '8', value: 8, number: 8 }, { name: '9', value: 9, number: 9 }, 
-        { name: '10', value: 10, number: 10 }, { name: 'J', value: 11, number: 11 }, { name: 'Q', value: 12, number: 12 }, 
+        { name: 'A', value: 14, number: 1 }, { name: '2', value: 2, number: 2 }, { name: '3', value: 3, number: 3 },
+        { name: '4', value: 4, number: 4 }, { name: '5', value: 5, number: 5 }, { name: '6', value: 6, number: 6 },
+        { name: '7', value: 7, number: 7 }, { name: '8', value: 8, number: 8 }, { name: '9', value: 9, number: 9 },
+        { name: '10', value: 10, number: 10 }, { name: 'J', value: 11, number: 11 }, { name: 'Q', value: 12, number: 12 },
         { name: 'K', value: 13, number: 13 }
     ];
     const deck: PokerCard[] = [];
+    let idCounter = 0;
     for (const suit of suits) {
         for (const rank of ranks) {
+             const suitSymbol = suit === 'spade' ? '♠️' : suit === 'heart' ? '♥️' : suit === 'diamond' ? '♦️' : suit === 'club' ? '♣️' : '⭐';
             deck.push({
-                id: `${rank.name}${suit}`,
+                id: `${rank.name}${suit}${idCounter++}`, // Ensure unique ID
                 gameType: 'poker',
                 suit: suit,
                 number: rank.number,
@@ -59,6 +40,13 @@ const createDefaultDeck = (): PokerCard[] => {
     }
     return deck;
 }
+
+// This function now fetches card data from Firestore.
+export const createPokerDeck = async (): Promise<PokerCard[]> => {
+  // For online poker, always generate a full deck programmatically to ensure fairness and completeness.
+  const deck = createDefaultDeck(true); // Create a 5-suit deck
+  return shuffleDeck(deck);
+};
 
 
 const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
@@ -95,7 +83,7 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
     
     hand.forEach(card => {
         rankCounts[card.value] = (rankCounts[card.value] || 0) + 1;
-        if (card.suit === '⭐') {
+        if (card.suit === 'star') {
             starSuitCount++;
         } else {
             suitCounts[card.suit] = (suitCounts[card.suit] || 0) + 1;
@@ -111,7 +99,7 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
             let maxSuit = Object.keys(finalSuitCounts).reduce((a, b) => finalSuitCounts[a] > finalSuitCounts[b] ? a : b);
             finalSuitCounts[maxSuit] += starSuitCount;
         } else {
-             finalSuitCounts['⭐'] = starSuitCount; // all stars
+             finalSuitCounts['star'] = starSuitCount; // all stars
         }
     }
 

@@ -51,14 +51,21 @@ export default function OnlinePokerPage() {
     if (!gameId || !user) return;
     const unsubscribe = subscribeToGame(gameId, (gameData) => {
       if (gameData) {
-        if (!gameData.playerIds.includes(user.uid)) {
+        if (!gameData.playerIds.includes(user.uid) && gameData.status !== 'waiting') {
             toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive' });
             router.push('/online');
             return;
         }
+
+        // Check for opponent disconnect only if game is in progress
         if (game?.status === 'in-progress' && gameData.status === 'finished') {
-            toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+             if (gameData.winner === user.uid) {
+                toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+             }
+             // Redirect to lobby after a disconnect is detected and handled.
+             setTimeout(() => router.push('/online'), 3000);
         }
+
         setGame(gameData);
       } else {
         toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
@@ -66,7 +73,8 @@ export default function OnlinePokerPage() {
       }
     });
     return () => unsubscribe();
-  }, [gameId, user, router, toast, game?.status, t]);
+  }, [gameId, user, router, toast, t, game?.status]);
+
 
   const handleSelectCard = (index: number) => {
     if (gameState?.phase !== 'exchanging' || !isMyTurn) return;
@@ -143,7 +151,7 @@ export default function OnlinePokerPage() {
     const isSelf = uid === user.uid;
 
     return (
-        <div className={cn("p-4 rounded-lg border-2", isMyTurn ? "border-primary shadow-lg" : "border-transparent")}>
+        <div className={cn("p-4 rounded-lg border-2", isMyTurn && gameState.phase === 'exchanging' ? "border-primary shadow-lg" : "border-transparent")}>
             <div className="flex items-center gap-2 mb-3">
                 <Avatar>
                     <AvatarImage src={player?.photoURL ?? undefined} />
@@ -154,7 +162,7 @@ export default function OnlinePokerPage() {
             </div>
             <div className="flex justify-center flex-wrap gap-1">
                 {hand.map((card, index) => (
-                    <div key={card.id || index} onClick={() => isSelf && handleSelectCard(index)} className={cn(localSelected.includes(index) && 'transform -translate-y-2', "cursor-pointer")}>
+                    <div key={card.id || index} onClick={() => isSelf && handleSelectCard(index)} className={cn(isSelf && localSelected.includes(index) && 'transform -translate-y-2', isSelf && gameState.phase === 'exchanging' && "cursor-pointer")}>
                         <GameCard card={card} revealed={isSelf || isRevealed} />
                     </div>
                 ))}

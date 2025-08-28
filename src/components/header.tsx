@@ -65,12 +65,14 @@ export function Header() {
             {user ? (
                <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'User'} />
-                      <AvatarFallback>{user.displayName?.[0]}</AvatarFallback>
-                    </Avatar>
-                  </Button>
+                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                     <Link href={`/profile/${user.uid}`}>
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.photoURL ?? ''} alt={user.displayName ?? 'User'} />
+                          <AvatarFallback>{user.displayName?.[0]}</AvatarFallback>
+                        </Avatar>
+                      </Link>
+                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
