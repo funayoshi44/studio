@@ -64,7 +64,7 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
     <TooltipProvider delayDuration={300}>
         <Tooltip>
             <TooltipTrigger asChild>{cardFace}</TooltipTrigger>
-            <TooltipContent className="max-w-xs break-words">
+            <TooltipContent side="right" sideOffset={10} className="max-w-xs break-words">
                 <div className="space-y-3 p-2">
                     <h3 className="text-lg font-bold">{card.name}</h3>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
