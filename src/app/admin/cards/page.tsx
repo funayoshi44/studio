@@ -18,48 +18,57 @@ import { addCard } from "@/lib/firestore";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import type { GameType } from "@/lib/types";
+import { useAuth } from "@/contexts/auth-context";
+import { Textarea } from "@/components/ui/textarea";
 
 type Inputs = {
-  name: string;
-  artist: string;
+  title: string;
+  caption: string;
+  seriesName: string;
   suit: string;
-  number: string; // Changed to string to accommodate "Joker"
-  rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
-  tags: string; // Comma-separated
+  rank: string;
+  hashtags: string; // Comma-separated
   image: FileList;
 };
 
 export default function AddCardPage() {
+  const { user } = useAuth();
   const { register, handleSubmit, formState: { errors }, reset, control } = useForm<Inputs>();
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const router = useRouter();
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
+    if (!user) {
+        toast({ title: "Error", description: "You must be logged in to add a card.", variant: "destructive" });
+        return;
+    }
     setIsLoading(true);
     try {
-      const { image, tags, number, ...cardDetails } = data;
+      const { image, hashtags, rank, ...cardDetails } = data;
       const imageFile = image[0];
-      const tagsArray = tags.split(',').map(tag => tag.trim()).filter(Boolean);
+      const hashtagsArray = hashtags.split(',').map(tag => tag.trim()).filter(Boolean);
+      
+      const rankNumber = rank === 'Joker' ? 0 : parseInt(rank, 10);
+      if (isNaN(rankNumber)) {
+          throw new Error("Invalid rank provided.");
+      }
 
       if (!imageFile) {
         throw new Error("Image file is required.");
       }
       
-      const cardData = {
+      const newCardData = {
           ...cardDetails,
-          number: number === 'Joker' ? 0 : parseInt(number, 10), // Joker is 0, others are parsed
-          value: number === 'Joker' ? 0 : parseInt(number, 10), // Value derived from number
-          gameType: 'common' as const, // Default to common
-          tags: tagsArray,
+          rank: rankNumber,
+          hashtags: hashtagsArray,
       }
 
-      await addCard(cardData, imageFile);
+      await addCard(newCardData, imageFile, user);
 
       toast({
         title: "Success!",
-        description: `Card "${data.name}" has been added to the database.`,
+        description: `Card "${data.title}" has been added to the database.`,
       });
       reset(); // Reset form fields
     } catch (error) {
@@ -86,18 +95,18 @@ export default function AddCardPage() {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Card Name */}
+                {/* Card Title */}
                 <div className="space-y-2">
-                <Label htmlFor="name">Card Name</Label>
-                <Input id="name" {...register("name", { required: "Name is required" })} />
-                {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+                <Label htmlFor="title">Card Title</Label>
+                <Input id="title" {...register("title", { required: "Title is required" })} />
+                {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
                 </div>
 
-                {/* Artist Name */}
+                {/* Series Name */}
                 <div className="space-y-2">
-                <Label htmlFor="artist">Artist</Label>
-                <Input id="artist" {...register("artist", { required: "Artist is required" })} />
-                {errors.artist && <p className="text-xs text-destructive">{errors.artist.message}</p>}
+                <Label htmlFor="seriesName">Series Name</Label>
+                <Input id="seriesName" {...register("seriesName", { required: "Series name is required" })} />
+                {errors.seriesName && <p className="text-xs text-destructive">{errors.seriesName.message}</p>}
                 </div>
 
                 {/* Suit */}
@@ -125,17 +134,17 @@ export default function AddCardPage() {
                     {errors.suit && <p className="text-xs text-destructive">{errors.suit.message}</p>}
                 </div>
                 
-                {/* Number */}
+                {/* Rank */}
                 <div className="space-y-2">
-                    <Label htmlFor="number">Number</Label>
+                    <Label htmlFor="rank">Rank</Label>
                     <Controller
-                        name="number"
+                        name="rank"
                         control={control}
-                        rules={{ required: "Number is required" }}
+                        rules={{ required: "Rank is required" }}
                         render={({ field }) => (
                             <Select onValueChange={field.onChange} defaultValue={field.value}>
                                 <SelectTrigger>
-                                    <SelectValue placeholder="Select number" />
+                                    <SelectValue placeholder="Select rank" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {Array.from({ length: 13 }, (_, i) => i + 1).map(n => (
@@ -146,43 +155,29 @@ export default function AddCardPage() {
                             </Select>
                         )}
                     />
-                    {errors.number && <p className="text-xs text-destructive">{errors.number.message}</p>}
+                    {errors.rank && <p className="text-xs text-destructive">{errors.rank.message}</p>}
                 </div>
 
-                {/* Rarity */}
-                <div className="space-y-2">
-                    <Label htmlFor="rarity">Rarity</Label>
-                     <Controller
-                        name="rarity"
-                        control={control}
-                        rules={{ required: "Rarity is required" }}
-                        render={({ field }) => (
-                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select rarity" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="common">Common</SelectItem>
-                                    <SelectItem value="uncommon">Uncommon</SelectItem>
-                                    <SelectItem value="rare">Rare</SelectItem>
-                                    <SelectItem value="legendary">Legendary</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        )}
+                <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="caption">Caption</Label>
+                    <Textarea
+                        id="caption"
+                        rows={3}
+                        {...register("caption", { required: "Caption is required" })}
                     />
-                    {errors.rarity && <p className="text-xs text-destructive">{errors.rarity.message}</p>}
+                    {errors.caption && <p className="text-xs text-destructive">{errors.caption.message}</p>}
                 </div>
-
-                 {/* Tags */}
-                <div className="space-y-2">
-                    <Label htmlFor="tags">Tags (comma-separated)</Label>
-                    <Input id="tags" {...register("tags")} placeholder="e.g. dragon, fire, sky" />
+                
+                 {/* Hashtags */}
+                <div className="space-y-2 md:col-span-2">
+                    <Label htmlFor="hashtags">Hashtags (comma-separated)</Label>
+                    <Input id="hashtags" {...register("hashtags")} placeholder="e.g. dragon, fire, sky" />
                 </div>
             </div>
 
             {/* Image Upload */}
             <div className="space-y-2">
-              <Label htmlFor="image">Card Image</Label>
+              <Label htmlFor="image">Card Image (Front)</Label>
               <Input id="image" type="file" accept="image/*" {...register("image", { required: "Image is required" })} className="pt-2 text-sm" />
               {errors.image && <p className="text-xs text-destructive">{errors.image.message}</p>}
             </div>

@@ -60,7 +60,7 @@ export type Post = {
 
 // Represents a single announcement from admins
 export type Announcement = {
-    id: string;
+    id:string;
     author: {
         uid: string;
         displayName: string;
@@ -74,20 +74,41 @@ export type Announcement = {
 // Represents a single card's data stored in Firestore, based on user's detailed spec
 export type CardData = {
     id: string;
-    gameType: GameType | 'common'; // Which game this card belongs to
+    frontImageUrl: string;
+    backImageUrl?: string;
     suit: string;
-    number: number;
-    value: number; // For game logic, might be same as number
-    name: string;
-    artist: string;
-    imageUrl: string;
-    rarity: 'common' | 'uncommon' | 'rare' | 'legendary';
-    tags: string[];
-    variations?: {
-        designId: string;
-        imageUrl: string;
-    }[];
+    rank: number | string; // 1-13 or 'Joker'
+    title: string;
+    caption: string;
+    hashtags: string[];
+    seriesName: string;
+    authorName: string;
+    authorId: string;
+    detailPageUrl?: string;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    
+    // Optional, for future extension
+    isPublic?: boolean;
+    likesCount?: number;
+    commentsCount?: number;
+    ownedByUserIds?: string[];
+    viewsCount?: number;
+    tagsForSearch?: string[];
+
+    // --- Deprecated fields for compatibility ---
+    // These fields will be phased out.
+    // For now, they can be derived from the new fields.
+    number: number; // Will be derived from 'rank'
+    value: number; // Will be derived from 'rank'
+    name: string; // Will be derived from 'title'
+    artist: string; // Will be derived from 'authorName'
+    imageUrl: string; // Will be derived from 'frontImageUrl'
+    rarity: 'common' | 'uncommon' | 'rare' | 'legendary'; // This might be a separate concept now
+    tags: string[]; // will be derived from 'hashtags'
+    gameType: GameType | 'common'; // can be derived or set based on series
 };
+
 
 // --- Online Game Types ---
 

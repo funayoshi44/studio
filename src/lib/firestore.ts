@@ -23,6 +23,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction } from './types';
+import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
 const TOTAL_ROUNDS = 13;
@@ -38,18 +39,34 @@ export const awardPoints = async (userId: string, amount: number) => {
 
 
 const createDefaultDeck = (count = 13): CardData[] => {
-    return Array.from({ length: count }, (_, i) => ({
-        id: `default-${i + 1}`,
-        gameType: 'common',
-        suit: 'default',
-        number: i + 1,
-        value: i + 1,
-        name: `Default Card ${i + 1}`,
-        artist: 'System',
-        imageUrl: `https://picsum.photos/seed/card-default-${i+1}/200/300`,
-        rarity: 'common',
-        tags: []
-    }));
+    // This function will need to be updated to generate cards matching the new `CardData` structure.
+    // For now, it will generate a simplified version for compatibility.
+    return Array.from({ length: count }, (_, i) => {
+        const rank = i + 1;
+        return {
+            id: `default-${rank}`,
+            frontImageUrl: `https://picsum.photos/seed/card-default-${rank}/200/300`,
+            suit: 'default',
+            rank: rank,
+            title: `Default Card ${rank}`,
+            caption: `This is a default card. Number ${rank}.`,
+            hashtags: ['default'],
+            seriesName: 'Default Series',
+            authorName: 'System',
+            authorId: 'system',
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+            // --- Compatibility fields ---
+            number: rank,
+            value: rank,
+            name: `Default Card ${rank}`,
+            artist: 'System',
+            imageUrl: `https://picsum.photos/seed/card-default-${rank}/200/300`,
+            rarity: 'common',
+            tags: ['default'],
+            gameType: 'common',
+        };
+    });
 };
 
 const createRandomDeck = (allCards: CardData[]): CardData[] => {
@@ -113,8 +130,6 @@ const getInitialJankenGameState = (playerIds: string[] = []) => {
     return gameState;
 };
 
-// Moved this import down to fix circular dependency
-import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 const getInitialPokerGameState = async (playerIds: string[] = []) => {
     const deck = await createPokerDeck();
@@ -650,6 +665,22 @@ export const deletePost = async (postId: string): Promise<void> => {
 const CARD_CACHE_KEY = 'cardverse-card-cache';
 const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 
+const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): CardData => {
+    const rankNumber = typeof card.rank === 'number' ? card.rank : 0; // Joker is 0
+    return {
+        ...card,
+        id: id,
+        number: rankNumber,
+        value: rankNumber,
+        name: card.title,
+        artist: card.authorName,
+        imageUrl: card.frontImageUrl,
+        rarity: 'common', // Default rarity, could be a field in the new structure later
+        tags: card.hashtags,
+        gameType: 'common', // Default gameType
+    };
+};
+
 export const getCards = async (forceRefresh: boolean = false): Promise<CardData[]> => {
     if (!forceRefresh) {
         try {
@@ -669,7 +700,8 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
     querySnapshot.forEach((doc) => {
-        cards.push({ id: doc.id, ...doc.data() } as CardData);
+        const data = doc.data() as Omit<CardData, 'id'>;
+        cards.push(deriveCompatibilityFields(data, doc.id));
     });
 
     try {
@@ -684,8 +716,9 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
 
 
 export const addCard = async (
-  cardData: Omit<CardData, 'id' | 'imageUrl'>,
-  imageFile: File
+  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'createdAt' | 'updatedAt'>,
+  imageFile: File,
+  author: MockUser,
 ): Promise<void> => {
   const filePath = `cards/${Date.now()}_${imageFile.name}`;
   const imageRef = ref(storage, filePath);
@@ -695,8 +728,11 @@ export const addCard = async (
   const cardsCollection = collection(db, 'cards');
   await addDoc(cardsCollection, {
     ...cardData,
-    imageUrl: imageUrl,
+    frontImageUrl: imageUrl,
+    authorName: author.displayName,
+    authorId: author.uid,
     createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 
   await getCards(true);
@@ -707,12 +743,12 @@ export const deleteCard = async (card: CardData): Promise<void> => {
     const cardRef = doc(db, 'cards', card.id);
     await deleteDoc(cardRef);
 
-    if (card.imageUrl && card.imageUrl.includes('firebasestorage.googleapis.com')) {
+    if (card.frontImageUrl && card.frontImageUrl.includes('firebasestorage.googleapis.com')) {
         try {
-            const imageRef = ref(storage, card.imageUrl);
+            const imageRef = ref(storage, card.frontImageUrl);
             await deleteObject(imageRef);
         } catch (error) {
-            console.warn(`Could not delete image ${card.imageUrl} from Storage. It might not exist.`, error);
+            console.warn(`Could not delete image ${card.frontImageUrl} from Storage. It might not exist.`, error);
         }
     }
 

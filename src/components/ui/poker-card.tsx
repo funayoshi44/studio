@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import type { CardData } from '@/lib/types';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
-import { User, Tag, Crown } from 'lucide-react';
+import { User, Tag, BookOpen, Sparkles } from 'lucide-react';
 
 type PokerCardProps = {
   card: CardData | null;
@@ -16,8 +16,6 @@ type PokerCardProps = {
 
 
 export function PokerCard({ card, revealed = false, className }: PokerCardProps) {
-  const cardValue = card ? `${card.number}${card.suit}` : '?';
-
   const cardBack = (
     <div
       className={cn(
@@ -40,10 +38,10 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
         className
       )}
     >
-      {card.imageUrl ? (
+      {card.frontImageUrl ? (
         <Image
-          src={card.imageUrl}
-          alt={card.name || `Card ${cardValue}`}
+          src={card.frontImageUrl}
+          alt={card.title || 'Card Image'}
           fill
           style={{ objectFit: 'cover' }}
           data-ai-hint="poker card illustration"
@@ -55,7 +53,7 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
          </div>
       )}
       <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-center font-bold text-white backdrop-blur-sm">
-        <span className="text-lg md:text-xl">{card.number === 0 ? 'Joker' : card.number}{card.suit}</span>
+        <span className="text-lg md:text-xl">{card.rank === 0 ? 'Joker' : card.rank}{card.suit}</span>
       </div>
     </div>
   );
@@ -66,20 +64,21 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
             <TooltipTrigger asChild>{cardFace}</TooltipTrigger>
             <TooltipContent side="right" sideOffset={10} className="max-w-xs break-words">
                 <div className="space-y-3 p-2">
-                    <h3 className="text-lg font-bold">{card.name}</h3>
+                    <h3 className="text-lg font-bold">{card.title}</h3>
+                    {card.caption && <p className="text-sm text-muted-foreground">{card.caption}</p>}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <BookOpen className="h-4 w-4 shrink-0" />
+                        <span>{card.seriesName}</span>
+                    </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <User className="h-4 w-4 shrink-0" />
-                        <span>{card.artist}</span>
+                        <span>{card.authorName}</span>
                     </div>
-                     <div className="flex items-center gap-2 text-sm text-muted-foreground capitalize">
-                        <Crown className="h-4 w-4 shrink-0" />
-                        <span>{card.rarity}</span>
-                    </div>
-                    {card.tags && card.tags.length > 0 && (
+                    {card.hashtags && card.hashtags.length > 0 && (
                         <div className="flex items-start gap-2 text-sm text-muted-foreground">
                             <Tag className="h-4 w-4 shrink-0 mt-1" />
                             <div className="flex flex-wrap gap-1">
-                                {card.tags.map(tag => (
+                                {card.hashtags.map(tag => (
                                     <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
                                 ))}
                             </div>

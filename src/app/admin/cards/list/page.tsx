@@ -24,7 +24,7 @@ export default function CardListPage() {
     setIsLoading(true);
     try {
       const allCards = await getCards(true); // Force refresh
-      setCards(allCards.sort((a, b) => a.number - b.number || a.suit.localeCompare(b.suit)));
+      setCards(allCards.sort((a, b) => a.seriesName.localeCompare(b.seriesName) || (typeof a.rank === 'number' && typeof b.rank === 'number' ? a.rank - b.rank : String(a.rank).localeCompare(String(b.rank)))));
     } catch (error) {
       console.error(error);
       toast({
@@ -47,7 +47,7 @@ export default function CardListPage() {
       await deleteCard(card);
       toast({
         title: "Success",
-        description: `Card "${card.name}" has been deleted.`,
+        description: `Card "${card.title}" has been deleted.`,
       });
       // Refetch cards to update the list
       await fetchCards();
@@ -91,10 +91,10 @@ export default function CardListPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Image</TableHead>
-                <TableHead>Name</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Series</TableHead>
                 <TableHead>Suit</TableHead>
-                <TableHead>Number</TableHead>
-                <TableHead>Rarity</TableHead>
+                <TableHead>Rank</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -104,18 +104,18 @@ export default function CardListPage() {
                   <TableRow key={card.id}>
                     <TableCell>
                       <Image
-                        src={card.imageUrl}
-                        alt={card.name}
+                        src={card.frontImageUrl}
+                        alt={card.title}
                         width={40}
                         height={60}
                         className="rounded-sm object-cover"
                         unoptimized
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{card.name}</TableCell>
+                    <TableCell className="font-medium">{card.title}</TableCell>
+                    <TableCell>{card.seriesName}</TableCell>
                     <TableCell>{card.suit}</TableCell>
-                    <TableCell>{card.number === 0 ? 'Joker' : card.number}</TableCell>
-                    <TableCell className="capitalize">{card.rarity}</TableCell>
+                    <TableCell>{card.rank === 0 ? 'Joker' : card.rank}</TableCell>
                     <TableCell className="text-right">
                        <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -128,7 +128,7 @@ export default function CardListPage() {
                               <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                               <AlertDialogDescription>
                                 This action cannot be undone. This will permanently delete the card
-                                "{card.name}" and its image from the servers.
+                                "{card.title}" and its image from the servers.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
