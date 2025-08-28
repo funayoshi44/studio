@@ -26,7 +26,7 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
     useEffect(() => {
         if (post.replyCount > 0) {
             const unsubscribe = subscribeToReplies(post.id, (fetchedReplies) => {
-                // Sort replies by creation date
+                // Sort replies by creation date (oldest first)
                 const sortedReplies = [...fetchedReplies].sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
                 setReplies(sortedReplies);
             });
@@ -175,7 +175,9 @@ export default function FeedPage() {
 
     useEffect(() => {
         const unsubscribe = subscribeToPosts((allPosts) => {
-            setPosts(allPosts);
+            // Sort posts by creation date (newest first) on the client side
+            const sortedPosts = [...allPosts].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            setPosts(sortedPosts);
             setIsLoadingPosts(false);
         });
         return () => unsubscribe();

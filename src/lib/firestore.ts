@@ -506,7 +506,6 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   const q = query(
     postsCollection, 
     where('parentId', '==', null), // Only fetch top-level posts
-    orderBy('createdAt', 'desc'), 
     limit(50)
   );
 

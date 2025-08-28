@@ -38,6 +38,7 @@ export default function SettingsPage() {
         setPreview(user.photoURL);
 
         const unsubscribe = subscribeToUserPosts(user.uid, (userPosts) => {
+            // Sort posts by creation date (newest first) on the client side
             const sortedPosts = [...userPosts].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
             setPosts(sortedPosts);
         });
