@@ -91,7 +91,7 @@ export default function UserProfilePage() {
             console.error("Failed to start chat:", error);
             toast({ title: "Could not start chat", variant: "destructive" });
         }
-    }
+    };
 
 
     if (loading) {
@@ -109,7 +109,7 @@ export default function UserProfilePage() {
                 <CardContent className="pt-6">
                     <div className="flex flex-col md:flex-row items-center gap-6">
                         <Avatar className="w-32 h-32 border-4 border-primary">
-                            <AvatarImage src={profileUser.photoURL} alt={profileUser.displayName} />
+                            <AvatarImage src={profileUser.photoURL ?? undefined} alt={profileUser.displayName ?? ""} />
                             <AvatarFallback className="text-4xl">{profileUser.displayName?.[0]}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 text-center md:text-left">
@@ -163,7 +163,7 @@ export default function UserProfilePage() {
                                         {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
                                     </p>
                                 </div>
-                            </Header>
+                            </CardHeader>
                             <CardContent>
                                 <p className="whitespace-pre-wrap">{post.content}</p>
                             </CardContent>
