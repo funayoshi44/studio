@@ -3,6 +3,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -20,6 +21,7 @@ import {
   runTransaction,
   orderBy,
   deleteDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData } from './types';
@@ -466,29 +468,53 @@ export const getUserProfile = async (userId: string): Promise<MockUser | null> =
 
 // --- Posts (Bulletin Board) ---
 
-// Create a new post
-export const createPost = async (author: MockUser, content: string): Promise<void> => {
+// Create a new post or reply
+export const createPost = async (author: MockUser, content: string, parentId: string | null = null): Promise<void> => {
   if (!content.trim()) {
     throw new Error("Post content cannot be empty.");
   }
   const postsCollection = collection(db, 'posts');
-  await addDoc(postsCollection, {
-    author: {
-      uid: author.uid,
-      displayName: author.displayName,
-      photoURL: author.photoURL,
-    },
-    content,
-    createdAt: serverTimestamp(),
-    likes: [],
-    likeCount: 0,
+
+  await runTransaction(db, async (transaction) => {
+    // Add the new post/reply
+    const newPostRef = doc(postsCollection);
+    transaction.set(newPostRef, {
+      author: {
+        uid: author.uid,
+        displayName: author.displayName,
+        photoURL: author.photoURL,
+      },
+      content,
+      parentId,
+      createdAt: serverTimestamp(),
+      likes: [],
+      likeCount: 0,
+      replyCount: 0,
+    });
+
+    // If it's a reply, increment the parent's replyCount
+    if (parentId) {
+      const parentRef = doc(db, 'posts', parentId);
+      const parentSnap = await transaction.get(parentRef);
+      if (parentSnap.exists()) {
+        const parentData = parentSnap.data();
+        const newReplyCount = (parentData.replyCount || 0) + 1;
+        transaction.update(parentRef, { replyCount: newReplyCount });
+      }
+    }
   });
 };
 
-// Listen for all posts
+
+// Listen for all top-level posts
 export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   const postsCollection = collection(db, 'posts');
-  const q = query(postsCollection, orderBy('createdAt', 'desc'), limit(50));
+  const q = query(
+    postsCollection, 
+    where('parentId', '==', null), // Only fetch top-level posts
+    orderBy('createdAt', 'desc'), 
+    limit(50)
+  );
 
   return onSnapshot(q, (querySnapshot) => {
     const posts: Post[] = [];
@@ -499,13 +525,31 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   });
 };
 
-// Listen for posts by a specific user
+// Listen for replies to a specific post
+export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => void) => {
+  const postsCollection = collection(db, 'posts');
+  const q = query(
+    postsCollection,
+    where('parentId', '==', postId),
+    orderBy('createdAt', 'asc') // Show replies in chronological order
+  );
+  return onSnapshot(q, (snapshot) => {
+    const replies: Post[] = [];
+    snapshot.forEach((doc) => {
+      replies.push({ id: doc.id, ...doc.data() } as Post);
+    });
+    callback(replies);
+  });
+};
+
+
+// Listen for posts by a specific user (both top-level and replies)
 export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) => void) => {
     const postsCollection = collection(db, 'posts');
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId), 
-        // orderBy('createdAt', 'desc'), // This requires a composite index
+        orderBy('createdAt', 'desc'),
         limit(50)
     );
 
@@ -514,13 +558,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
         snapshot.forEach((doc) => {
             posts.push({ id: doc.id, ...doc.data() } as Post);
         });
-        // Sort posts on the client-side to avoid needing a composite index
-        const sortedPosts = posts.sort((a, b) => {
-            const dateA = a.createdAt?.toDate() || new Date(0);
-            const dateB = b.createdAt?.toDate() || new Date(0);
-            return dateB.getTime() - dateA.getTime();
-        });
-        callback(sortedPosts);
+        callback(posts);
     });
 };
 
@@ -553,11 +591,28 @@ export const togglePostLike = async (postId: string, userId: string): Promise<vo
     });
 };
 
-// Delete a post
+// Delete a post and all its replies
 export const deletePost = async (postId: string): Promise<void> => {
     const postRef = doc(db, 'posts', postId);
-    await deleteDoc(postRef);
+    
+    // First, find all replies to this post
+    const repliesQuery = query(collection(db, 'posts'), where('parentId', '==', postId));
+    const repliesSnapshot = await getDocs(repliesQuery);
+
+    const batch = writeBatch(db);
+
+    // Delete all replies
+    repliesSnapshot.forEach(replyDoc => {
+        batch.delete(replyDoc.ref);
+    });
+
+    // Delete the parent post itself
+    batch.delete(postRef);
+
+    // Commit the batch
+    await batch.commit();
 };
+
 
 
 // --- Card Management ---
