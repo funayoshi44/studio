@@ -1,5 +1,6 @@
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -677,7 +678,7 @@ const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): Card
         imageUrl: card.frontImageUrl,
         rarity: 'common', // Default rarity, could be a field in the new structure later
         tags: card.hashtags,
-        gameType: 'common', // Default gameType, can be adjusted based on series or tags later
+        gameType: 'common', // Default gameType, can be derived or set based on series or tags later
     };
 };
 
@@ -714,6 +715,17 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
     return cards;
 };
 
+export const getCardById = async (id: string): Promise<CardData | null> => {
+    const cardRef = doc(db, CARDS_COLLECTION, id);
+    const docSnap = await getDoc(cardRef);
+
+    if (docSnap.exists()) {
+        return deriveCompatibilityFields(docSnap.data() as Omit<CardData, 'id'>, docSnap.id);
+    }
+
+    return null;
+}
+
 
 export const addCard = async (
   cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'backImageUrl' | 'createdAt' | 'updatedAt' | 'authorId'>,
@@ -739,8 +751,6 @@ export const addCard = async (
       const backImageRef = ref(storage, backFilePath);
       const backUploadResult = await uploadBytes(backImageRef, backImageFile);
       cardToSave.backImageUrl = await getDownloadURL(backUploadResult.ref);
-  } else {
-    cardToSave.backImageUrl = ''; // Ensure the field exists but is empty
   }
 
   const cardsCollection = collection(db, CARDS_COLLECTION);
@@ -967,3 +977,4 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
 };
 
     
+

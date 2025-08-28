@@ -13,28 +13,33 @@ type PokerCardProps = {
   card: CardData | null;
   revealed?: boolean;
   className?: string;
+  disablePopover?: boolean;
 };
 
 
-export function PokerCard({ card, revealed = false, className }: PokerCardProps) {
+export function PokerCard({ card, revealed = false, className, disablePopover = false }: PokerCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const handleMouseEnter = () => {
+    if (disablePopover) return;
     setIsOpen(true);
   };
 
   const handleMouseLeave = () => {
+    if (disablePopover) return;
     setIsOpen(false);
   };
   
   const handleTouchStart = () => {
+    if (disablePopover) return;
     longPressTimeout.current = setTimeout(() => {
       setIsOpen(true);
     }, 500); // 500ms for a long press
   };
 
   const handleTouchEnd = () => {
+    if (disablePopover) return;
     if (longPressTimeout.current) {
       clearTimeout(longPressTimeout.current);
     }
@@ -82,6 +87,10 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
       </div>
     </div>
   );
+
+  if (disablePopover) {
+      return cardFace;
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -138,3 +147,4 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
     </Popover>
   );
 }
+

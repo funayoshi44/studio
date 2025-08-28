@@ -6,14 +6,111 @@ import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DifficultySelector } from '@/components/difficulty-selector';
-import { Swords, Scissors, Layers, Users, Eye, Loader2, Megaphone } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Swords, Scissors, Layers, Users, Eye, Loader2, Megaphone, HelpCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import { getCards, subscribeToAnnouncements, type CardData, type Announcement } from '@/lib/firestore';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { PokerCard } from '@/components/ui/poker-card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
+import Image from 'next/image';
+
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+};
+
+const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
+    const [gameCards, setGameCards] = useState<CardData[]>([]);
+    const [revealed, setRevealed] = useState(false);
+    const [result, setResult] = useState<'win' | 'lose' | null>(null);
+
+    const setupGame = useCallback(() => {
+        const cardsWithBacks = allCards.filter(c => c.backImageUrl);
+        if (cardsWithBacks.length < 3) return; // Not enough cards to play
+
+        const jokers = allCards.filter(c => c.rank === 'Joker');
+        const nonJokersWithBacks = cardsWithBacks.filter(c => c.rank !== 'Joker');
+        
+        if (jokers.length === 0 || nonJokersWithBacks.length < 2) return;
+
+        const winningCard = jokers[Math.floor(Math.random() * jokers.length)];
+        const losingCards = shuffleArray(nonJokersWithBacks).slice(0, 2);
+        
+        setGameCards(shuffleArray([winningCard, ...losingCards]));
+        setRevealed(false);
+        setResult(null);
+    }, [allCards]);
+
+    useEffect(() => {
+        setupGame();
+    }, [setupGame]);
+
+    const handleCardClick = (card: CardData) => {
+        if (revealed) return;
+        setRevealed(true);
+        if (card.rank === 'Joker') {
+            setResult('win');
+        } else {
+            setResult('lose');
+        }
+    };
+    
+    if (gameCards.length < 3) {
+        return (
+            <Card className="bg-card/80 backdrop-blur-sm">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card!</CardTitle>
+                    <CardDescription>Not enough cards with back images to play. Please add at least 3 cards (including one Joker) with back images in the admin panel.</CardDescription>
+                </CardHeader>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="bg-card/80 backdrop-blur-sm">
+            <CardHeader>
+                <div className="flex items-center gap-3">
+                    <HelpCircle className="w-8 h-8 text-primary" />
+                    <div>
+                        <CardTitle className="text-2xl">Guess the Card!</CardTitle>
+                        <CardDescription>Find the Joker card. Click on a card to guess.</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="flex justify-center gap-4 mb-4">
+                    {gameCards.map((card, index) => (
+                        <button key={index} onClick={() => handleCardClick(card)} disabled={revealed}>
+                            {revealed ? (
+                                <PokerCard card={card} revealed={true} />
+                            ) : (
+                                <div className="relative h-28 w-20 md:h-32 md:w-24">
+                                     <Image src={card.backImageUrl!} alt="Card back" layout="fill" objectFit="cover" className="rounded-lg" unoptimized/>
+                                </div>
+                            )}
+                        </button>
+                    ))}
+                </div>
+                {result && (
+                    <div className="text-center space-y-2">
+                        <p className={cn("text-2xl font-bold", result === 'win' ? 'text-accent' : 'text-destructive')}>
+                            {result === 'win' ? 'You Win!' : 'Try Again!'}
+                        </p>
+                        <Button onClick={setupGame}>Play Again</Button>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
 
 export default function HomePage() {
   const { t, language } = useTranslation();
@@ -173,15 +270,17 @@ export default function HomePage() {
               <Carousel
                 opts={{
                   align: "start",
-                  loop: true,
+                  loop: cards.length > 5, // Only loop if there are enough cards
                 }}
                 className="w-full max-w-5xl mx-auto"
               >
                 <CarouselContent className="-ml-2">
-                  {cards.map((card, index) => (
+                  {cards.map((card) => (
                     <CarouselItem key={card.id} className="pl-2 basis-1/2 md:basis-1/3 lg:basis-1/5">
                       <div className="p-1">
-                          <PokerCard card={card} revealed={true} />
+                        <Link href={`/cards/${card.id}`}>
+                           <PokerCard card={card} revealed={true} />
+                        </Link>
                       </div>
                     </CarouselItem>
                   ))}
@@ -194,7 +293,12 @@ export default function HomePage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Guess the Card Game Section */}
+        {!isLoadingCards && <GuessTheCardGame allCards={cards} />}
+
       </div>
     </div>
   );
 }
+
