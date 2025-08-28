@@ -15,6 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useVictorySound } from '@/hooks/use-victory-sound';
+import { VictoryAnimation } from '@/components/victory-animation';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
@@ -43,6 +45,7 @@ export default function OnlineJankenPage() {
     const gameId = params.gameId as string;
     const { toast } = useToast();
     const { t } = useTranslation();
+    const playVictorySound = useVictorySound();
 
     const [game, setGame] = useState<Game | null>(null);
     const [loading, setLoading] = useState(false);
@@ -108,6 +111,13 @@ export default function OnlineJankenPage() {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [game?.gameState, game?.playerIds, user?.uid, opponentId]);
+
+    // Play sound/animation on win
+    useEffect(() => {
+        if (user && gameState && gameState.roundWinner === user.uid) {
+            playVictorySound();
+        }
+    }, [gameState, user, playVictorySound]);
     
     const handleSelectMove = async (move: Move) => {
         if (loading || !user || !game || !gameState || gameState.roundWinner) return;
@@ -326,6 +336,7 @@ export default function OnlineJankenPage() {
 
     return (
         <div className="text-center">
+            {gameState.roundWinner === user.uid && <VictoryAnimation />}
             <div className="flex justify-between items-center mb-2">
                 <div/>
                 <h2 className="text-3xl font-bold">{t('jankenTitle')} - Online</h2>

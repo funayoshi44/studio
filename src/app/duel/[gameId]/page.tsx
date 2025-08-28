@@ -14,6 +14,8 @@ import { Copy, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { PokerCard as GameCard } from '@/components/ui/poker-card';
+import { useVictorySound } from '@/hooks/use-victory-sound';
+import { VictoryAnimation } from '@/components/victory-animation';
 
 const TOTAL_ROUNDS = 13;
 
@@ -37,6 +39,7 @@ export default function OnlineDuelPage() {
   const params = useParams();
   const gameId = params.gameId as string;
   const { toast } = useToast();
+  const playVictorySound = useVictorySound();
 
   const { t } = useTranslation();
   const [game, setGame] = useState<Game | null>(null);
@@ -108,6 +111,15 @@ export default function OnlineDuelPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.gameState, game?.playerIds, user, opponentId]);
+
+  // Play sound/animation on win
+  useEffect(() => {
+    if (user && game && gameState) {
+        if (gameState.roundWinner === user.uid || game.winner === user.uid) {
+            playVictorySound();
+        }
+    }
+  }, [gameState?.roundWinner, game?.winner, user, playVictorySound]);
   
   const handleSelectCard = async (card: CardData) => {
     if (loading || !user || !game || !gameState) return;
@@ -322,6 +334,9 @@ export default function OnlineDuelPage() {
 
   return (
     <div className="text-center">
+      {gameState.roundWinner === user.uid && <VictoryAnimation />}
+      {game.winner === user.uid && <VictoryAnimation />}
+
       <div className="flex justify-between items-center mb-2">
         <div className="w-1/3"></div>
         <div className="w-1/3 text-center">

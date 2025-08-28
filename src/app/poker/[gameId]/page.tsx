@@ -17,6 +17,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { evaluatePokerHand, type HandRank } from '@/lib/game-logic/poker';
 import { cn } from '@/lib/utils';
+import { useVictorySound } from '@/hooks/use-victory-sound';
+import { VictoryAnimation } from '@/components/victory-animation';
 
 type PokerGameState = {
   phase: 'waiting' | 'dealing' | 'exchanging' | 'showdown' | 'finished';
@@ -38,6 +40,7 @@ export default function OnlinePokerPage() {
   const gameId = params.gameId as string;
   const { toast } = useToast();
   const { t } = useTranslation();
+  const playVictorySound = useVictorySound();
 
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,6 +77,13 @@ export default function OnlinePokerPage() {
     });
     return () => unsubscribe();
   }, [gameId, user, router, toast, t, game?.status]);
+  
+  // Play sound/animation on win
+  useEffect(() => {
+    if (user && gameState && gameState.winners && Array.isArray(gameState.winners) && gameState.winners.includes(user.uid)) {
+        playVictorySound();
+    }
+  }, [gameState, user, playVictorySound]);
 
 
   const handleSelectCard = (index: number) => {
@@ -219,8 +229,11 @@ export default function OnlinePokerPage() {
     );
   }
 
+  const isWinner = gameState.winners && Array.isArray(gameState.winners) && gameState.winners.includes(user.uid);
+
   return (
     <div className="container mx-auto">
+       {isWinner && <VictoryAnimation />}
        <div className="flex justify-between items-center mb-4">
           <h2 className="text-3xl font-bold">{t('pokerTitle')} - Online</h2>
           <AlertDialog>

@@ -14,6 +14,8 @@ import { Lightbulb, Loader2 } from 'lucide-react';
 import { PokerCard as GameCardComponent } from '@/components/ui/poker-card';
 import { getCards } from '@/lib/firestore';
 import type { CardData } from '@/lib/types';
+import { useVictorySound } from '@/hooks/use-victory-sound';
+import { VictoryAnimation } from '@/components/victory-animation';
 
 
 const TOTAL_ROUNDS = 13;
@@ -96,6 +98,7 @@ export default function DuelPage() {
   const { t } = useTranslation();
   const [state, setState] = useState<DuelState>({ ...initialDuelState, playerCards: [], cpuCards: [], isLoading: true });
   const [loading, setLoading] = useState(false);
+  const playVictorySound = useVictorySound();
 
   const initializeDecks = useCallback(async () => {
     setState(prevState => ({ ...prevState, isLoading: true }));
@@ -230,6 +233,7 @@ export default function DuelPage() {
     if (winner === 'player') {
         resultText = t('youWin');
         newPlayerScore++;
+        playVictorySound();
     } else if (winner === 'cpu') {
         resultText = t('cpuWins');
         newCpuScore++;
@@ -295,6 +299,7 @@ export default function DuelPage() {
 
     if(ended) {
         setState(prev => ({ ...prev, gameEnded: true, finalResult, finalDetail }));
+        if(winner === 'player') playVictorySound();
     }
   };
 
@@ -339,6 +344,8 @@ export default function DuelPage() {
 
   return (
     <div className="text-center">
+      {state.resultText === t('youWin') && <VictoryAnimation />}
+      {state.finalResult === t('duelFinalResultWin') && <VictoryAnimation />}
       <h2 className="text-3xl font-bold mb-2">{t('duelTitle')}</h2>
       <div className="mb-4 text-muted-foreground">
         <span>{t('round')} {state.currentRound > TOTAL_ROUNDS ? TOTAL_ROUNDS : state.currentRound} / {TOTAL_ROUNDS}</span>

@@ -15,6 +15,8 @@ import { Lightbulb, Loader2 } from 'lucide-react';
 import { getJankenActions, type JankenAction } from '@/lib/firestore';
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useVictorySound } from '@/hooks/use-victory-sound';
+import { VictoryAnimation } from '@/components/victory-animation';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
@@ -31,6 +33,7 @@ type JankenState = {
   cpuFinalMove: Move | null;
   resultText: string;
   aiRationale: string | null;
+  isVictory: boolean;
 };
 
 const initialJankenState: JankenState = {
@@ -44,6 +47,7 @@ const initialJankenState: JankenState = {
   cpuFinalMove: null,
   resultText: '',
   aiRationale: null,
+  isVictory: false,
 };
 
 const JankenMoveButton = ({ action, move, onSelect, disabled }: { action?: JankenAction, move: Move, onSelect: (move: Move) => void, disabled: boolean }) => {
@@ -108,6 +112,7 @@ export default function JankenPage() {
   const [loading, setLoading] = useState(false);
   const [jankenActions, setJankenActions] = useState<{ [key in Move]?: JankenAction }>({});
   const [loadingActions, setLoadingActions] = useState(true);
+  const playVictorySound = useVictorySound();
 
   useEffect(() => {
     const loadJankenActions = async () => {
@@ -205,8 +210,15 @@ export default function JankenPage() {
         winner = 'draw';
     }
     
-    if(winner === 'player') recordGameResult('janken', 'win');
-    if(winner === 'cpu') recordGameResult('janken', 'loss');
+    let isVictory = false;
+    if(winner === 'player') {
+      recordGameResult('janken', 'win');
+      playVictorySound();
+      isVictory = true;
+    }
+    if(winner === 'cpu') {
+      recordGameResult('janken', 'loss');
+    }
 
     setState(prev => ({
         ...prev,
@@ -216,6 +228,7 @@ export default function JankenPage() {
         phase: 'result',
         playerScore: prev.playerScore + (winner === 'player' ? 1 : 0),
         cpuScore: prev.cpuScore + (winner === 'cpu' ? 1 : 0),
+        isVictory: isVictory,
     }));
   };
 
@@ -267,6 +280,7 @@ export default function JankenPage() {
 
   return (
     <div className="text-center">
+      {state.isVictory && <VictoryAnimation />}
       <h2 className="text-3xl font-bold mb-2">{t('jankenTitle')}</h2>
       <div className="mb-4 text-muted-foreground">
         <span>{t('round')} {state.round}</span>

@@ -15,6 +15,8 @@ import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
 import { PokerCard as PokerCardComponent } from '@/components/ui/poker-card';
+import { useVictorySound } from '@/hooks/use-victory-sound';
+import { VictoryAnimation } from '@/components/victory-animation';
 
 
 type PokerState = {
@@ -31,6 +33,7 @@ type PokerState = {
   cpuHandRank: string | null;
   resultText: string;
   aiRationale: string | null;
+  isVictory: boolean;
 };
 
 const initialPokerState: PokerState = {
@@ -47,6 +50,7 @@ const initialPokerState: PokerState = {
   cpuHandRank: null,
   resultText: '',
   aiRationale: null,
+  isVictory: false,
 };
 
 export default function PokerPage() {
@@ -54,9 +58,10 @@ export default function PokerPage() {
   const { t } = useTranslation();
   const [state, setState] = useState<PokerState>(initialPokerState);
   const [loading, setLoading] = useState(false);
+  const playVictorySound = useVictorySound();
 
   const dealNewHand = useCallback(async () => {
-    setState(prev => ({ ...prev, phase: 'loading', resultText: '', playerHandRank: null, cpuHandRank: null, aiRationale: null, selectedIndices: [] }));
+    setState(prev => ({ ...prev, phase: 'loading', resultText: '', playerHandRank: null, cpuHandRank: null, aiRationale: null, selectedIndices: [], isVictory: false }));
     const deck = await createPokerDeck();
     if (deck.length < 10) {
       console.error("Not enough cards to deal.");
@@ -155,8 +160,15 @@ export default function PokerPage() {
     if (playerRank.value > cpuRankAfter.value) winner = 'player';
     else if (cpuRankAfter.value > playerRank.value) winner = 'cpu';
 
-    if (winner === 'player') recordGameResult('poker', 'win');
-    if (winner === 'cpu') recordGameResult('poker', 'loss');
+    let isVictory = false;
+    if (winner === 'player') {
+      recordGameResult('poker', 'win');
+      playVictorySound();
+      isVictory = true;
+    }
+    if (winner === 'cpu') {
+      recordGameResult('poker', 'loss');
+    }
 
     setState(prev => ({
         ...prev,
@@ -168,6 +180,7 @@ export default function PokerPage() {
         playerScore: prev.playerScore + (winner === 'player' ? 1 : 0),
         cpuScore: prev.cpuScore + (winner === 'cpu' ? 1 : 0),
         aiRationale: aiResponse.rationale,
+        isVictory: isVictory
     }));
     setLoading(false);
   };
@@ -209,6 +222,7 @@ export default function PokerPage() {
 
   return (
     <div className="text-center">
+      {state.isVictory && <VictoryAnimation />}
       <h2 className="text-3xl font-bold mb-2">{t('pokerTitle')}</h2>
       <div className="mb-4 text-muted-foreground">
         <span>{t('round')} {state.round}</span>
