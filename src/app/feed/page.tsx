@@ -69,49 +69,49 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
     }
 
     return (
-        <Card>
-            <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                <Link href={`/profile/${post.author.uid}`}>
-                    <Avatar>
-                        <AvatarImage src={post.author.photoURL ?? undefined} />
-                        <AvatarFallback>{post.author.displayName?.[0]}</AvatarFallback>
-                    </Avatar>
-                </Link>
-                <div className="flex-1">
-                    <Link href={`/profile/${post.author.uid}`} className="font-bold hover:underline">{post.author.displayName}</Link>
-                    <p className="text-xs text-muted-foreground">
-                        {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
-                    </p>
-                </div>
-            </CardHeader>
-            <CardContent>
-                <p className="whitespace-pre-wrap">{post.content}</p>
-            </CardContent>
-            <CardFooter className="flex justify-between items-center border-t pt-2">
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <button onClick={() => handleLikePost(post.id)} className="flex items-center gap-1 hover:text-red-500">
-                        <Heart className={`w-4 h-4 ${user && post.likes.includes(user.uid) ? 'fill-current text-red-500' : ''}`} /> 
-                        {post.likeCount}
-                    </button>
-                     <CollapsibleTrigger asChild>
-                         <button className="flex items-center gap-1 hover:text-primary">
-                            <MessageSquare className="w-4 h-4" />
-                            {post.replyCount}
+         <Collapsible open={isRepliesOpen} onOpenChange={setIsRepliesOpen} asChild>
+            <Card>
+                <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                    <Link href={`/profile/${post.author.uid}`}>
+                        <Avatar>
+                            <AvatarImage src={post.author.photoURL ?? undefined} />
+                            <AvatarFallback>{post.author.displayName?.[0]}</AvatarFallback>
+                        </Avatar>
+                    </Link>
+                    <div className="flex-1">
+                        <Link href={`/profile/${post.author.uid}`} className="font-bold hover:underline">{post.author.displayName}</Link>
+                        <p className="text-xs text-muted-foreground">
+                            {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
+                        </p>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <p className="whitespace-pre-wrap">{post.content}</p>
+                </CardContent>
+                <CardFooter className="flex justify-between items-center border-t pt-2">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <button onClick={() => handleLikePost(post.id)} className="flex items-center gap-1 hover:text-red-500">
+                            <Heart className={`w-4 h-4 ${user && post.likes.includes(user.uid) ? 'fill-current text-red-500' : ''}`} /> 
+                            {post.likeCount}
                         </button>
-                    </CollapsibleTrigger>
-                </div>
-                {user?.uid === post.author.uid && (
-                    <Button variant="ghost" size="icon" onClick={() => handleDeletePost(post.id)}>
-                        <Trash2 className="w-4 h-4 text-red-500" />
-                    </Button>
-                )}
-            </CardFooter>
-            
-            <Collapsible open={isRepliesOpen} onOpenChange={setIsRepliesOpen}>
+                        <CollapsibleTrigger asChild>
+                            <button className="flex items-center gap-1 hover:text-primary">
+                                <MessageSquare className="w-4 h-4" />
+                                {post.replyCount}
+                            </button>
+                        </CollapsibleTrigger>
+                    </div>
+                    {user?.uid === post.author.uid && (
+                        <Button variant="ghost" size="icon" onClick={() => handleDeletePost(post.id)}>
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                        </Button>
+                    )}
+                </CardFooter>
+                
                 <CollapsibleContent>
                     <div className="border-t">
                         {/* Reply Input */}
-                         <div className="p-4">
+                        <div className="p-4">
                             <form onSubmit={handleReplySubmit} className="flex items-start gap-2">
                                 <Avatar className="w-8 h-8 mt-1">
                                     <AvatarImage src={user?.photoURL ?? undefined} />
@@ -136,30 +136,30 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
 
                         {/* Display Replies */}
                         <div className="pl-8 pr-4 pb-4 space-y-4">
-                           {replies.map(reply => (
-                               <div key={reply.id} className="flex gap-3">
-                                   <Link href={`/profile/${reply.author.uid}`}>
-                                        <Avatar className="w-8 h-8">
-                                            <AvatarImage src={reply.author.photoURL ?? undefined} />
-                                            <AvatarFallback>{reply.author.displayName?.[0]}</AvatarFallback>
-                                        </Avatar>
-                                   </Link>
-                                   <div className="flex-1 bg-muted p-3 rounded-lg">
-                                        <div className="flex items-center gap-2">
-                                             <Link href={`/profile/${reply.author.uid}`} className="font-bold text-sm hover:underline">{reply.author.displayName}</Link>
-                                             <p className="text-xs text-muted-foreground">
+                        {replies.map(reply => (
+                            <div key={reply.id} className="flex gap-3">
+                                <Link href={`/profile/${reply.author.uid}`}>
+                                    <Avatar className="w-8 h-8">
+                                        <AvatarImage src={reply.author.photoURL ?? undefined} />
+                                        <AvatarFallback>{reply.author.displayName?.[0]}</AvatarFallback>
+                                    </Avatar>
+                                </Link>
+                                <div className="flex-1 bg-muted p-3 rounded-lg">
+                                    <div className="flex items-center gap-2">
+                                            <Link href={`/profile/${reply.author.uid}`} className="font-bold text-sm hover:underline">{reply.author.displayName}</Link>
+                                            <p className="text-xs text-muted-foreground">
                                                 {reply.createdAt ? formatDistanceToNow(reply.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
                                             </p>
-                                        </div>
-                                       <p className="text-sm mt-1">{reply.content}</p>
-                                   </div>
-                               </div>
-                           ))}
+                                    </div>
+                                    <p className="text-sm mt-1">{reply.content}</p>
+                                </div>
+                            </div>
+                        ))}
                         </div>
                     </div>
                 </CollapsibleContent>
-            </Collapsible>
-        </Card>
+            </Card>
+        </Collapsible>
     );
 };
 
