@@ -662,8 +662,7 @@ export const getOrCreateChatRoom = async (user1Id: string, user2Id: string): Pro
 export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[]) => void) => {
     const q = query(
         collection(db, 'chatRooms'),
-        where('participantIds', 'array-contains', userId),
-        orderBy('updatedAt', 'desc')
+        where('participantIds', 'array-contains', userId)
     );
 
     return onSnapshot(q, (querySnapshot) => {
