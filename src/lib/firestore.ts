@@ -26,24 +26,18 @@ import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 const TOTAL_ROUNDS = 13;
 
-const getInitialDuelGameState = async (playerIds: string[] = []) => {
-    // Fetch all cards from the database
-    const allCards = await getCards();
+const createRandomDeck = (allCards: CardData[]): CardData[] => {
+    const shuffled = [...allCards].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 13);
+};
 
-    // Create a unique deck of 13 cards, one for each number from 1 to 13
-    const cardMap = new Map<number, CardData>();
-    for (const card of allCards) {
-        if (card.number >= 1 && card.number <= 13 && !cardMap.has(card.number)) {
-            cardMap.set(card.number, card);
-        }
+
+const getInitialDuelGameState = async (playerIds: string[] = []) => {
+    const allCards = await getCards();
+     if (allCards.length < 13) {
+        console.error("Not enough cards in DB for a duel, need at least 13.");
+        // Potentially return a default/fallback deck here
     }
-    const baseDeck = Array.from({ length: 13 }, (_, i) => i + 1).map(num => {
-        return cardMap.get(num) || {
-            id: `fallback-${num}`, name: `Card ${num}`, number: num, value: num, suit: '?',
-            imageUrl: `https://picsum.photos/seed/card-fallback-${num}/200/300`,
-            gameType: 'common', artist: 'System', rarity: 'common', tags: []
-        };
-    });
 
     const gameState: any = {
         currentRound: 1,
@@ -60,8 +54,8 @@ const getInitialDuelGameState = async (playerIds: string[] = []) => {
     };
 
     playerIds.forEach(uid => {
-        // Each player gets a shuffled full deck of CardData objects
-        gameState.playerHands[uid] = [...baseDeck].sort(() => Math.random() - 0.5);
+        // Each player gets a randomized 13-card deck from all available cards
+        gameState.playerHands[uid] = createRandomDeck(allCards);
         gameState.scores[uid] = 0;
         gameState.kyuso[uid] = 0;
         gameState.only[uid] = 0;
@@ -670,7 +664,13 @@ export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[
         querySnapshot.forEach((doc) => {
             rooms.push({ id: doc.id, ...doc.data() } as ChatRoom);
         });
-        callback(rooms);
+        // Sort rooms by updatedAt timestamp on the client-side
+        const sortedRooms = rooms.sort((a, b) => {
+            const timeA = a.updatedAt?.toMillis() || 0;
+            const timeB = b.updatedAt?.toMillis() || 0;
+            return timeB - timeA;
+        });
+        callback(sortedRooms);
     });
 };
 

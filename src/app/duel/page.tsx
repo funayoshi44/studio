@@ -60,6 +60,12 @@ const initialDuelState: Omit<DuelState, 'playerCards' | 'cpuCards'> = {
   isLoading: true,
 };
 
+// Function to create a random 13-card deck from all available cards
+const createRandomDeck = (allCards: CardData[]): CardData[] => {
+    const shuffled = [...allCards].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, 13);
+};
+
 export default function DuelPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
   const t = useTranslation();
@@ -69,33 +75,13 @@ export default function DuelPage() {
   const initializeDecks = useCallback(async () => {
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
-        // Fetch all cards from the database, regardless of gameType
-        const allCards = await getCards(); 
-        
-        // Create a unique deck of 13 cards, one for each number from 1 to 13
-        const cardMap = new Map<number, CardData>();
-        for (const card of allCards) {
-            // If we don't have a card for this number yet, and it's a valid number
-            if (card.number >= 1 && card.number <= 13 && !cardMap.has(card.number)) {
-                cardMap.set(card.number, card);
-            }
-        }
-        
-        // Fill any missing numbers with fallback cards
-        const finalDeck = Array.from({ length: 13 }, (_, i) => i + 1).map(num => {
-            return cardMap.get(num) || { 
-                id: `fallback-${num}`, name: `Card ${num}`, number: num, value: num, suit: '?', 
-                imageUrl: `https://picsum.photos/seed/card-fallback-${num}/200/300`,
-                gameType: 'common', artist: 'System', rarity: 'common', tags: []
-            };
-        });
-
-        if (finalDeck.length < 13) {
-            throw new Error("Could not assemble a full deck of 13 cards.");
+        const allCards = await getCards();
+        if (allCards.length < 13) {
+            throw new Error("Not enough cards in the database to play. At least 13 are required.");
         }
 
-        const shuffledPlayerDeck = [...finalDeck].sort(() => Math.random() - 0.5);
-        const shuffledCpuDeck = [...finalDeck].sort(() => Math.random() - 0.5);
+        const playerDeck = createRandomDeck(allCards);
+        const cpuDeck = createRandomDeck(allCards);
 
         setState(prevState => ({
             ...prevState,
@@ -103,8 +89,8 @@ export default function DuelPage() {
             round: prevState.round, // Keep score across resets if any
             playerScore: prevState.playerScore,
             cpuScore: prevState.cpuScore,
-            playerCards: shuffledPlayerDeck,
-            cpuCards: shuffledCpuDeck,
+            playerCards: playerDeck,
+            cpuCards: cpuDeck,
             isLoading: false,
         }));
     } catch (error) {
