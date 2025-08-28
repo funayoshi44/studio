@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, SubmitHandler, Controller } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { addCard } from "@/lib/firestore";
+import { addCard, getSeriesNames } from "@/lib/firestore";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -38,8 +38,21 @@ export default function AddCardPage() {
   const { user } = useAuth();
   const { register, handleSubmit, formState: { errors }, reset, control } = useForm<Inputs>();
   const [isLoading, setIsLoading] = useState(false);
+  const [seriesNames, setSeriesNames] = useState<string[]>([]);
   const { toast } = useToast();
   const router = useRouter();
+
+  useEffect(() => {
+    const fetchSeries = async () => {
+        try {
+            const names = await getSeriesNames();
+            setSeriesNames(names);
+        } catch (error) {
+            console.error("Failed to fetch series names:", error);
+        }
+    };
+    fetchSeries();
+  }, []);
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
     if (!user) {
@@ -114,10 +127,17 @@ export default function AddCardPage() {
 
                 {/* Series Name */}
                 <div className="space-y-2">
-                <Label htmlFor="seriesName">Series Name</Label>
-                <Input id="seriesName" {...register("seriesName", { required: "Series name is required" })} />
-                {errors.seriesName && <p className="text-xs text-destructive">{errors.seriesName.message}</p>}
+                    <Label htmlFor="seriesName">Series Name</Label>
+                    <Input 
+                        id="seriesName" 
+                        list="series-names-list"
+                        {...register("seriesName", { required: "Series name is required" })} />
+                    <datalist id="series-names-list">
+                        {seriesNames.map(name => <option key={name} value={name} />)}
+                    </datalist>
+                    {errors.seriesName && <p className="text-xs text-destructive">{errors.seriesName.message}</p>}
                 </div>
+
 
                 {/* Suit */}
                 <div className="space-y-2">

@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction } from './types';
-import { evaluatePokerHand, createPokerDeck } from './game-logic/poker';
+import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
 const TOTAL_ROUNDS = 13;
@@ -771,6 +771,12 @@ export const deleteCard = async (card: CardData): Promise<void> => {
 
 
     await getCards(true);
+};
+
+export const getSeriesNames = async (): Promise<string[]> => {
+    const cards = await getCards(); // Use cached version if available
+    const names = new Set(cards.map(card => card.seriesName));
+    return Array.from(names);
 };
 
 
