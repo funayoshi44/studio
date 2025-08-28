@@ -1,40 +1,22 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { subscribeToPosts, createPost, togglePostLike, deletePost, subscribeToReplies, type Post } from '@/lib/firestore';
+import { subscribeToPosts, createPost, togglePostLike, deletePost, type Post } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Heart, MessageSquare, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import Link from 'next/link';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
-const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content: string, parentId: string) => void; }) => {
+const PostCard = ({ post }: { post: Post; }) => {
     const { user } = useAuth();
     const { toast } = useToast();
-    const [rawReplies, setRawReplies] = useState<Post[]>([]);
-    const [isRepliesOpen, setIsRepliesOpen] = useState(false);
-    const [replyContent, setReplyContent] = useState('');
-    const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-
-    useEffect(() => {
-        if (post.replyCount > 0) {
-            const unsubscribe = subscribeToReplies(post.id, (fetchedReplies) => {
-                setRawReplies(fetchedReplies);
-            });
-            return () => unsubscribe();
-        }
-    }, [post.id, post.replyCount]);
-
-    const sortedReplies = useMemo(() => {
-        return [...rawReplies].sort((a, b) => a.createdAt.toDate().getTime() - b.createdAt.toDate().getTime());
-    }, [rawReplies]);
 
     const handleLikePost = async (postId: string) => {
         if (!user) return;
@@ -47,7 +29,7 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
     };
 
     const handleDeletePost = async (postId: string) => {
-        if (window.confirm("Are you sure you want to delete this post? This will also delete all replies.")) {
+        if (window.confirm("Are you sure you want to delete this post?")) {
             try {
                 await deletePost(postId);
                 toast({ title: "Post deleted" });
@@ -57,111 +39,45 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
         }
     };
 
-    const handleReplySubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!replyContent.trim()) return;
-        setIsSubmittingReply(true);
-        try {
-            await onReplySubmit(replyContent, post.id);
-            setReplyContent('');
-            setIsRepliesOpen(true); // Show replies after submitting
-        } finally {
-            setIsSubmittingReply(false);
-        }
-    }
-
     return (
-         <Collapsible open={isRepliesOpen} onOpenChange={setIsRepliesOpen} asChild>
-            <Card>
-                <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                    <Link href={`/profile/${post.author.uid}`}>
-                        <Avatar>
-                            <AvatarImage src={post.author.photoURL ?? undefined} />
-                            <AvatarFallback>{post.author.displayName?.[0]}</AvatarFallback>
-                        </Avatar>
-                    </Link>
-                    <div className="flex-1">
-                        <Link href={`/profile/${post.author.uid}`} className="font-bold hover:underline">{post.author.displayName}</Link>
-                        <p className="text-xs text-muted-foreground">
-                            {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
-                        </p>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <p className="whitespace-pre-wrap">{post.content}</p>
-                </CardContent>
-                <CardFooter className="flex justify-between items-center border-t pt-2">
-                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <button onClick={() => handleLikePost(post.id)} className="flex items-center gap-1 hover:text-red-500">
-                            <Heart className={`w-4 h-4 ${user && post.likes.includes(user.uid) ? 'fill-current text-red-500' : ''}`} /> 
-                            {post.likeCount}
-                        </button>
-                        <CollapsibleTrigger asChild>
-                            <button className="flex items-center gap-1 hover:text-primary">
-                                <MessageSquare className="w-4 h-4" />
-                                {post.replyCount}
-                            </button>
-                        </CollapsibleTrigger>
-                    </div>
-                    {user?.uid === post.author.uid && (
-                        <Button variant="ghost" size="icon" onClick={() => handleDeletePost(post.id)}>
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                        </Button>
-                    )}
-                </CardFooter>
-                
-                <CollapsibleContent>
-                    <div className="border-t">
-                        {/* Reply Input */}
-                        <div className="p-4">
-                            <form onSubmit={handleReplySubmit} className="flex items-start gap-2">
-                                <Avatar className="w-8 h-8 mt-1">
-                                    <AvatarImage src={user?.photoURL ?? undefined} />
-                                    <AvatarFallback>{user?.displayName?.[0]}</AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1">
-                                    <Textarea 
-                                        value={replyContent}
-                                        onChange={(e) => setReplyContent(e.target.value)}
-                                        placeholder="Reply to this post..."
-                                        rows={2}
-                                    />
-                                    <div className="flex justify-end mt-2">
-                                        <Button size="sm" disabled={isSubmittingReply || !replyContent.trim()}>
-                                            {isSubmittingReply && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                                            Reply
-                                        </Button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-
-                        {/* Display Replies */}
-                        <div className="pl-8 pr-4 pb-4 space-y-4">
-                        {sortedReplies.map(reply => (
-                            <div key={reply.id} className="flex gap-3">
-                                <Link href={`/profile/${reply.author.uid}`}>
-                                    <Avatar className="w-8 h-8">
-                                        <AvatarImage src={reply.author.photoURL ?? undefined} />
-                                        <AvatarFallback>{reply.author.displayName?.[0]}</AvatarFallback>
-                                    </Avatar>
-                                </Link>
-                                <div className="flex-1 bg-muted p-3 rounded-lg">
-                                    <div className="flex items-center gap-2">
-                                            <Link href={`/profile/${reply.author.uid}`} className="font-bold text-sm hover:underline">{reply.author.displayName}</Link>
-                                            <p className="text-xs text-muted-foreground">
-                                                {reply.createdAt ? formatDistanceToNow(reply.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
-                                            </p>
-                                    </div>
-                                    <p className="text-sm mt-1">{reply.content}</p>
-                                </div>
-                            </div>
-                        ))}
-                        </div>
-                    </div>
-                </CollapsibleContent>
-            </Card>
-        </Collapsible>
+        <Card>
+            <CardHeader className="flex flex-row items-center gap-4 pb-2">
+                <Link href={`/profile/${post.author.uid}`}>
+                    <Avatar>
+                        <AvatarImage src={post.author.photoURL ?? undefined} />
+                        <AvatarFallback>{post.author.displayName?.[0]}</AvatarFallback>
+                    </Avatar>
+                </Link>
+                <div className="flex-1">
+                    <Link href={`/profile/${post.author.uid}`} className="font-bold hover:underline">{post.author.displayName}</Link>
+                    <p className="text-xs text-muted-foreground">
+                        {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
+                    </p>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <p className="whitespace-pre-wrap">{post.content}</p>
+            </CardContent>
+            <CardFooter className="flex justify-between items-center border-t pt-2">
+                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <button onClick={() => handleLikePost(post.id)} className="flex items-center gap-1 hover:text-red-500">
+                        <Heart className={`w-4 h-4 ${user && post.likes.includes(user.uid) ? 'fill-current text-red-500' : ''}`} /> 
+                        {post.likeCount}
+                    </button>
+                    {/* Reply functionality is commented out for now
+                    <button className="flex items-center gap-1 hover:text-primary">
+                        <MessageSquare className="w-4 h-4" />
+                        {post.replyCount}
+                    </button>
+                    */}
+                </div>
+                {user?.uid === post.author.uid && (
+                    <Button variant="ghost" size="icon" onClick={() => handleDeletePost(post.id)}>
+                        <Trash2 className="w-4 h-4 text-red-500" />
+                    </Button>
+                )}
+            </CardFooter>
+        </Card>
     );
 };
 
@@ -176,6 +92,7 @@ export default function FeedPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     useEffect(() => {
+        setIsLoadingPosts(true);
         const unsubscribe = subscribeToPosts((allPosts) => {
             setPosts(allPosts);
             setIsLoadingPosts(false);
@@ -183,27 +100,19 @@ export default function FeedPage() {
         return () => unsubscribe();
     }, []);
 
-    const handleCreatePost = async (content: string, parentId: string | null = null) => {
+    const handleCreatePost = async (content: string) => {
         if (!user || !content.trim()) return;
-        
+        setIsSubmitting(true);
         try {
-            await createPost(user, content, parentId);
-            if (!parentId) {
-                setNewPostContent(''); // Clear main input only if it's a top-level post
-                toast({ title: "Post created!" });
-            } else {
-                 toast({ title: "Reply sent!" });
-            }
+            await createPost(user, content);
+            setNewPostContent(''); 
+            toast({ title: "Post created!" });
         } catch (error) {
             toast({ title: "Error creating post", variant: 'destructive' });
+        } finally {
+            setIsSubmitting(false);
         }
     };
-
-    const handleTopLevelSubmit = async () => {
-        setIsSubmitting(true);
-        await handleCreatePost(newPostContent);
-        setIsSubmitting(false);
-    }
 
 
     if (authLoading) {
@@ -239,7 +148,7 @@ export default function FeedPage() {
                     />
                 </CardContent>
                 <CardFooter className="flex justify-end">
-                    <Button onClick={handleTopLevelSubmit} disabled={isSubmitting || !newPostContent.trim()}>
+                    <Button onClick={() => handleCreatePost(newPostContent)} disabled={isSubmitting || !newPostContent.trim()}>
                         {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Post
                     </Button>
@@ -248,13 +157,16 @@ export default function FeedPage() {
 
             <div className="space-y-4">
                 {isLoadingPosts ? (
-                    <p>Loading posts...</p>
+                    <div className="text-center text-muted-foreground py-8">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                        <p>Loading posts...</p>
+                    </div>
                 ) : posts.length > 0 ? (
                     posts.map(post => (
-                        <PostCard key={post.id} post={post} onReplySubmit={handleCreatePost}/>
+                        <PostCard key={post.id} post={post}/>
                     ))
                 ) : (
-                    <p className="text-center text-muted-foreground">No posts yet. Be the first to share something!</p>
+                    <p className="text-center text-muted-foreground py-8">No posts yet. Be the first to share something!</p>
                 )}
             </div>
         </div>

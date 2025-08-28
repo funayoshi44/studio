@@ -1,3 +1,4 @@
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -463,7 +464,7 @@ export const getUserProfile = async (userId: string): Promise<MockUser | null> =
 // --- Posts (Bulletin Board) ---
 
 // Create a new post or reply
-export const createPost = async (author: MockUser, content: string, parentId: string | null = null): Promise<void> => {
+export const createPost = async (author: MockUser, content: string): Promise<void> => {
   if (!content.trim()) {
     throw new Error("Post content cannot be empty.");
   }
@@ -475,27 +476,14 @@ export const createPost = async (author: MockUser, content: string, parentId: st
         photoURL: author.photoURL,
     },
     content,
-    parentId,
+    // parentId: null, // parentId is removed for now
     createdAt: serverTimestamp(),
     likes: [],
     likeCount: 0,
-    replyCount: 0,
+    // replyCount: 0, // replyCount is removed for now
   };
   
-  const newPostRef = await addDoc(collection(db, 'posts'), postData);
-
-  // If it's a reply, update the parent post's reply count
-  if (parentId) {
-      const parentRef = doc(db, 'posts', parentId);
-      await runTransaction(db, async (transaction) => {
-          const parentSnap = await transaction.get(parentRef);
-          if (!parentSnap.exists()) {
-              throw new Error("Parent post does not exist.");
-          }
-          const newReplyCount = (parentSnap.data().replyCount || 0) + 1;
-          transaction.update(parentRef, { replyCount: newReplyCount });
-      });
-  }
+  await addDoc(collection(db, 'posts'), postData);
 };
 
 
@@ -504,7 +492,7 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   const postsCollection = collection(db, 'posts');
   const q = query(
     postsCollection, 
-    where('parentId', '==', null), // Only fetch top-level posts
+    // where('parentId', '==', null), // No longer needed
     orderBy('createdAt', 'desc'),
     limit(50)
   );
@@ -518,6 +506,7 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   });
 };
 
+/*
 // Listen for replies to a specific post
 export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => void) => {
   const postsCollection = collection(db, 'posts');
@@ -533,6 +522,7 @@ export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => 
     callback(replies);
   });
 };
+*/
 
 
 // Listen for posts by a specific user (both top-level and replies)
@@ -586,7 +576,10 @@ export const togglePostLike = async (postId: string, userId: string): Promise<vo
 // Delete a post and all its replies
 export const deletePost = async (postId: string): Promise<void> => {
     const postRef = doc(db, 'posts', postId);
+    await deleteDoc(postRef);
     
+    // Deleting replies is commented out as the functionality is disabled
+    /*
     // First, find all replies to this post
     const repliesQuery = query(collection(db, 'posts'), where('parentId', '==', postId));
     const repliesSnapshot = await getDocs(repliesQuery);
@@ -603,6 +596,7 @@ export const deletePost = async (postId: string): Promise<void> => {
 
     // Commit the batch
     await batch.commit();
+    */
 };
 
 

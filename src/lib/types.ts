@@ -39,8 +39,8 @@ export type Post = {
     createdAt: Timestamp;
     likes: string[]; // Array of user UIDs who liked it
     likeCount: number;
-    parentId: string | null; // ID of the parent post for replies
-    replyCount: number;
+    // parentId: string | null; // ID of the parent post for replies
+    // replyCount: number;
 };
 
 // Represents a single card's data stored in Firestore, based on user's detailed spec
