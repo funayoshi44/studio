@@ -7,11 +7,8 @@ export type PokerCard = CardData;
 export type HandRank = { name: string; value: number };
 
 // A fallback function to create a default deck if Firestore is empty
-const createDefaultDeck = (addStarSuit: boolean = false): PokerCard[] => {
+const createDefaultPokerDeck = (): PokerCard[] => {
     const suits = ['spade', 'heart', 'diamond', 'club'];
-    if (addStarSuit) {
-        suits.push('star');
-    }
     const ranks = [
         { name: 'A', value: 14, number: 1 }, { name: '2', value: 2, number: 2 }, { name: '3', value: 3, number: 3 },
         { name: '4', value: 4, number: 4 }, { name: '5', value: 5, number: 5 }, { name: '6', value: 6, number: 6 },
@@ -23,16 +20,16 @@ const createDefaultDeck = (addStarSuit: boolean = false): PokerCard[] => {
     let idCounter = 0;
     for (const suit of suits) {
         for (const rank of ranks) {
-             const suitSymbol = suit === 'spade' ? '♠️' : suit === 'heart' ? '♥️' : suit === 'diamond' ? '♦️' : suit === 'club' ? '♣️' : '⭐';
+             const suitSymbol = suit === 'spade' ? '♠️' : suit === 'heart' ? '♥️' : suit === 'diamond' ? '♦️' : '♣️';
             deck.push({
-                id: `${rank.name}${suit}${idCounter++}`, // Ensure unique ID
+                id: `default-poker-${rank.name}${suit}${idCounter++}`, // Ensure unique ID
                 gameType: 'poker',
                 suit: suit,
                 number: rank.number,
                 value: rank.value,
                 name: `${rank.name} of ${suit}`,
                 artist: 'System',
-                imageUrl: `https://picsum.photos/seed/${rank.name}${suit}/200/300`,
+                imageUrl: `https://picsum.photos/seed/card-poker-${rank.name}${suit}/200/300`,
                 rarity: 'common',
                 tags: []
             });
@@ -43,9 +40,23 @@ const createDefaultDeck = (addStarSuit: boolean = false): PokerCard[] => {
 
 // This function now fetches card data from Firestore.
 export const createPokerDeck = async (): Promise<PokerCard[]> => {
-  // For online poker, always generate a full deck programmatically to ensure fairness and completeness.
-  const deck = createDefaultDeck(true); // Create a 5-suit deck
-  return shuffleDeck(deck);
+    let allCards = await getCards(true); // Force refresh to get latest cards
+    let pokerCards = allCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
+
+    // If we don't have enough cards for a full 52-card deck, supplement with defaults
+    if (pokerCards.length < 52) {
+        const defaultDeck = createDefaultPokerDeck();
+        const needed = 52 - pokerCards.length;
+        
+        // Find default cards that are not already represented in the custom cards
+        const existingSignatures = new Set(pokerCards.map(c => `${c.number}-${c.suit}`));
+        const uniqueDefaults = defaultDeck.filter(dc => !existingSignatures.has(`${dc.number}-${dc.suit}`));
+
+        pokerCards.push(...uniqueDefaults.slice(0, needed));
+    }
+    
+    // Ensure we have exactly 52 cards, and shuffle them
+    return shuffleDeck(pokerCards.slice(0, 52));
 };
 
 
