@@ -146,7 +146,7 @@ export default function OnlineLobbyPage() {
                     <div key={game.name} className="flex items-center justify-between p-3 rounded-lg border bg-background">
                          <div className="flex items-center gap-4">
                             <game.icon className="w-8 h-8 text-primary" />
-                            <span className="font-bold text-lg">{t(`${game.name}Title`)}</span>
+                            <span className="font-bold text-lg">{t(`${game.name}Title` as any)}</span>
                         </div>
                         {isMatching && matchingGameType === game.name ? (
                             <div className="flex items-center gap-2 px-4">
@@ -212,7 +212,7 @@ export default function OnlineLobbyPage() {
                                 </Avatar>
                                 <div>
                                     <p className="font-bold">{host.displayName}</p>
-                                    <p className="text-sm text-muted-foreground">{t(`${game.gameType}Title`)}</p>
+                                    <p className="text-sm text-muted-foreground">{t(`${game.gameType}Title` as any)}</p>
                                 </div>
                             </div>
                             <Button

@@ -113,7 +113,7 @@ export default function HistoryPage() {
                                         <p className="font-bold">vs {game.opponent.displayName}</p>
                                         <p className="text-sm text-muted-foreground flex items-center gap-2">
                                             {getGameIcon(game.gameType)}
-                                            <span>{t(`${game.gameType}Title`)}</span>
+                                            <span>{t(`${game.gameType}Title` as any)}</span>
                                             <span className="hidden sm:inline-block">• {format(game.playedAt, 'PPp', { locale: language === 'ja' ? ja : undefined })}</span>
                                         </p>
                                     </div>
@@ -132,7 +132,7 @@ export default function HistoryPage() {
                     {gameTypes.map((gameType) => (
                     <Card key={gameType}>
                         <CardHeader>
-                        <CardTitle>{t(`${gameType}Title`)}</CardTitle>
+                        <CardTitle>{t(`${gameType}Title` as any)}</CardTitle>
                         </CardHeader>
                         <CardContent>
                         <div className="grid md:grid-cols-3 gap-4">
