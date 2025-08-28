@@ -63,7 +63,7 @@ export function PokerCard({ card, revealed = false, className, disablePopover = 
           />
       ) : (
          <Image
-            src="https://firebasestorage.googleapis.com/v0/b/cardverse-oajwb.firebasestorage.app/o/system-use?alt=media"
+            src="https://firebasestorage.googleapis.com/v0/b/cardverse-oajwb.appspot.com/o/system-use%2Fcard-back.png?alt=media&token=7c3d2c8a-7a64-4d82-9a30-2a9103554367"
             alt="Generic card back"
             layout="fill"
             objectFit="cover"
