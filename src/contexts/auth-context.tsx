@@ -91,6 +91,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               bio: 'A guest user.',
               isGuest: true,
               isAdmin: false, // Guests can't be admins
+              points: 0,
             };
           } else {
              newUserProfile = {
@@ -101,6 +102,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               bio: '',
               isGuest: false,
               isAdmin: isAdmin,
+              points: 0,
             };
           }
           await setDoc(userDocRef, { ...newUserProfile, createdAt: serverTimestamp() });
@@ -168,6 +170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             bio: '',
             isGuest: false,
             isAdmin: isAdmin,
+            points: 0,
           };
           await setDoc(doc(db, 'users', fbUser.uid), { ...newUserProfile, createdAt: serverTimestamp() });
           

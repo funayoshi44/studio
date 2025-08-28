@@ -18,6 +18,7 @@ import {
   orderBy,
   deleteDoc,
   writeBatch,
+  increment,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage } from './types';
@@ -25,6 +26,16 @@ import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
 const TOTAL_ROUNDS = 13;
+
+// --- Point System ---
+export const awardPoints = async (userId: string, amount: number) => {
+    if (!userId) return;
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+        points: increment(amount)
+    });
+};
+
 
 const createDefaultDeck = (count = 13): CardData[] => {
     return Array.from({ length: count }, (_, i) => ({
@@ -164,7 +175,8 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
     maxPlayers: gameType === 'poker' ? 4 : 2,
     gameState: {}, // Initialize with an empty object
   });
-
+  
+  await awardPoints(user.uid, 1); // Award 1 point for creating a game
   return docRef.id;
 };
 
@@ -207,6 +219,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         }
 
         transaction.update(gameRef, updates);
+        await awardPoints(user.uid, 1); // Award 1 point for joining
     });
 };
 
@@ -326,6 +339,13 @@ export const submitMove = async (gameId: string, userId: string, move: any, phas
                     ? `Draw between ${winners.map(w => gameData.players[w]?.displayName).join(', ')}!`
                     : `${gameData.players[winners[0]]?.displayName} wins with a ${highestRank.name}!`;
                 newGameState.phase = 'finished';
+
+                // Award points to winner(s)
+                if (winners.length > 0) {
+                    for (const winnerId of winners) {
+                       await awardPoints(winnerId, 1);
+                    }
+                }
             }
 
         } else { // Duel
@@ -398,6 +418,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       }
       
       transaction.update(gameRef, updates);
+      await awardPoints(user.uid, 1);
       return suitableGameId;
     } else {
       // No suitable waiting games found, create a new one
@@ -412,6 +433,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         gameState: {},
         maxPlayers: maxPlayers,
       });
+      await awardPoints(user.uid, 1);
       return newGameRef.id;
     }
   });
@@ -435,9 +457,13 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
 
             if (remainingPlayers.length < 2 && gameData.status === 'in-progress') {
                 // If only one player is left, they are the winner.
+                const winnerId = remainingPlayers[0] || null;
+                if (winnerId) {
+                    await awardPoints(winnerId, 1); // Award point for winning
+                }
                 transaction.update(gameRef, {
                     status: 'finished',
-                    winner: remainingPlayers[0] || null,
+                    winner: winnerId,
                 });
             } else if (remainingPlayers.length > 0) {
                  // The game continues with the remaining players
@@ -662,8 +688,8 @@ export const getOrCreateChatRoom = async (user1Id: string, user2Id: string): Pro
         await setDoc(chatRoomRef, {
             participantIds: members,
             participantsInfo: {
-                [user1Id]: { displayName: user1Profile.displayName, photoURL: user1Profile.photoURL },
-                [user2Id]: { displayName: user2Profile.displayName, photoURL: user2Profile.photoURL }
+                [user1Id]: { displayName: user1Profile.displayName, photoURL: user1.photoURL },
+                [user2Id]: { displayName: user2Profile.displayName, photoURL: user2.photoURL }
             },
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus, CircleUser, Send } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus, CircleUser, Send, Award } from 'lucide-react';
 import { AuthContext } from '@/contexts/auth-context';
 import {
   DropdownMenu,
@@ -88,6 +88,9 @@ export function Header() {
                       <p className="text-sm font-medium leading-none">{user.displayName}</p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {user.isGuest ? "Guest User" : user.email}
+                      </p>
+                       <p className="text-xs leading-none text-amber-600 flex items-center gap-1 pt-1">
+                        <Award className="w-3 h-3" /> {user.points ?? 0} Points
                       </p>
                     </div>
                   </DropdownMenuLabel>

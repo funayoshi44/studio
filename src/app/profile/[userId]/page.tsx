@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom, getCards, type CardData } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Heart, Trash2, Send } from 'lucide-react';
+import { Loader2, Heart, Trash2, Send, Award } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
@@ -115,6 +115,10 @@ export default function UserProfilePage() {
                         <div className="flex-1 text-center md:text-left">
                             <h1 className="text-4xl font-bold">{profileUser.displayName}</h1>
                             {profileUser.bio && <p className="mt-2 text-lg text-muted-foreground">{profileUser.bio}</p>}
+                             <div className="flex items-center justify-center md:justify-start gap-2 mt-3 text-lg font-semibold text-amber-500">
+                                <Award />
+                                <span>{profileUser.points ?? 0} Points</span>
+                            </div>
                             {currentUser?.uid === userId ? (
                                 <Link href="/settings" passHref>
                                     <Button variant="outline" className="mt-4">Edit Profile</Button>

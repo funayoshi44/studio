@@ -26,6 +26,7 @@ export type MockUser = {
   isAdmin: boolean; // Admin flag
   isGuest?: boolean; // Guest flag
   myCards?: string[]; // Array of Card IDs
+  points?: number; // User points
 };
 
 // Represents a post on the bulletin board
