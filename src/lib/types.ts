@@ -26,14 +26,21 @@ export type MockUser = {
   isAdmin: boolean; // Admin flag
   isGuest?: boolean; // Guest flag
   myCards?: string[]; // Array of Card IDs
-  jankenFavorites?: { // Card IDs for janken moves
-    rock: string;
-    paper: string;
-    scissors: string;
-  };
   points?: number; // User points
   lastLogin?: Timestamp; // For daily login bonus
 };
+
+// Represents a custom janken action created by a user
+export type JankenAction = {
+    id: string;
+    userId: string;
+    type: 'rock' | 'paper' | 'scissors';
+    title: string;
+    comment: string;
+    imageUrl: string;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+}
 
 // Represents a post on the bulletin board
 export type Post = {

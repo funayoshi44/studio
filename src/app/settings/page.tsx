@@ -11,16 +11,83 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Heart, Trash2, Scissors, Replace } from "lucide-react";
+import { Loader2, Heart, Trash2, Scissors, ImageUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { subscribeToUserPosts, deletePost, togglePostLike, type Post, getCards, type CardData, updateMyCards, updateJankenFavorites } from "@/lib/firestore";
+import { subscribeToUserPosts, deletePost, togglePostLike, type Post, getCards, type CardData, updateMyCards, getJankenActions, setJankenAction, type JankenAction } from "@/lib/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { PokerCard } from "@/components/ui/poker-card";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
-type JankenMove = 'rock' | 'paper' | 'scissors';
+type JankenMoveType = 'rock' | 'paper' | 'scissors';
+
+const JankenActionEditor = ({ 
+    type,
+    action,
+    onSave
+} : {
+    type: JankenMoveType,
+    action: Partial<JankenAction> | null,
+    onSave: (data: { title: string, comment: string }, file: File | null) => Promise<void>
+}) => {
+    const [title, setTitle] = useState(action?.title || "");
+    const [comment, setComment] = useState(action?.comment || "");
+    const [imageFile, setImageFile] = useState<File | null>(null);
+    const [preview, setPreview] = useState<string | null>(action?.imageUrl || null);
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const file = e.target.files[0];
+            setImageFile(file);
+            setPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSave = async () => {
+        setIsSaving(true);
+        await onSave({ title, comment }, imageFile);
+        setIsSaving(false);
+    }
+
+    return (
+        <Card className="bg-background/50">
+            <CardHeader>
+                <CardTitle className="capitalize flex items-center gap-2">
+                    <Scissors className="w-5 h-5"/> {type}
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                 <div className="flex justify-center items-center h-40 w-full bg-muted rounded-md overflow-hidden relative">
+                    {preview ? (
+                        <Image src={preview} alt={`${type} preview`} layout="fill" objectFit="cover" />
+                    ) : (
+                        <span className="text-muted-foreground text-sm">No Image</span>
+                    )}
+                 </div>
+                 <div className="space-y-1">
+                    <Label htmlFor={`${type}-image`}>Image</Label>
+                    <Input id={`${type}-image`} type="file" accept="image/*" onChange={handleImageChange} />
+                 </div>
+                 <div className="space-y-1">
+                    <Label htmlFor={`${type}-title`}>Title</Label>
+                    <Input id={`${type}-title`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. The Unstoppable Fist" />
+                 </div>
+                 <div className="space-y-1">
+                    <Label htmlFor={`${type}-comment`}>Comment</Label>
+                    <Textarea id={`${type}-comment`} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="A short comment about your move." rows={2}/>
+                 </div>
+            </CardContent>
+            <CardFooter>
+                 <Button onClick={handleSave} disabled={isSaving} className="w-full">
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin"/> : `Save ${type}`}
+                 </Button>
+            </CardFooter>
+        </Card>
+    );
+};
 
 
 export default function SettingsPage() {
@@ -40,12 +107,8 @@ export default function SettingsPage() {
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(user?.myCards || []);
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false);
   
-  // For Janken Favorites
-  const [jankenFavorites, setJankenFavorites] = useState(user?.jankenFavorites || { rock: '', paper: '', scissors: '' });
-  const [isJankenDialogOpen, setIsJankenDialogOpen] = useState(false);
-  const [currentJankenMove, setCurrentJankenMove] = useState<JankenMove>('rock');
-  const [jankenCards, setJankenCards] = useState<{rock?: CardData, paper?: CardData, scissors?: CardData}>({});
-
+  // For Janken Actions
+  const [jankenActions, setJankenActions] = useState<{ [key: string]: Partial<JankenAction> }>({});
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -55,24 +118,18 @@ export default function SettingsPage() {
         setBio(user.bio || "");
         setPreview(user.photoURL);
         setSelectedCardIds(user.myCards || []);
-        setJankenFavorites(user.jankenFavorites || { rock: '', paper: '', scissors: '' });
 
         const unsubscribe = subscribeToUserPosts(user.uid, (userPosts) => {
             setPosts(userPosts);
         });
 
-        const fetchAllCards = async () => {
+        const fetchInitialData = async () => {
           const cards = await getCards(true);
           setAllCards(cards);
-
-          // Pre-load janken favorite cards data
-          const jf = user.jankenFavorites || { rock: '', paper: '', scissors: '' };
-          const rockCard = cards.find(c => c.id === jf.rock);
-          const paperCard = cards.find(c => c.id === jf.paper);
-          const scissorsCard = cards.find(c => c.id === jf.scissors);
-          setJankenCards({ rock: rockCard, paper: paperCard, scissors: scissorsCard });
+          const actions = await getJankenActions(user.uid);
+          setJankenActions(actions);
         }
-        fetchAllCards();
+        fetchInitialData();
 
         return () => unsubscribe();
     }
@@ -146,12 +203,6 @@ export default function SettingsPage() {
         return prev;
     });
   }
-  
-  const handleJankenCardSelect = (card: CardData) => {
-    setJankenFavorites(prev => ({...prev, [currentJankenMove]: card.id }));
-    setJankenCards(prev => ({ ...prev, [currentJankenMove]: card }));
-    setIsJankenDialogOpen(false);
-  }
 
   const handleSaveMyCards = async () => {
     if (!user) return;
@@ -169,19 +220,20 @@ export default function SettingsPage() {
     }
   }
   
-  const handleSaveJankenFavorites = async () => {
-      if(!user) return;
-      setIsLoading(true);
+  const handleSaveJankenAction = async (
+      type: JankenMoveType,
+      data: { title: string, comment: string },
+      file: File | null
+  ) => {
+      if (!user) return;
       try {
-        await updateJankenFavorites(user.uid, jankenFavorites);
-        toast({ title: "Success", description: "Your Janken cards have been updated." });
-        if(user.jankenFavorites) {
-            user.jankenFavorites = jankenFavorites;
-        }
+          await setJankenAction(user.uid, type, data, file);
+          const newActions = await getJankenActions(user.uid);
+          setJankenActions(newActions);
+          toast({ title: "Success", description: `Your ${type} action has been updated.` });
       } catch (error) {
-        toast({ title: "Error", description: "Failed to update your Janken cards.", variant: "destructive" });
-      } finally {
-        setIsLoading(false);
+          console.error(error);
+          toast({ title: "Error", description: `Failed to save ${type} action.`, variant: "destructive" });
       }
   }
 
@@ -291,47 +343,18 @@ export default function SettingsPage() {
             
             <Card>
                 <CardHeader>
-                    <CardTitle>Janken Settings</CardTitle>
-                    <CardDescription>Assign cards to your Rock, Paper, Scissors moves.</CardDescription>
+                    <CardTitle>Janken Actions</CardTitle>
+                    <CardDescription>Set a custom image, title, and comment for each Janken move.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                     <Dialog open={isJankenDialogOpen} onOpenChange={setIsJankenDialogOpen}>
-                        <div className="space-y-2">
-                           {(['rock', 'paper', 'scissors'] as JankenMove[]).map((move) => (
-                               <div key={move} className="flex items-center justify-between">
-                                    <Label htmlFor={move} className="capitalize flex items-center gap-2">
-                                       <Scissors className="w-4 h-4"/> {move}
-                                    </Label>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-14 h-20">
-                                            {jankenCards[move] && <PokerCard card={jankenCards[move]} revealed />}
-                                        </div>
-                                        <DialogTrigger asChild>
-                                           <Button variant="outline" size="icon" onClick={() => setCurrentJankenMove(move)}><Replace className="w-4 h-4" /></Button>
-                                        </DialogTrigger>
-                                    </div>
-                               </div>
-                           ))}
-                        </div>
-                        <Button className="w-full" onClick={handleSaveJankenFavorites} disabled={isLoading}>
-                           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                           Save Janken Cards
-                        </Button>
-                        <DialogContent className="max-w-4xl h-[90vh]">
-                             <DialogHeader>
-                                <DialogTitle>Select a Card for <span className="capitalize">{currentJankenMove}</span></DialogTitle>
-                            </DialogHeader>
-                            <div className="overflow-y-auto pr-4 -mr-4">
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 py-4">
-                                    {allCards.map(card => (
-                                        <div key={card.id} onClick={() => handleJankenCardSelect(card)} className="cursor-pointer">
-                                            <PokerCard card={card} revealed={true} />
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </DialogContent>
-                    </Dialog>
+                    {(['rock', 'paper', 'scissors'] as JankenMoveType[]).map(move => (
+                        <JankenActionEditor
+                            key={move}
+                            type={move}
+                            action={jankenActions[move] || null}
+                            onSave={(data, file) => handleSaveJankenAction(move, data, file)}
+                         />
+                    ))}
                 </CardContent>
             </Card>
 

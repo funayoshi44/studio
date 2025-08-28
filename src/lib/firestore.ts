@@ -1,4 +1,5 @@
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -21,7 +22,7 @@ import {
   increment,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement } from './types';
+import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction } from './types';
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
@@ -175,7 +176,6 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
         displayName: user.displayName,
         photoURL: user.photoURL,
         bio: user.bio || '',
-        jankenFavorites: user.jankenFavorites || {},
       },
     },
     playerIds: [user.uid],
@@ -218,7 +218,6 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
                 displayName: user.displayName,
                 photoURL: user.photoURL,
                 bio: user.bio || '',
-                jankenFavorites: user.jankenFavorites || {},
             },
             playerIds: newPlayerIds,
         };
@@ -419,7 +418,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       const isGameStarting = (gameType === 'duel' || gameType === 'janken') && newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
       
       const updates: any = {
-        [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '', jankenFavorites: user.jankenFavorites || {} },
+        [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' },
         playerIds: newPlayerIds
       };
 
@@ -437,7 +436,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       
       transaction.set(newGameRef, {
         gameType,
-        players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '', jankenFavorites: user.jankenFavorites || {} } },
+        players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' } },
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
@@ -515,12 +514,42 @@ export const updateMyCards = async (userId: string, cardIds: string[]): Promise<
     });
 };
 
-// Update a user's janken favorites
-export const updateJankenFavorites = async (userId: string, favorites: { rock: string, paper: string, scissors: string }): Promise<void> => {
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
-        jankenFavorites: favorites,
+// --- Janken Actions ---
+export const setJankenAction = async (
+    userId: string, 
+    type: 'rock' | 'paper' | 'scissors',
+    data: { title: string, comment: string },
+    imageFile: File | null
+): Promise<void> => {
+    const docId = `${userId}_${type}`;
+    const actionRef = doc(db, 'jankenActions', docId);
+
+    const actionData: Partial<JankenAction> = {
+        userId,
+        type,
+        title: data.title,
+        comment: data.comment,
+        updatedAt: serverTimestamp(),
+    };
+
+    if (imageFile) {
+        const storageRef = ref(storage, `jankenActions/${userId}/${type}_${Date.now()}`);
+        const snapshot = await uploadBytes(storageRef, imageFile);
+        actionData.imageUrl = await getDownloadURL(snapshot.ref);
+    }
+
+    await setDoc(actionRef, actionData, { merge: true });
+};
+
+export const getJankenActions = async (userId: string): Promise<{ [key: string]: JankenAction }> => {
+    const actions: { [key: string]: JankenAction } = {};
+    const q = query(collection(db, 'jankenActions'), where('userId', '==', userId));
+    const querySnapshot = await getDocs(q);
+    querySnapshot.forEach((doc) => {
+        const data = doc.data() as JankenAction;
+        actions[data.type] = { id: doc.id, ...data };
     });
+    return actions;
 };
 
 

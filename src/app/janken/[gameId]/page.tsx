@@ -8,12 +8,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, getCards, type CardData } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, getJankenActions, type JankenAction } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { PokerCard } from '@/components/ui/poker-card';
+import Image from 'next/image';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
@@ -45,14 +46,26 @@ export default function OnlineJankenPage() {
 
     const [game, setGame] = useState<Game | null>(null);
     const [loading, setLoading] = useState(false);
-    const [allCards, setAllCards] = useState<CardData[]>([]);
+    const [jankenActions, setJankenActions] = useState<{ [uid: string]: { [key in Move]?: JankenAction } }>({});
+
 
     const gameState = game?.gameState as JankenGameState | undefined;
     const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
     
+    // Fetch custom janken actions for all players in the game
     useEffect(() => {
-        getCards(true).then(setAllCards);
-    }, []);
+        if (!game) return;
+        const fetchAllActions = async () => {
+            const allActions: { [uid: string]: { [key in Move]?: JankenAction } } = {};
+            for (const uid of game.playerIds) {
+                const userActions = await getJankenActions(uid);
+                allActions[uid] = userActions;
+            }
+            setJankenActions(allActions);
+        };
+        fetchAllActions();
+    }, [game]);
+
 
     // Subscribe to game updates
     useEffect(() => {
@@ -204,36 +217,49 @@ export default function OnlineJankenPage() {
         }
     };
     
-    const jankenCards = useMemo(() => {
-        if (!game || !allCards.length) return {};
-        const cards: {[uid: string]: {[move in Move]?: CardData}} = {};
-        for(const uid of game.playerIds) {
-            const player = game.players[uid];
-            if (player?.jankenFavorites) {
-                cards[uid] = {
-                    rock: allCards.find(c => c.id === player.jankenFavorites?.rock),
-                    paper: allCards.find(c => c.id === player.jankenFavorites?.paper),
-                    scissors: allCards.find(c => c.id === player.jankenFavorites?.scissors),
-                }
-            }
-        }
-        return cards;
-    }, [game, allCards]);
+    const JankenMoveButton = ({ action, move, onSelect, disabled }: { action?: JankenAction, move: Move, onSelect: (move: Move) => void, disabled: boolean }) => {
+        const content = action ? (
+            <div className="relative w-full h-full">
+                <Image src={action.imageUrl} alt={action.title} layout="fill" objectFit="cover" className="rounded-md" />
+            </div>
+        ) : (
+            <span className="text-4xl">{getJankenEmoji(move)}</span>
+        );
+        
+        return (
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button onClick={() => onSelect(move)} size="lg" className="w-24 h-24 p-0" disabled={disabled}>
+                            {content}
+                        </Button>
+                    </TooltipTrigger>
+                    {action && (
+                        <TooltipContent>
+                            <p className="font-bold">{action.title}</p>
+                            <p className="text-sm text-muted-foreground">{action.comment}</p>
+                        </TooltipContent>
+                    )}
+                </Tooltip>
+            </TooltipProvider>
+        )
+    }
 
     const JankenMoveSelector = ({ onSelect, disabled }: { onSelect: (move: Move) => void; disabled: boolean }) => {
         if (!user) return null;
-        const myJankenCards = jankenCards[user.uid] || {};
+        const myJankenActions = jankenActions[user.uid] || {};
         
         return (
             <div className="flex justify-center space-x-4">
-            {moves.map(move => {
-                const card = myJankenCards[move];
-                return (
-                    <Button key={move} onClick={() => onSelect(move)} size="lg" className="text-4xl w-24 h-24 p-0" disabled={disabled}>
-                        {card ? <PokerCard card={card} revealed /> : getJankenEmoji(move)}
-                    </Button>
-                );
-            })}
+            {moves.map(move => (
+                <JankenMoveButton 
+                    key={move}
+                    move={move}
+                    action={myJankenActions[move]}
+                    onSelect={onSelect}
+                    disabled={disabled}
+                />
+            ))}
             </div>
         )
     }
@@ -242,19 +268,37 @@ export default function OnlineJankenPage() {
         if (!game || !gameState) return null;
         const playerMoves = gameState.moves[uid];
         const move = playerMoves?.[phase];
+        const action = jankenActions[uid]?.[move!];
         
-        if (gameState.phase === 'result' || (gameState.phase === 'final' && phase === 'initial')) {
-            const card = jankenCards[uid]?.[move!];
-            if (card) return <PokerCard card={card} revealed />;
+        const renderContent = () => {
+            if (!move) {
+                 return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">?</div>;
+            }
+            if (action) {
+                return (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                               <div className="relative w-24 h-32">
+                                    <Image src={action.imageUrl} alt={action.title} layout="fill" objectFit="cover" className="rounded-lg" />
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p className="font-bold">{action.title}</p>
+                                <p className="text-sm text-muted-foreground">{action.comment}</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                );
+            }
             return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{getJankenEmoji(move)}</div>;
         }
 
-        if (uid === user?.uid) {
-             const card = jankenCards[uid]?.[move!];
-             if (card) return <PokerCard card={card} revealed />;
-             return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{getJankenEmoji(move)}</div>;
+        if (gameState.phase === 'result' || (gameState.phase === 'final' && phase === 'initial') || uid === user?.uid) {
+            return renderContent();
         }
 
+        // Opponent's move, not yet revealed
         return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{move ? '✅' : '❓'}</div>
     };
     

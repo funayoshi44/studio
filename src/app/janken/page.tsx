@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useMemo } from 'react';
 import { GameContext } from '@/contexts/game-context';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
@@ -12,8 +12,9 @@ import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-ad
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
-import { PokerCard } from '@/components/ui/poker-card';
-import { getCards, type CardData } from '@/lib/firestore';
+import { getJankenActions, type JankenAction } from '@/lib/firestore';
+import Image from 'next/image';
+import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
@@ -45,27 +46,56 @@ const initialJankenState: JankenState = {
   aiRationale: null,
 };
 
-const JankenMoveSelector = ({ onSelect, disabled, jankenCards, isLoading }: { onSelect: (move: Move) => void; disabled: boolean, jankenCards: { [key in Move]?: CardData }, isLoading: boolean }) => {
+const JankenMoveButton = ({ action, move, onSelect, disabled }: { action?: JankenAction, move: Move, onSelect: (move: Move) => void, disabled: boolean }) => {
     const getJankenEmoji = (move: Move) => {
         if (!move) return '?';
         const emojiMap = { rock: '✊', paper: '✋', scissors: '✌️' };
         return emojiMap[move];
     };
     
+    const content = action ? (
+        <div className="relative w-full h-full">
+            <Image src={action.imageUrl} alt={action.title} layout="fill" objectFit="cover" className="rounded-md" />
+        </div>
+    ) : (
+        <span className="text-4xl">{getJankenEmoji(move)}</span>
+    );
+    
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button onClick={() => onSelect(move)} size="lg" className="w-24 h-24 p-0" disabled={disabled}>
+                        {content}
+                    </Button>
+                </TooltipTrigger>
+                {action && (
+                    <TooltipContent>
+                        <p className="font-bold">{action.title}</p>
+                        <p className="text-sm text-muted-foreground">{action.comment}</p>
+                    </TooltipContent>
+                )}
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
+
+const JankenMoveSelector = ({ onSelect, disabled, jankenActions, isLoading }: { onSelect: (move: Move) => void; disabled: boolean, jankenActions: { [key in Move]?: JankenAction }, isLoading: boolean }) => {
     if (isLoading) {
         return <Loader2 className="w-8 h-8 animate-spin mx-auto" />
     }
     
     return (
         <div className="flex justify-center space-x-4">
-        {moves.map(move => {
-            const card = jankenCards[move];
-            return (
-                <Button key={move} onClick={() => onSelect(move)} size="lg" className="text-4xl w-24 h-24 p-0" disabled={disabled}>
-                    {card ? <PokerCard card={card} revealed /> : getJankenEmoji(move)}
-                </Button>
-            );
-        })}
+        {moves.map(move => (
+            <JankenMoveButton 
+                key={move}
+                move={move}
+                action={jankenActions[move]}
+                onSelect={onSelect}
+                disabled={disabled}
+            />
+        ))}
         </div>
     )
 }
@@ -76,23 +106,21 @@ export default function JankenPage() {
   const { t } = useTranslation();
   const [state, setState] = useState<JankenState>(initialJankenState);
   const [loading, setLoading] = useState(false);
-  const [jankenCards, setJankenCards] = useState<{ [key in Move]?: CardData }>({});
-  const [loadingCards, setLoadingCards] = useState(true);
+  const [jankenActions, setJankenActions] = useState<{ [key in Move]?: JankenAction }>({});
+  const [loadingActions, setLoadingActions] = useState(true);
 
   useEffect(() => {
-    const loadJankenCards = async () => {
-        setLoadingCards(true);
-        if (user?.jankenFavorites) {
-            const allCards = await getCards();
-            const favorites = user.jankenFavorites;
-            const rock = allCards.find(c => c.id === favorites.rock);
-            const paper = allCards.find(c => c.id === favorites.paper);
-            const scissors = allCards.find(c => c.id === favorites.scissors);
-            setJankenCards({ rock, paper, scissors });
-        }
-        setLoadingCards(false);
+    const loadJankenActions = async () => {
+        if (!user) {
+            setLoadingActions(false);
+            return;
+        };
+        setLoadingActions(true);
+        const actions = await getJankenActions(user.uid);
+        setJankenActions(actions);
+        setLoadingActions(false);
     }
-    loadJankenCards();
+    loadJankenActions();
   }, [user]);
 
   const selectInitialMove = async (move: Move) => {
@@ -220,10 +248,14 @@ export default function JankenPage() {
       )
     }
 
-    const card = owner === 'player' ? jankenCards[move] : undefined; // CPU doesn't have custom cards in this mode
+    const action = owner === 'player' ? jankenActions[move] : undefined;
 
-    if (card) {
-      return <PokerCard card={card} revealed />;
+    if (action) {
+      return (
+          <div className="relative w-24 h-32">
+              <Image src={action.imageUrl} alt={action.title} layout="fill" objectFit="cover" className="rounded-lg" />
+          </div>
+      );
     }
     return (
         <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">
@@ -247,7 +279,7 @@ export default function JankenPage() {
         <Card className="max-w-md mx-auto my-8">
           <CardHeader><CardTitle>{t('jankenPhase1Title')}</CardTitle></CardHeader>
           <CardContent>
-            <JankenMoveSelector onSelect={selectInitialMove} disabled={loading} jankenCards={jankenCards} isLoading={loadingCards} />
+            <JankenMoveSelector onSelect={selectInitialMove} disabled={loading} jankenActions={jankenActions} isLoading={loadingActions} />
           </CardContent>
         </Card>
       )}
@@ -268,7 +300,7 @@ export default function JankenPage() {
             <Card className="max-w-md mx-auto">
                 <CardHeader><CardTitle>{t('jankenPhase2Title')}</CardTitle></CardHeader>
                 <CardContent>
-                   <JankenMoveSelector onSelect={selectFinalMove} disabled={loading} jankenCards={jankenCards} isLoading={loadingCards}/>
+                   <JankenMoveSelector onSelect={selectFinalMove} disabled={loading} jankenActions={jankenActions} isLoading={loadingActions}/>
                 </CardContent>
             </Card>
         </div>
