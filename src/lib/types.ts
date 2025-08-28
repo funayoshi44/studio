@@ -27,6 +27,7 @@ export type MockUser = {
   isGuest?: boolean; // Guest flag
   myCards?: string[]; // Array of Card IDs
   points?: number; // User points
+  lastLogin?: Timestamp; // For daily login bonus
 };
 
 // Represents a post on the bulletin board

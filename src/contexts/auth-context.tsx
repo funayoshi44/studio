@@ -13,10 +13,12 @@ import {
   signInWithEmailAndPassword,
   signInAnonymously,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { uploadProfileImage } from '@/lib/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { uploadProfileImage, awardPoints } from '@/lib/firestore';
 import type { MockUser } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
+import { Timestamp } from 'firebase/firestore';
+
 
 type EmailPassCredentials = {
   email: string;
@@ -53,6 +55,13 @@ export const AuthContext = createContext<AuthContextType>({
   updateUser: async () => {},
 });
 
+const isSameDay = (d1: Date, d2: Date) => {
+    return d1.getFullYear() === d2.getFullYear() &&
+           d1.getMonth() === d2.getMonth() &&
+           d1.getDate() === d2.getDate();
+}
+
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,50 +73,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (fbUser) {
         const userDocRef = doc(db, 'users', fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
-        
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+        let userData: MockUser;
 
         if (userDocSnap.exists()) {
-          const userData = userDocSnap.data() as MockUser;
-          // Ensure isAdmin status is correctly updated on login
-          const isAdmin = userData.email === adminEmail;
-          if (userData.isAdmin !== isAdmin) {
-            await setDoc(userDocRef, { isAdmin }, { merge: true });
-            setUser({ ...userData, isAdmin });
-          } else {
-            setUser(userData);
-          }
+            userData = userDocSnap.data() as MockUser;
+            // Ensure isAdmin status is correctly updated on login
+            const isAdmin = userData.email === adminEmail;
+            if (userData.isAdmin !== isAdmin) {
+                await updateDoc(userDocRef, { isAdmin });
+                userData.isAdmin = isAdmin;
+            }
         } else {
-          // New user (or guest) profile creation
-          let newUserProfile: MockUser;
-          const isAdmin = fbUser.email === adminEmail;
-
-          if (fbUser.isAnonymous) {
-             newUserProfile = {
-              uid: fbUser.uid,
-              displayName: 'Guest',
-              email: '',
-              photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`,
-              bio: 'A guest user.',
-              isGuest: true,
-              isAdmin: false, // Guests can't be admins
-              points: 0,
+            // New user profile creation
+            const isAdmin = fbUser.email === adminEmail;
+            userData = {
+                uid: fbUser.uid,
+                displayName: fbUser.displayName || (fbUser.isAnonymous ? 'Guest' : 'Anonymous'),
+                email: fbUser.email || '',
+                photoURL: fbUser.photoURL || `https://i.pravatar.cc/150?u=${fbUser.uid}`,
+                bio: fbUser.isAnonymous ? 'A guest user.' : '',
+                isGuest: fbUser.isAnonymous,
+                isAdmin: isAdmin,
+                points: 0,
+                lastLogin: serverTimestamp() as Timestamp,
             };
-          } else {
-             newUserProfile = {
-              uid: fbUser.uid,
-              displayName: fbUser.displayName || 'Anonymous',
-              email: fbUser.email || '',
-              photoURL: fbUser.photoURL || `https://i.pravatar.cc/150?u=${fbUser.uid}`,
-              bio: '',
-              isGuest: false,
-              isAdmin: isAdmin,
-              points: 0,
-            };
-          }
-          await setDoc(userDocRef, { ...newUserProfile, createdAt: serverTimestamp() });
-          setUser(newUserProfile);
+            await setDoc(userDocRef, { ...userData, createdAt: serverTimestamp() });
         }
+        
+        // Handle Daily Login Bonus
+        const today = new Date();
+        const lastLoginDate = userData.lastLogin?.toDate();
+        
+        if (!lastLoginDate || !isSameDay(lastLoginDate, today)) {
+             if (!userData.isGuest) {
+                await awardPoints(fbUser.uid, 1);
+                userData.points = (userData.points || 0) + 1; // Update local state
+                toast({ title: "Login Bonus!", description: "You've received 1 point for your daily login." });
+             }
+        }
+        
+        await updateDoc(userDocRef, { lastLogin: serverTimestamp() });
+        userData.lastLogin = Timestamp.now();
+        
+        setUser(userData);
+
       } else {
         setUser(null);
       }
@@ -131,7 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      handleAuthSuccess("Logged in with Google");
+      // Auth success is handled by onAuthStateChanged
     } catch (error) {
       handleAuthError(error, "Google Login");
     } finally {
@@ -144,7 +154,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
         await signInWithEmailAndPassword(auth, email, password);
-        handleAuthSuccess("Logged In");
+        // Auth success is handled by onAuthStateChanged
     } catch (error) {
         handleAuthError(error, "Email/Password Login");
     } finally {
@@ -158,19 +168,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       try {
           const userCredential = await createUserWithEmailAndPassword(auth, email, password);
           const fbUser = userCredential.user;
-          
           const isAdmin = fbUser.email === process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
-          // Create user profile in Firestore
           const newUserProfile: MockUser = {
             uid: fbUser.uid,
             displayName: displayName,
             email: fbUser.email || '',
-            photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`, // Default avatar
+            photoURL: `https://i.pravatar.cc/150?u=${fbUser.uid}`,
             bio: '',
             isGuest: false,
             isAdmin: isAdmin,
             points: 0,
+            lastLogin: serverTimestamp() as Timestamp,
           };
           await setDoc(doc(db, 'users', fbUser.uid), { ...newUserProfile, createdAt: serverTimestamp() });
           
@@ -187,7 +196,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       try {
           await signInAnonymously(auth);
-          handleAuthSuccess("Logged in as Guest");
+          // Auth success handled by onAuthStateChanged
       } catch (error) {
           handleAuthError(error, "Guest Login");
       } finally {
