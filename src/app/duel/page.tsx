@@ -11,7 +11,7 @@ import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-ad
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
-import { PokerCard as GameCardComponent } from '@/components/ui/poker-card'; // Re-using poker card for richer data display
+import { PokerCard as GameCardComponent } from '@/components/ui/poker-card';
 import { getCards } from '@/lib/firestore';
 import type { CardData } from '@/lib/types';
 
@@ -75,10 +75,9 @@ const createDefaultDeck = (count = 13): CardData[] => {
     }));
 };
 
-// Function to create a random 13-card deck from all available cards
 const createRandomDeck = (allCards: CardData[]): CardData[] => {
+    // This function now correctly handles the fallback.
     if (allCards.length < 13) {
-      // Not enough registered cards, use default deck as fallback
       return createDefaultDeck(13);
     }
     const shuffled = [...allCards].sort(() => 0.5 - Math.random());
@@ -94,25 +93,24 @@ export default function DuelPage() {
   const initializeDecks = useCallback(async () => {
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
-        const allCards = await getCards(true); // Force refresh to get latest cards
+        const allCards = await getCards(true); // Force refresh
         
-        // If not enough cards, createRandomDeck will use the fallback.
+        // createRandomDeck will handle the logic of falling back to default cards
         const playerDeck = createRandomDeck(allCards);
         const cpuDeck = createRandomDeck(allCards);
 
         setState(prevState => ({
             ...prevState,
             ...initialDuelState,
-            round: prevState.round,
-            playerScore: prevState.playerScore,
-            cpuScore: prevState.cpuScore,
+            round: 1, // Always reset round
+            playerScore: 0, // Always reset score
+            cpuScore: 0, // Always reset score
             playerCards: playerDeck,
             cpuCards: cpuDeck,
             isLoading: false,
         }));
     } catch (error) {
         console.error("Failed to initialize decks:", error);
-        // Fallback to default decks in case of any error
         const playerDeck = createDefaultDeck(13);
         const cpuDeck = createDefaultDeck(13);
         setState(prevState => ({
