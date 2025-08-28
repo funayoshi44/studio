@@ -666,18 +666,18 @@ const CARD_CACHE_KEY = 'cardverse-card-cache';
 const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 
 const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): CardData => {
-    const rankNumber = typeof card.rank === 'number' ? card.rank : 0; // Joker is 0
+    const rankNumber = typeof card.rank === 'number' ? card.rank : (card.rank === 'Joker' ? 0 : -1);
     return {
         ...card,
         id: id,
         number: rankNumber,
-        value: rankNumber,
+        value: rankNumber, // Assuming value is the same as number for now
         name: card.title,
         artist: card.authorName,
         imageUrl: card.frontImageUrl,
         rarity: 'common', // Default rarity, could be a field in the new structure later
         tags: card.hashtags,
-        gameType: 'common', // Default gameType
+        gameType: 'common', // Default gameType, can be adjusted based on series or tags later
     };
 };
 
@@ -716,7 +716,7 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
 
 
 export const addCard = async (
-  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'createdAt' | 'updatedAt'>,
+  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'createdAt' | 'updatedAt' | 'authorName' | 'authorId'>,
   imageFile: File,
   author: MockUser,
 ): Promise<void> => {

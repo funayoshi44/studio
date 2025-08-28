@@ -49,8 +49,8 @@ export default function AddCardPage() {
       const imageFile = image[0];
       const hashtagsArray = hashtags.split(',').map(tag => tag.trim()).filter(Boolean);
       
-      const rankNumber = rank === 'Joker' ? 0 : parseInt(rank, 10);
-      if (isNaN(rankNumber)) {
+      const rankNumberOrString = rank === 'Joker' ? 'Joker' : parseInt(rank, 10);
+      if (typeof rankNumberOrString === 'number' && isNaN(rankNumberOrString)) {
           throw new Error("Invalid rank provided.");
       }
 
@@ -60,7 +60,7 @@ export default function AddCardPage() {
       
       const newCardData = {
           ...cardDetails,
-          rank: rankNumber,
+          rank: rankNumberOrString,
           hashtags: hashtagsArray,
       }
 
@@ -127,6 +127,7 @@ export default function AddCardPage() {
                                     <SelectItem value="diamond">Diamond ♦️</SelectItem>
                                     <SelectItem value="club">Club ♣️</SelectItem>
                                     <SelectItem value="star">Star ⭐</SelectItem>
+                                    <SelectItem value="joker">Joker</SelectItem>
                                 </SelectContent>
                             </Select>
                         )}
