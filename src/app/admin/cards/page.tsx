@@ -89,7 +89,7 @@ export default function AddCardPage() {
         title: "Success!",
         description: `Card "${data.title}" has been added to the database.`,
       });
-      reset(); // Reset form fields
+      router.push('/admin/cards/list'); // Redirect to the list page
     } catch (error) {
       console.error(error);
       toast({
