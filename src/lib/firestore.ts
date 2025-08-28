@@ -506,7 +506,6 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   const q = query(
     postsCollection, 
     where('parentId', '==', null), // Only fetch top-level posts
-    orderBy('createdAt', 'desc'),
     limit(50)
   );
 
@@ -524,8 +523,7 @@ export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => 
   const postsCollection = collection(db, 'posts');
   const q = query(
     postsCollection,
-    where('parentId', '==', postId),
-    orderBy('createdAt', 'asc')
+    where('parentId', '==', postId)
   );
   return onSnapshot(q, (snapshot) => {
     const replies: Post[] = [];
@@ -542,8 +540,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const postsCollection = collection(db, 'posts');
     const q = query(
         postsCollection, 
-        where('author.uid', '==', userId), 
-        orderBy('createdAt', 'desc'),
+        where('author.uid', '==', userId),
         limit(50)
     );
 
