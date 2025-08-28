@@ -22,7 +22,7 @@ import {
   increment,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction } from './types';
+import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction, CardSeries } from './types';
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
@@ -773,11 +773,42 @@ export const deleteCard = async (card: CardData): Promise<void> => {
     await getCards(true);
 };
 
-export const getSeriesNames = async (): Promise<string[]> => {
-    const cards = await getCards(); // Use cached version if available
-    const names = new Set(cards.map(card => card.seriesName));
-    return Array.from(names);
-};
+// --- Series Management ---
+
+export const getSeries = async (forceRefresh: boolean = false): Promise<CardSeries[]> => {
+    // This could also be cached in the future
+    const seriesCollection = collection(db, 'series');
+    const q = query(seriesCollection, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    const series: CardSeries[] = [];
+    querySnapshot.forEach((doc) => {
+        series.push({ id: doc.id, ...doc.data() } as CardSeries);
+    });
+    return series;
+}
+
+export const addSeries = async (name: string): Promise<string> => {
+    // Check if series with the same name already exists to prevent duplicates
+    const seriesCollection = collection(db, 'series');
+    const q = query(seriesCollection, where("name", "==", name));
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        throw new Error(`Series with name "${name}" already exists.`);
+    }
+
+    const docRef = await addDoc(seriesCollection, {
+        name,
+        createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+}
+
+export const deleteSeries = async (id: string): Promise<void> => {
+    // Note: This does not delete cards within the series.
+    // That logic could be added here if needed (e.g., using a transaction or batch write).
+    const seriesRef = doc(db, 'series', id);
+    await deleteDoc(seriesRef);
+}
 
 
 // --- Game History ---

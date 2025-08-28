@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FilePlus2, List, Megaphone } from "lucide-react";
+import { FilePlus2, List, Megaphone, Library } from "lucide-react";
 
 export default function AdminPage() {
   return (
@@ -23,6 +23,22 @@ export default function AdminPage() {
               <Button className="w-full">
                 <Megaphone className="mr-2 h-4 w-4" />
                 Manage Announcements
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Manage Series</CardTitle>
+            <CardDescription>
+              Add, edit, or delete card series.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/admin/series">
+              <Button className="w-full">
+                <Library className="mr-2 h-4 w-4" />
+                Manage Series
               </Button>
             </Link>
           </CardContent>

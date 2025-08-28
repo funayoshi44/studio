@@ -14,12 +14,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { addCard, getSeriesNames } from "@/lib/firestore";
+import { addCard, getSeries } from "@/lib/firestore";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { Textarea } from "@/components/ui/textarea";
+import type { CardSeries } from "@/lib/types";
 
 type Inputs = {
   title: string;
@@ -38,21 +39,22 @@ export default function AddCardPage() {
   const { user } = useAuth();
   const { register, handleSubmit, formState: { errors }, reset, control } = useForm<Inputs>();
   const [isLoading, setIsLoading] = useState(false);
-  const [seriesNames, setSeriesNames] = useState<string[]>([]);
+  const [series, setSeries] = useState<CardSeries[]>([]);
   const { toast } = useToast();
   const router = useRouter();
 
   useEffect(() => {
     const fetchSeries = async () => {
         try {
-            const names = await getSeriesNames();
-            setSeriesNames(names);
+            const seriesData = await getSeries();
+            setSeries(seriesData);
         } catch (error) {
-            console.error("Failed to fetch series names:", error);
+            console.error("Failed to fetch series:", error);
+            toast({ title: "Error", description: "Could not fetch series list.", variant: "destructive" });
         }
     };
     fetchSeries();
-  }, []);
+  }, [toast]);
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
     if (!user) {
@@ -128,13 +130,23 @@ export default function AddCardPage() {
                 {/* Series Name */}
                 <div className="space-y-2">
                     <Label htmlFor="seriesName">Series Name</Label>
-                    <Input 
-                        id="seriesName" 
-                        list="series-names-list"
-                        {...register("seriesName", { required: "Series name is required" })} />
-                    <datalist id="series-names-list">
-                        {seriesNames.map(name => <option key={name} value={name} />)}
-                    </datalist>
+                     <Controller
+                        name="seriesName"
+                        control={control}
+                        rules={{ required: "Series is required" }}
+                        render={({ field }) => (
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select a series" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {series.map(s => (
+                                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        )}
+                    />
                     {errors.seriesName && <p className="text-xs text-destructive">{errors.seriesName.message}</p>}
                 </div>
 

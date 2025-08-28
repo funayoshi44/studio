@@ -109,6 +109,14 @@ export type CardData = {
     gameType: GameType | 'common'; // can be derived or set based on series
 };
 
+// Represents a single Card Series' data stored in Firestore
+export type CardSeries = {
+    id: string;
+    name: string;
+    createdAt: Timestamp;
+    // description?: string; // Optional for future use
+}
+
 
 // --- Online Game Types ---
 
