@@ -29,13 +29,7 @@ export default function ChatInboxPage() {
         }
 
         const unsubscribe = subscribeToChatRooms(user.uid, (rooms) => {
-            // Sort rooms by updatedAt timestamp on the client-side
-            const sortedRooms = rooms.sort((a, b) => {
-                const timeA = a.updatedAt?.toMillis() || 0;
-                const timeB = b.updatedAt?.toMillis() || 0;
-                return timeB - timeA;
-            });
-            setChatRooms(sortedRooms);
+            setChatRooms(rooms);
             setLoading(false);
         });
 

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DifficultySelector } from '@/components/difficulty-selector';
 import { Swords, Scissors, Layers, Users, Eye, Loader2, Megaphone, HelpCircle } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
-import { subscribeToAnnouncements, type Announcement, type CardData } from '@/lib/firestore';
+import { subscribeToLatestAnnouncements, type Announcement, type CardData } from '@/lib/firestore';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { PokerCard } from '@/components/ui/poker-card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -114,7 +114,7 @@ export default function HomePage() {
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
 
   useEffect(() => {
-    const unsubscribeAnnouncements = subscribeToAnnouncements((data) => {
+    const unsubscribeAnnouncements = subscribeToLatestAnnouncements((data) => {
         setAnnouncements(data);
         setIsLoadingAnnouncements(false);
     });
@@ -161,7 +161,7 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent>
                     <Accordion type="single" collapsible className="w-full">
-                        {announcements.slice(0, 3).map(item => (
+                        {announcements.map(item => (
                              <AccordionItem value={item.id} key={item.id}>
                                 <AccordionTrigger>
                                     <div className="flex justify-between w-full pr-4">

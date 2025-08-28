@@ -29,10 +29,10 @@ export default function SeriesManagementPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  const fetchSeries = useCallback(async () => {
+  const fetchSeries = useCallback(async (force = false) => {
     setIsLoading(true);
     try {
-      const seriesData = await getSeries(true); // Force refresh
+      const seriesData = await getSeries(force); // Force refresh
       setSeries(seriesData);
     } catch (error) {
       console.error(error);
@@ -43,7 +43,7 @@ export default function SeriesManagementPage() {
   }, [toast]);
 
   useEffect(() => {
-    fetchSeries();
+    fetchSeries(false);
   }, [fetchSeries]);
 
   const onSubmit: SubmitHandler<Inputs> = async (data) => {
@@ -53,7 +53,7 @@ export default function SeriesManagementPage() {
       await addSeries(data.name);
       toast({ title: "Success", description: `Series "${data.name}" has been created.` });
       reset();
-      await fetchSeries(); // Refresh the list
+      await fetchSeries(true); // Refresh the list
     } catch (error) {
       console.error(error);
       toast({ title: "Error", description: "Failed to create series.", variant: "destructive" });
@@ -67,7 +67,7 @@ export default function SeriesManagementPage() {
     try {
       await deleteSeries(id);
       toast({ title: "Success", description: "Series has been deleted." });
-      await fetchSeries(); // Refresh the list
+      await fetchSeries(true); // Refresh the list
     } catch (error) {
       console.error(error);
       toast({ title: "Error", description: "Failed to delete series.", variant: "destructive" });
