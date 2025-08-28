@@ -343,7 +343,7 @@ export const submitMove = async (gameId: string, userId: string, move: any, phas
                 // Award points to winner(s)
                 if (winners.length > 0) {
                     for (const winnerId of winners) {
-                       await awardPoints(winnerId, 1);
+                       awardPoints(winnerId, 1);
                     }
                 }
             }
@@ -547,7 +547,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId),
-        orderBy('createdAt', 'desc'),
+        // orderBy('createdAt', 'desc'), // This requires a composite index
         limit(50)
     );
 
@@ -688,8 +688,8 @@ export const getOrCreateChatRoom = async (user1Id: string, user2Id: string): Pro
         await setDoc(chatRoomRef, {
             participantIds: members,
             participantsInfo: {
-                [user1Id]: { displayName: user1Profile.displayName, photoURL: user1.photoURL },
-                [user2Id]: { displayName: user2Profile.displayName, photoURL: user2.photoURL }
+                [user1Id]: { displayName: user1Profile.displayName, photoURL: user1Profile.photoURL },
+                [user2Id]: { displayName: user2Profile.displayName, photoURL: user2Profile.photoURL }
             },
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
