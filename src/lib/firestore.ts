@@ -468,42 +468,34 @@ export const createPost = async (author: MockUser, content: string, parentId: st
     throw new Error("Post content cannot be empty.");
   }
 
-  await runTransaction(db, async (transaction) => {
-    let parentRef;
-    let parentData;
-
-    // All reads must happen before writes in a transaction.
-    if (parentId) {
-      parentRef = doc(db, 'posts', parentId);
-      const parentSnap = await transaction.get(parentRef);
-      if (!parentSnap.exists()) {
-        throw new Error("Parent post does not exist.");
-      }
-      parentData = parentSnap.data();
-    }
-    
-    // Now perform the writes.
-    const postsCollection = collection(db, 'posts');
-    const newPostRef = doc(postsCollection);
-    transaction.set(newPostRef, {
-      author: {
+  const postData = {
+    author: {
         uid: author.uid,
         displayName: author.displayName,
         photoURL: author.photoURL,
-      },
-      content,
-      parentId,
-      createdAt: serverTimestamp(),
-      likes: [],
-      likeCount: 0,
-      replyCount: 0,
-    });
+    },
+    content,
+    parentId,
+    createdAt: serverTimestamp(),
+    likes: [],
+    likeCount: 0,
+    replyCount: 0,
+  };
+  
+  const newPostRef = await addDoc(collection(db, 'posts'), postData);
 
-    if (parentId && parentRef && parentData) {
-      const newReplyCount = (parentData.replyCount || 0) + 1;
-      transaction.update(parentRef, { replyCount: newReplyCount });
-    }
-  });
+  // If it's a reply, update the parent post's reply count
+  if (parentId) {
+      const parentRef = doc(db, 'posts', parentId);
+      await runTransaction(db, async (transaction) => {
+          const parentSnap = await transaction.get(parentRef);
+          if (!parentSnap.exists()) {
+              throw new Error("Parent post does not exist.");
+          }
+          const newReplyCount = (parentSnap.data().replyCount || 0) + 1;
+          transaction.update(parentRef, { replyCount: newReplyCount });
+      });
+  }
 };
 
 
@@ -531,8 +523,7 @@ export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => 
   const postsCollection = collection(db, 'posts');
   const q = query(
     postsCollection,
-    where('parentId', '==', postId),
-    orderBy('createdAt', 'asc')
+    where('parentId', '==', postId)
   );
   return onSnapshot(q, (snapshot) => {
     const replies: Post[] = [];

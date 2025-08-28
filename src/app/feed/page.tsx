@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,7 +18,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content: string, parentId: string) => void; }) => {
     const { user } = useAuth();
     const { toast } = useToast();
-    const [replies, setReplies] = useState<Post[]>([]);
+    const [rawReplies, setRawReplies] = useState<Post[]>([]);
     const [isRepliesOpen, setIsRepliesOpen] = useState(false);
     const [replyContent, setReplyContent] = useState('');
     const [isSubmittingReply, setIsSubmittingReply] = useState(false);
@@ -26,11 +26,15 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
     useEffect(() => {
         if (post.replyCount > 0) {
             const unsubscribe = subscribeToReplies(post.id, (fetchedReplies) => {
-                setReplies(fetchedReplies);
+                setRawReplies(fetchedReplies);
             });
             return () => unsubscribe();
         }
     }, [post.id, post.replyCount]);
+
+    const sortedReplies = useMemo(() => {
+        return [...rawReplies].sort((a, b) => a.createdAt.toDate().getTime() - b.createdAt.toDate().getTime());
+    }, [rawReplies]);
 
     const handleLikePost = async (postId: string) => {
         if (!user) return;
@@ -134,7 +138,7 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
 
                         {/* Display Replies */}
                         <div className="pl-8 pr-4 pb-4 space-y-4">
-                        {replies.map(reply => (
+                        {sortedReplies.map(reply => (
                             <div key={reply.id} className="flex gap-3">
                                 <Link href={`/profile/${reply.author.uid}`}>
                                     <Avatar className="w-8 h-8">
