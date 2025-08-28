@@ -125,7 +125,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [toast]);
   
   const handleAuthSuccess = (message: string) => {
       router.push('/');
