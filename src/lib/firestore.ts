@@ -23,7 +23,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction } from './types';
-import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
+import { evaluatePokerHand, createPokerDeck } from './game-logic/poker';
 
 
 const TOTAL_ROUNDS = 13;
@@ -716,19 +716,29 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
 
 
 export const addCard = async (
-  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'createdAt' | 'updatedAt' | 'authorName' | 'authorId'>,
+  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'backImageUrl' | 'createdAt' | 'updatedAt' | 'authorName' | 'authorId'>,
   imageFile: File,
   author: MockUser,
+  backImageFile?: File | null
 ): Promise<void> => {
   const filePath = `cards/${Date.now()}_${imageFile.name}`;
   const imageRef = ref(storage, filePath);
   const uploadResult = await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(uploadResult.ref);
+  
+  let backImageUrl: string | undefined = undefined;
+  if (backImageFile) {
+      const backFilePath = `cards/backs/${Date.now()}_${backImageFile.name}`;
+      const backImageRef = ref(storage, backFilePath);
+      const backUploadResult = await uploadBytes(backImageRef, backImageFile);
+      backImageUrl = await getDownloadURL(backUploadResult.ref);
+  }
 
   const cardsCollection = collection(db, 'cards');
   await addDoc(cardsCollection, {
     ...cardData,
     frontImageUrl: imageUrl,
+    backImageUrl: backImageUrl,
     authorName: author.displayName,
     authorId: author.uid,
     createdAt: serverTimestamp(),
@@ -751,6 +761,15 @@ export const deleteCard = async (card: CardData): Promise<void> => {
             console.warn(`Could not delete image ${card.frontImageUrl} from Storage. It might not exist.`, error);
         }
     }
+     if (card.backImageUrl && card.backImageUrl.includes('firebasestorage.googleapis.com')) {
+        try {
+            const imageRef = ref(storage, card.backImageUrl);
+            await deleteObject(imageRef);
+        } catch (error) {
+            console.warn(`Could not delete image ${card.backImageUrl} from Storage. It might not exist.`, error);
+        }
+    }
+
 
     await getCards(true);
 };

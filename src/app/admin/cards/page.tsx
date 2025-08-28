@@ -29,6 +29,7 @@ type Inputs = {
   rank: string;
   hashtags: string; // Comma-separated
   image: FileList;
+  backImage?: FileList;
 };
 
 export default function AddCardPage() {
@@ -45,8 +46,9 @@ export default function AddCardPage() {
     }
     setIsLoading(true);
     try {
-      const { image, hashtags, rank, ...cardDetails } = data;
+      const { image, backImage, hashtags, rank, ...cardDetails } = data;
       const imageFile = image[0];
+      const backImageFile = backImage?.[0];
       const hashtagsArray = hashtags.split(',').map(tag => tag.trim()).filter(Boolean);
       
       const rankNumberOrString = rank === 'Joker' ? 'Joker' : parseInt(rank, 10);
@@ -64,7 +66,7 @@ export default function AddCardPage() {
           hashtags: hashtagsArray,
       }
 
-      await addCard(newCardData, imageFile, user);
+      await addCard(newCardData, imageFile, user, backImageFile);
 
       toast({
         title: "Success!",
@@ -177,11 +179,18 @@ export default function AddCardPage() {
             </div>
 
             {/* Image Upload */}
-            <div className="space-y-2">
-              <Label htmlFor="image">Card Image (Front)</Label>
-              <Input id="image" type="file" accept="image/*" {...register("image", { required: "Image is required" })} className="pt-2 text-sm" />
-              {errors.image && <p className="text-xs text-destructive">{errors.image.message}</p>}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="image">Card Image (Front)</Label>
+                <Input id="image" type="file" accept="image/*" {...register("image", { required: "Image is required" })} className="pt-2 text-sm" />
+                {errors.image && <p className="text-xs text-destructive">{errors.image.message}</p>}
+              </div>
+               <div className="space-y-2">
+                <Label htmlFor="backImage">Card Image (Back) (Optional)</Label>
+                <Input id="backImage" type="file" accept="image/*" {...register("backImage")} className="pt-2 text-sm" />
+              </div>
             </div>
+
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Add Card"}
