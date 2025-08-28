@@ -1,18 +1,20 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, getCards, type CardData } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { PokerCard } from '@/components/ui/poker-card';
+
 
 type Move = 'rock' | 'paper' | 'scissors';
 const moves: Move[] = ['rock', 'paper', 'scissors'];
@@ -43,10 +45,15 @@ export default function OnlineJankenPage() {
 
     const [game, setGame] = useState<Game | null>(null);
     const [loading, setLoading] = useState(false);
+    const [allCards, setAllCards] = useState<CardData[]>([]);
 
     const gameState = game?.gameState as JankenGameState | undefined;
     const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
     
+    useEffect(() => {
+        getCards(true).then(setAllCards);
+    }, []);
+
     // Subscribe to game updates
     useEffect(() => {
         if (!gameId || !user) return;
@@ -197,21 +204,61 @@ export default function OnlineJankenPage() {
         }
     };
     
-    const PlayerInfo = ({ uid }: { uid: string | null }) => {
-        if (!uid) return null;
-        const player = game?.players[uid];
-        if (!player) return null;
+    const jankenCards = useMemo(() => {
+        if (!game || !allCards.length) return {};
+        const cards: {[uid: string]: {[move in Move]?: CardData}} = {};
+        for(const uid of game.playerIds) {
+            const player = game.players[uid];
+            if (player?.jankenFavorites) {
+                cards[uid] = {
+                    rock: allCards.find(c => c.id === player.jankenFavorites?.rock),
+                    paper: allCards.find(c => c.id === player.jankenFavorites?.paper),
+                    scissors: allCards.find(c => c.id === player.jankenFavorites?.scissors),
+                }
+            }
+        }
+        return cards;
+    }, [game, allCards]);
+
+    const JankenMoveSelector = ({ onSelect, disabled }: { onSelect: (move: Move) => void; disabled: boolean }) => {
+        if (!user) return null;
+        const myJankenCards = jankenCards[user.uid] || {};
+        
         return (
-            <div className="flex flex-col items-center gap-2">
-                <Avatar className="w-16 h-16">
-                    <AvatarImage src={player.photoURL ?? undefined} />
-                    <AvatarFallback className="text-2xl">{player.displayName?.[0]}</AvatarFallback>
-                </Avatar>
-                <p className="font-bold text-lg">{uid === user?.uid ? t('you') : player.displayName}</p>
+            <div className="flex justify-center space-x-4">
+            {moves.map(move => {
+                const card = myJankenCards[move];
+                return (
+                    <Button key={move} onClick={() => onSelect(move)} size="lg" className="text-4xl w-24 h-24 p-0" disabled={disabled}>
+                        {card ? <PokerCard card={card} revealed /> : getJankenEmoji(move)}
+                    </Button>
+                );
+            })}
             </div>
-        );
+        )
     }
 
+    const MoveDisplay = ({ uid, phase }: { uid: string, phase: 'initial' | 'final' }) => {
+        if (!game || !gameState) return null;
+        const playerMoves = gameState.moves[uid];
+        const move = playerMoves?.[phase];
+        
+        if (gameState.phase === 'result' || (gameState.phase === 'final' && phase === 'initial')) {
+            const card = jankenCards[uid]?.[move!];
+            if (card) return <PokerCard card={card} revealed />;
+            return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{getJankenEmoji(move)}</div>;
+        }
+
+        if (uid === user?.uid) {
+             const card = jankenCards[uid]?.[move!];
+             if (card) return <PokerCard card={card} revealed />;
+             return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{getJankenEmoji(move)}</div>;
+        }
+
+        return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{move ? '✅' : '❓'}</div>
+    };
+    
+    
     if (!user || !game || !gameState) {
         return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
     }
@@ -232,46 +279,6 @@ export default function OnlineJankenPage() {
     
     const myMoves = gameState.moves[user.uid];
     const opponentMoves = opponentId ? gameState.moves[opponentId] : null;
-
-    const renderMove = (uid: string | null, phase: 'initial' | 'final') => {
-        if (!uid || !gameState) return '❓';
-
-        const playerMoves = gameState.moves[uid];
-        if (!playerMoves) return '❓';
-        const move = playerMoves[phase];
-
-        // Result phase: always reveal everything
-        if (gameState.phase === 'result') {
-            return getJankenEmoji(move);
-        }
-
-        // Initial phase: hide everything until both have moved
-        if (phase === 'initial') {
-             if (gameState.phase === 'initial') {
-                if (uid === user.uid) {
-                    return move ? getJankenEmoji(move) : '❓';
-                }
-                return move ? '✅' : '❓';
-             }
-             // In final phase, initial moves are public
-            return getJankenEmoji(gameState.moves[uid].initial);
-        }
-        
-        // Final phase
-        if (phase === 'final') {
-             if (gameState.phase === 'final') {
-                // Show my move if I've made it
-                if (uid === user.uid) {
-                    return move ? getJankenEmoji(move) : '❓';
-                }
-                // Hide opponent's final move until result phase
-                return move ? '✅' : '❓';
-             }
-        }
-        
-        return '❓';
-    }
-
 
     return (
         <div className="text-center">
@@ -302,21 +309,27 @@ export default function OnlineJankenPage() {
 
             {/* Game Area */}
             <div className="grid grid-cols-2 gap-4 my-8">
-                <PlayerInfo uid={user.uid} />
-                <PlayerInfo uid={opponentId} />
+                {game.playerIds.map(uid => (
+                    <div key={uid} className="flex flex-col items-center gap-2">
+                        <Avatar className="w-16 h-16">
+                            <AvatarImage src={game.players[uid]?.photoURL ?? undefined} />
+                            <AvatarFallback className="text-2xl">{game.players[uid]?.displayName?.[0]}</AvatarFallback>
+                        </Avatar>
+                        <p className="font-bold text-lg">{uid === user?.uid ? t('you') : game.players[uid]?.displayName}</p>
+                    </div>
+                ))}
             </div>
+
 
             {gameState.phase !== 'result' && (
                 <div className="my-8">
                     <h3 className="text-xl font-bold mb-4">{gameState.phase === 'initial' ? t('jankenPhase1Title') : t('jankenPhase2Title')}</h3>
-                    {gameState.phase === 'final' && <p className="text-sm text-muted-foreground mb-4">Opponent's first move was {getJankenEmoji(opponentMoves?.initial)}. Decide your final move!</p>}
-                     <div className="flex justify-center space-x-4">
-                        {moves.map(move => (
-                            <Button key={move} onClick={() => handleSelectMove(move)} size="lg" className="text-4xl w-24 h-24" disabled={loading || myMoves[gameState.phase] != null}>
-                                {getJankenEmoji(move)}
-                            </Button>
-                        ))}
-                    </div>
+                     {gameState.phase === 'final' && opponentId && (
+                        <div className="text-sm text-muted-foreground mb-4 flex justify-center items-center gap-2">
+                            Opponent's first move was: <MoveDisplay uid={opponentId} phase='initial'/>
+                        </div>
+                     )}
+                     <JankenMoveSelector onSelect={handleSelectMove} disabled={loading || myMoves[gameState.phase] != null} />
                     {myMoves[gameState.phase] && opponentMoves && !opponentMoves[gameState.phase] && (
                         <p className="mt-4 animate-pulse">{t('waitingForOpponentMove')}</p>
                     )}
@@ -326,17 +339,17 @@ export default function OnlineJankenPage() {
             <div className="my-8 space-y-4">
                  <div>
                     <h4 className="font-bold">{t('firstMoves')}</h4>
-                    <div className="flex justify-around text-4xl mt-2">
-                        <span>{getJankenEmoji(gameState.moves[user.uid]?.initial)}</span>
-                        <span>{opponentId ? getJankenEmoji(gameState.moves[opponentId]?.initial) : '❓'}</span>
+                    <div className="flex justify-around items-center text-4xl mt-2">
+                        {user.uid && <MoveDisplay uid={user.uid} phase="initial"/>}
+                        {opponentId && <MoveDisplay uid={opponentId} phase="initial"/>}
                     </div>
                 </div>
                 {gameState.phase === 'result' && (
                     <div>
                         <h4 className="font-bold">{t('finalResult')}</h4>
-                        <div className="flex justify-around text-4xl mt-2">
-                            <span>{getJankenEmoji(gameState.moves[user.uid]?.final)}</span>
-                            <span>{opponentId ? getJankenEmoji(gameState.moves[opponentId]?.final) : '❓'}</span>
+                         <div className="flex justify-around items-center text-4xl mt-2">
+                            {user.uid && <MoveDisplay uid={user.uid} phase="final"/>}
+                            {opponentId && <MoveDisplay uid={opponentId} phase="final"/>}
                         </div>
                     </div>
                 )}

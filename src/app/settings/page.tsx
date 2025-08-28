@@ -11,14 +11,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Heart, Trash2 } from "lucide-react";
+import { Loader2, Heart, Trash2, Scissors, Replace } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { subscribeToUserPosts, deletePost, togglePostLike, type Post, getCards, type CardData, updateMyCards } from "@/lib/firestore";
+import { subscribeToUserPosts, deletePost, togglePostLike, type Post, getCards, type CardData, updateMyCards, updateJankenFavorites } from "@/lib/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { PokerCard } from "@/components/ui/poker-card";
 import { cn } from "@/lib/utils";
+
+type JankenMove = 'rock' | 'paper' | 'scissors';
 
 
 export default function SettingsPage() {
@@ -37,6 +39,13 @@ export default function SettingsPage() {
   const [allCards, setAllCards] = useState<CardData[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(user?.myCards || []);
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false);
+  
+  // For Janken Favorites
+  const [jankenFavorites, setJankenFavorites] = useState(user?.jankenFavorites || { rock: '', paper: '', scissors: '' });
+  const [isJankenDialogOpen, setIsJankenDialogOpen] = useState(false);
+  const [currentJankenMove, setCurrentJankenMove] = useState<JankenMove>('rock');
+  const [jankenCards, setJankenCards] = useState<{rock?: CardData, paper?: CardData, scissors?: CardData}>({});
+
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -46,6 +55,7 @@ export default function SettingsPage() {
         setBio(user.bio || "");
         setPreview(user.photoURL);
         setSelectedCardIds(user.myCards || []);
+        setJankenFavorites(user.jankenFavorites || { rock: '', paper: '', scissors: '' });
 
         const unsubscribe = subscribeToUserPosts(user.uid, (userPosts) => {
             setPosts(userPosts);
@@ -54,6 +64,13 @@ export default function SettingsPage() {
         const fetchAllCards = async () => {
           const cards = await getCards(true);
           setAllCards(cards);
+
+          // Pre-load janken favorite cards data
+          const jf = user.jankenFavorites || { rock: '', paper: '', scissors: '' };
+          const rockCard = cards.find(c => c.id === jf.rock);
+          const paperCard = cards.find(c => c.id === jf.paper);
+          const scissorsCard = cards.find(c => c.id === jf.scissors);
+          setJankenCards({ rock: rockCard, paper: paperCard, scissors: scissorsCard });
         }
         fetchAllCards();
 
@@ -129,6 +146,12 @@ export default function SettingsPage() {
         return prev;
     });
   }
+  
+  const handleJankenCardSelect = (card: CardData) => {
+    setJankenFavorites(prev => ({...prev, [currentJankenMove]: card.id }));
+    setJankenCards(prev => ({ ...prev, [currentJankenMove]: card }));
+    setIsJankenDialogOpen(false);
+  }
 
   const handleSaveMyCards = async () => {
     if (!user) return;
@@ -144,6 +167,22 @@ export default function SettingsPage() {
     } finally {
         setIsLoading(false);
     }
+  }
+  
+  const handleSaveJankenFavorites = async () => {
+      if(!user) return;
+      setIsLoading(true);
+      try {
+        await updateJankenFavorites(user.uid, jankenFavorites);
+        toast({ title: "Success", description: "Your Janken cards have been updated." });
+        if(user.jankenFavorites) {
+            user.jankenFavorites = jankenFavorites;
+        }
+      } catch (error) {
+        toast({ title: "Error", description: "Failed to update your Janken cards.", variant: "destructive" });
+      } finally {
+        setIsLoading(false);
+      }
   }
 
 
@@ -249,6 +288,53 @@ export default function SettingsPage() {
                     </Dialog>
                 </CardContent>
             </Card>
+            
+            <Card>
+                <CardHeader>
+                    <CardTitle>Janken Settings</CardTitle>
+                    <CardDescription>Assign cards to your Rock, Paper, Scissors moves.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                     <Dialog open={isJankenDialogOpen} onOpenChange={setIsJankenDialogOpen}>
+                        <div className="space-y-2">
+                           {(['rock', 'paper', 'scissors'] as JankenMove[]).map((move) => (
+                               <div key={move} className="flex items-center justify-between">
+                                    <Label htmlFor={move} className="capitalize flex items-center gap-2">
+                                       <Scissors className="w-4 h-4"/> {move}
+                                    </Label>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-14 h-20">
+                                            {jankenCards[move] && <PokerCard card={jankenCards[move]} revealed />}
+                                        </div>
+                                        <DialogTrigger asChild>
+                                           <Button variant="outline" size="icon" onClick={() => setCurrentJankenMove(move)}><Replace className="w-4 h-4" /></Button>
+                                        </DialogTrigger>
+                                    </div>
+                               </div>
+                           ))}
+                        </div>
+                        <Button className="w-full" onClick={handleSaveJankenFavorites} disabled={isLoading}>
+                           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                           Save Janken Cards
+                        </Button>
+                        <DialogContent className="max-w-4xl h-[90vh]">
+                             <DialogHeader>
+                                <DialogTitle>Select a Card for <span className="capitalize">{currentJankenMove}</span></DialogTitle>
+                            </DialogHeader>
+                            <div className="overflow-y-auto pr-4 -mr-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 py-4">
+                                    {allCards.map(card => (
+                                        <div key={card.id} onClick={() => handleJankenCardSelect(card)} className="cursor-pointer">
+                                            <PokerCard card={card} revealed={true} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+                </CardContent>
+            </Card>
+
         </div>
 
         <div className="md:col-span-2">
@@ -267,7 +353,7 @@ export default function SettingsPage() {
                                         {post.likeCount}
                                     </button>
                                     <span>
-                                        {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
+                                        {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { locale: ja }) : '...'}
                                     </span>
                                 </div>
                                 {post.author.uid === user.uid && (

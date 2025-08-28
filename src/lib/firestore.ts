@@ -175,6 +175,7 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
         displayName: user.displayName,
         photoURL: user.photoURL,
         bio: user.bio || '',
+        jankenFavorites: user.jankenFavorites || {},
       },
     },
     playerIds: [user.uid],
@@ -217,6 +218,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
                 displayName: user.displayName,
                 photoURL: user.photoURL,
                 bio: user.bio || '',
+                jankenFavorites: user.jankenFavorites || {},
             },
             playerIds: newPlayerIds,
         };
@@ -417,7 +419,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       const isGameStarting = (gameType === 'duel' || gameType === 'janken') && newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
       
       const updates: any = {
-        [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' },
+        [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '', jankenFavorites: user.jankenFavorites || {} },
         playerIds: newPlayerIds
       };
 
@@ -435,7 +437,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       
       transaction.set(newGameRef, {
         gameType,
-        players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' } },
+        players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '', jankenFavorites: user.jankenFavorites || {} } },
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
@@ -512,6 +514,15 @@ export const updateMyCards = async (userId: string, cardIds: string[]): Promise<
         myCards: cardIds,
     });
 };
+
+// Update a user's janken favorites
+export const updateJankenFavorites = async (userId: string, favorites: { rock: string, paper: string, scissors: string }): Promise<void> => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+        jankenFavorites: favorites,
+    });
+};
+
 
 // --- Posts (Bulletin Board) ---
 

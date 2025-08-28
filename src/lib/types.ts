@@ -26,6 +26,11 @@ export type MockUser = {
   isAdmin: boolean; // Admin flag
   isGuest?: boolean; // Guest flag
   myCards?: string[]; // Array of Card IDs
+  jankenFavorites?: { // Card IDs for janken moves
+    rock: string;
+    paper: string;
+    scissors: string;
+  };
   points?: number; // User points
   lastLogin?: Timestamp; // For daily login bonus
 };
