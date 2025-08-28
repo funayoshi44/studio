@@ -26,7 +26,10 @@ import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, A
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
-const TOTAL_ROUNDS = 13;
+const CARDS_COLLECTION = process.env.NEXT_PUBLIC_CARDS_COLLECTION_NAME || 'cards';
+const CARD_CACHE_KEY = `cardverse-${CARDS_COLLECTION}-cache`;
+const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
+
 
 // --- Point System ---
 export const awardPoints = async (userId: string, amount: number) => {
@@ -662,9 +665,6 @@ export const deletePost = async (postId: string): Promise<void> => {
 
 // --- Card Management ---
 
-const CARD_CACHE_KEY = 'cardverse-card2-cache';
-const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
-
 const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): CardData => {
     const rankNumber = typeof card.rank === 'number' ? card.rank : (card.rank === 'Joker' ? 0 : -1);
     return {
@@ -696,7 +696,7 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
         }
     }
     
-    const cardsCollection = collection(db, 'cards2');
+    const cardsCollection = collection(db, CARDS_COLLECTION);
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
     querySnapshot.forEach((doc) => {
@@ -721,7 +721,7 @@ export const addCard = async (
   author: MockUser,
   backImageFile?: File | null
 ): Promise<void> => {
-  const filePath = `cards2/${Date.now()}_${imageFile.name}`;
+  const filePath = `${CARDS_COLLECTION}/${Date.now()}_${imageFile.name}`;
   const imageRef = ref(storage, filePath);
   const uploadResult = await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(uploadResult.ref);
@@ -735,13 +735,15 @@ export const addCard = async (
   };
 
   if (backImageFile) {
-      const backFilePath = `cards2/backs/${Date.now()}_${backImageFile.name}`;
+      const backFilePath = `${CARDS_COLLECTION}/backs/${Date.now()}_${backImageFile.name}`;
       const backImageRef = ref(storage, backFilePath);
       const backUploadResult = await uploadBytes(backImageRef, backImageFile);
       cardToSave.backImageUrl = await getDownloadURL(backUploadResult.ref);
+  } else {
+    cardToSave.backImageUrl = ''; // Ensure the field exists but is empty
   }
 
-  const cardsCollection = collection(db, 'cards2');
+  const cardsCollection = collection(db, CARDS_COLLECTION);
   await addDoc(cardsCollection, cardToSave);
 
   await getCards(true);
@@ -749,7 +751,7 @@ export const addCard = async (
 
 
 export const deleteCard = async (card: CardData): Promise<void> => {
-    const cardRef = doc(db, 'cards2', card.id);
+    const cardRef = doc(db, CARDS_COLLECTION, card.id);
     await deleteDoc(cardRef);
 
     if (card.frontImageUrl && card.frontImageUrl.includes('firebasestorage.googleapis.com')) {
