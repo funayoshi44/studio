@@ -40,7 +40,7 @@ export default function HistoryPage() {
             return {
               id: game.id,
               gameType: game.gameType,
-              opponent: opponent ? { displayName: opponent.displayName!, photoURL: opponent.photoURL! } : { displayName: 'Unknown Player', photoURL: '' },
+              opponent: opponent ? { uid: opponentId!, displayName: opponent.displayName!, photoURL: opponent.photoURL! } : { uid: 'unknown', displayName: 'Unknown Player', photoURL: '' },
               result: result,
               playedAt: game.createdAt.toDate(),
             };
@@ -103,23 +103,25 @@ export default function HistoryPage() {
                             </div>
                         ) : onlineHistory.length > 0 ? (
                            onlineHistory.map(game => (
-                            <div key={game.id} className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/50">
-                                <div className="flex items-center gap-4">
-                                    <Avatar>
-                                        <AvatarImage src={game.opponent.photoURL} />
-                                        <AvatarFallback>{game.opponent.displayName[0]}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="font-bold">vs {game.opponent.displayName}</p>
-                                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                                            {getGameIcon(game.gameType)}
-                                            <span>{t(`${game.gameType}Title` as any)}</span>
-                                            <span className="hidden sm:inline-block">• {format(game.playedAt, 'PPp', { locale: language === 'ja' ? ja : undefined })}</span>
-                                        </p>
+                            <Link key={game.id} href={`/profile/${game.opponent.uid}`} className="block">
+                                <div className="flex items-center justify-between p-3 rounded-lg border bg-background hover:bg-muted/50 transition-colors">
+                                    <div className="flex items-center gap-4">
+                                        <Avatar>
+                                            <AvatarImage src={game.opponent.photoURL} />
+                                            <AvatarFallback>{game.opponent.displayName[0]}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <p className="font-bold">vs {game.opponent.displayName}</p>
+                                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                                {getGameIcon(game.gameType)}
+                                                <span>{t(`${game.gameType}Title` as any)}</span>
+                                                <span className="hidden sm:inline-block">• {format(game.playedAt, 'PPp', { locale: language === 'ja' ? ja : undefined })}</span>
+                                            </p>
+                                        </div>
                                     </div>
+                                    {getResultBadge(game.result)}
                                 </div>
-                                {getResultBadge(game.result)}
-                            </div>
+                            </Link>
                            ))
                         ) : (
                             <p className="text-center text-muted-foreground py-10">No online match history found.</p>

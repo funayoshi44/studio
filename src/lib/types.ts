@@ -95,6 +95,7 @@ export type OnlineGameRecord = {
     id: string;
     gameType: GameType;
     opponent: {
+        uid: string;
         displayName: string;
         photoURL: string;
     };
