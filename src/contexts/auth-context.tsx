@@ -65,11 +65,13 @@ const isSameDay = (d1: Date, d2: Date) => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<MockUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialAuthChecked, setInitialAuthChecked] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      setInitialAuthChecked(false);
       if (fbUser) {
         const userDocRef = doc(db, 'users', fbUser.uid);
         const userDocSnap = await getDoc(userDocRef);
@@ -79,13 +81,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (userDocSnap.exists()) {
             userData = userDocSnap.data() as MockUser;
-            // Ensure isAdmin status is correctly updated on login
             if (userData.isAdmin !== isCurrentlyAdmin) {
                 await updateDoc(userDocRef, { isAdmin: isCurrentlyAdmin });
                 userData.isAdmin = isCurrentlyAdmin;
             }
         } else {
-            // New user profile creation
             userData = {
                 uid: fbUser.uid,
                 displayName: fbUser.displayName || (fbUser.isAnonymous ? 'Guest' : 'Anonymous'),
@@ -100,14 +100,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             await setDoc(userDocRef, { ...userData, createdAt: serverTimestamp() });
         }
         
-        // Handle Daily Login Bonus
         const today = new Date();
         const lastLoginDate = userData.lastLogin?.toDate();
         
         if (!lastLoginDate || !isSameDay(lastLoginDate, today)) {
              if (!userData.isGuest) {
                 await awardPoints(fbUser.uid, 1);
-                userData.points = (userData.points || 0) + 1; // Update local state
+                userData.points = (userData.points || 0) + 1;
                 toast({ title: "Login Bonus!", description: "You've received 1 point for your daily login." });
              }
         }
@@ -116,11 +115,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         userData.lastLogin = Timestamp.now();
         
         setUser(userData);
-
       } else {
         setUser(null);
       }
       setLoading(false);
+      setInitialAuthChecked(true);
     });
 
     return () => unsubscribe();
@@ -140,7 +139,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
-      // Auth success is handled by onAuthStateChanged
     } catch (error) {
       handleAuthError(error, "Google Login");
     } finally {
@@ -153,7 +151,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true);
     try {
         await signInWithEmailAndPassword(auth, email, password);
-        // Auth success is handled by onAuthStateChanged
     } catch (error) {
         handleAuthError(error, "Email/Password Login");
     } finally {
@@ -195,7 +192,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(true);
       try {
           await signInAnonymously(auth);
-          // Auth success handled by onAuthStateChanged
       } catch (error) {
           handleAuthError(error, "Guest Login");
       } finally {
@@ -237,13 +233,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logOut = async () => {
     const wasGuest = user?.isGuest;
-    const userToDelete = auth.currentUser; // Capture before state changes
+    const userToDelete = auth.currentUser;
     try {
         await signOut(auth);
         if (wasGuest && userToDelete) {
-           // Optionally delete guest data from firestore upon logout
-           // await deleteDoc(doc(db, 'users', userToDelete.uid));
-           // await userToDelete.delete(); // This deletes the auth user
         }
         router.push('/login');
     } catch (error) {
@@ -253,7 +246,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const value = {
     user,
-    loading,
+    loading: loading || !initialAuthChecked, // The context is loading if the initial check hasn't completed
     logInWithGoogle,
     logInWithEmail,
     signUpWithEmail,
