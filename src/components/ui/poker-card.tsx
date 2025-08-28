@@ -4,9 +4,10 @@
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import type { CardData } from '@/lib/types';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Badge } from '@/components/ui/badge';
-import { User, Tag, BookOpen, Sparkles } from 'lucide-react';
+import { User, Tag, BookOpen } from 'lucide-react';
+import { useState, useRef } from 'react';
 
 type PokerCardProps = {
   card: CardData | null;
@@ -16,6 +17,30 @@ type PokerCardProps = {
 
 
 export function PokerCard({ card, revealed = false, className }: PokerCardProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const longPressTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  const handleMouseEnter = () => {
+    setIsOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsOpen(false);
+  };
+  
+  const handleTouchStart = () => {
+    longPressTimeout.current = setTimeout(() => {
+      setIsOpen(true);
+    }, 500); // 500ms for a long press
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimeout.current) {
+      clearTimeout(longPressTimeout.current);
+    }
+  };
+
+
   const cardBack = (
     <div
       className={cn(
@@ -59,34 +84,57 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
   );
 
   return (
-    <TooltipProvider delayDuration={300}>
-        <Tooltip>
-            <TooltipTrigger asChild>{cardFace}</TooltipTrigger>
-            <TooltipContent side="right" sideOffset={10} className="max-w-xs break-words">
-                <div className="space-y-3 p-2">
-                    <h3 className="text-lg font-bold">{card.title}</h3>
-                    {card.caption && <p className="text-sm text-muted-foreground">{card.caption}</p>}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <BookOpen className="h-4 w-4 shrink-0" />
-                        <span>{card.seriesName}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <User className="h-4 w-4 shrink-0" />
-                        <span>{card.authorName}</span>
-                    </div>
-                    {card.hashtags && card.hashtags.length > 0 && (
-                        <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                            <Tag className="h-4 w-4 shrink-0 mt-1" />
-                            <div className="flex flex-wrap gap-1">
-                                {card.hashtags.map(tag => (
-                                    <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                                ))}
-                            </div>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger 
+            asChild
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            onClick={(e) => e.preventDefault()}
+        >
+            {cardFace}
+        </PopoverTrigger>
+        <PopoverContent side="right" sideOffset={15} className="w-auto p-0 border-none bg-transparent shadow-none">
+            <div className="flex items-start">
+                <div className="bg-card text-card-foreground p-4 rounded-lg shadow-lg max-w-sm ml-2">
+                    <div className="space-y-3">
+                        <h3 className="text-lg font-bold">{card.title}</h3>
+                        {card.caption && <p className="text-sm text-muted-foreground whitespace-pre-wrap">{card.caption}</p>}
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <BookOpen className="h-4 w-4 shrink-0" />
+                            <span>{card.seriesName}</span>
                         </div>
-                    )}
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <User className="h-4 w-4 shrink-0" />
+                            <span>{card.authorName}</span>
+                        </div>
+                        {card.hashtags && card.hashtags.length > 0 && (
+                            <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                                <Tag className="h-4 w-4 shrink-0 mt-1" />
+                                <div className="flex flex-wrap gap-1">
+                                    {card.hashtags.map(tag => (
+                                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </TooltipContent>
-        </Tooltip>
-    </TooltipProvider>
+                {card.backImageUrl && (
+                    <div className="relative h-28 w-20 overflow-hidden rounded-lg border-4 border-gray-300 bg-white text-black shadow-md md:h-32 md:w-24 mt-[138px] -ml-[90px]">
+                         <Image
+                            src={card.backImageUrl}
+                            alt={`${card.title} - Back`}
+                            fill
+                            style={{ objectFit: 'cover' }}
+                            data-ai-hint="card back design"
+                            unoptimized
+                        />
+                    </div>
+                )}
+            </div>
+        </PopoverContent>
+    </Popover>
   );
 }
