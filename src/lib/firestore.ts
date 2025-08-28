@@ -23,7 +23,6 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction } from './types';
-import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
 const TOTAL_ROUNDS = 13;
@@ -113,6 +112,9 @@ const getInitialJankenGameState = (playerIds: string[] = []) => {
     });
     return gameState;
 };
+
+// Moved this import down to fix circular dependency
+import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 const getInitialPokerGameState = async (playerIds: string[] = []) => {
     const deck = await createPokerDeck();
