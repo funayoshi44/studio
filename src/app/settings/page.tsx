@@ -3,6 +3,7 @@
 
 import { useState, useContext, useEffect, ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from 'next/link';
 import { AuthContext } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -138,10 +139,12 @@ export default function SettingsPage() {
                     <div className="space-y-2">
                     <Label htmlFor="profile-image">Profile Picture</Label>
                     <div className="flex items-center gap-4">
-                        <Avatar className="w-20 h-20">
-                            <AvatarImage src={preview ?? undefined}/>
-                            <AvatarFallback>{displayName?.[0]}</AvatarFallback>
-                        </Avatar>
+                        <Link href={`/profile/${user.uid}`}>
+                            <Avatar className="w-20 h-20">
+                                <AvatarImage src={preview ?? undefined}/>
+                                <AvatarFallback>{displayName?.[0]}</AvatarFallback>
+                            </Avatar>
+                        </Link>
                         <Input
                         id="profile-image"
                         type="file"
