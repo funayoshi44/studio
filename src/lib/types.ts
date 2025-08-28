@@ -39,7 +39,7 @@ export type Post = {
     createdAt: Timestamp;
     likes: string[]; // Array of user UIDs who liked it
     likeCount: number;
-    // parentId: string | null; // ID of the parent post for replies
+    // parentId: string | null;
     // replyCount: number;
 };
 
@@ -74,3 +74,25 @@ export interface Game {
   winner?: string | null; // UID of the winner
   maxPlayers?: number;
 }
+
+// --- Chat Types ---
+
+export type ChatRoom = {
+    id: string;
+    participantIds: string[];
+    participantsInfo: {
+        [uid: string]: {
+            displayName: string;
+            photoURL: string;
+        }
+    };
+    lastMessage: string;
+    updatedAt: Timestamp;
+};
+
+export type ChatMessage = {
+    id: string;
+    senderId: string;
+    text: string;
+    createdAt: Timestamp;
+};

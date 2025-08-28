@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from '@/hooks/use-translation';
 import { LanguageToggle } from '@/components/language-toggle';
-import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus, CircleUser } from 'lucide-react';
+import { BarChart3, Gamepad2, User, LogOut, Users, Settings, MessageSquare, Shield, UserPlus, CircleUser, Send } from 'lucide-react';
 import { AuthContext } from '@/contexts/auth-context';
 import {
   DropdownMenu,
@@ -42,12 +42,20 @@ export function Header() {
               </Link>
             )}
              {user && !user.isGuest && (
-              <Link href="/feed" passHref>
-                <Button variant="ghost">
-                  <MessageSquare className="h-4 w-4 mr-2"/>
-                  Feed
-                </Button>
-              </Link>
+              <>
+                <Link href="/feed" passHref>
+                    <Button variant="ghost">
+                    <MessageSquare className="h-4 w-4 mr-2"/>
+                    Feed
+                    </Button>
+                </Link>
+                <Link href="/chat" passHref>
+                    <Button variant="ghost">
+                        <Send className="h-4 w-4 mr-2"/>
+                        Chat
+                    </Button>
+                </Link>
+              </>
             )}
             <Link href="/online" passHref>
               <Button variant="ghost">

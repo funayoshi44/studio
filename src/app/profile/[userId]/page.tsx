@@ -2,11 +2,11 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser } from '@/lib/firestore';
+import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Heart, Trash2 } from 'lucide-react';
+import { Loader2, Heart, Trash2, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
@@ -19,6 +19,7 @@ export default function UserProfilePage() {
     const userId = params.userId as string;
     const { user: currentUser } = useAuth(); // The currently logged-in user
     const { toast } = useToast();
+    const router = useRouter();
 
     const [profileUser, setProfileUser] = useState<MockUser | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
@@ -47,7 +48,7 @@ export default function UserProfilePage() {
         fetchUser();
 
         const unsubscribePosts = subscribeToUserPosts(userId, (userPosts) => {
-            setPosts(userPosts);
+            setPosts(userPosts.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
         });
 
         return () => unsubscribePosts();
@@ -73,6 +74,17 @@ export default function UserProfilePage() {
             }
         }
     };
+    
+    const handleStartChat = async () => {
+        if (!currentUser || !profileUser || currentUser.uid === profileUser.uid) return;
+        try {
+            const chatRoomId = await getOrCreateChatRoom(currentUser.uid, profileUser.uid);
+            router.push(`/chat/${chatRoomId}`);
+        } catch (error) {
+            console.error("Failed to start chat:", error);
+            toast({ title: "Could not start chat", variant: "destructive" });
+        }
+    }
 
 
     if (loading) {
@@ -96,10 +108,14 @@ export default function UserProfilePage() {
                         <div className="flex-1 text-center md:text-left">
                             <h1 className="text-4xl font-bold">{profileUser.displayName}</h1>
                             {profileUser.bio && <p className="mt-2 text-lg text-muted-foreground">{profileUser.bio}</p>}
-                            {currentUser?.uid === userId && (
+                            {currentUser?.uid === userId ? (
                                 <Link href="/settings" passHref>
                                     <Button variant="outline" className="mt-4">Edit Profile</Button>
                                 </Link>
+                            ) : currentUser && (
+                                <Button onClick={handleStartChat} className="mt-4">
+                                    <Send className="mr-2 h-4 w-4" /> Message
+                                </Button>
                             )}
                         </div>
                     </div>

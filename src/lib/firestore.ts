@@ -6,6 +6,7 @@ import {
   doc,
   updateDoc,
   getDoc,
+  setDoc,
   onSnapshot,
   query,
   where,
@@ -19,7 +20,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { Game, GameType, MockUser, Post, CardData } from './types';
+import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage } from './types';
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
@@ -463,36 +464,29 @@ export const getUserProfile = async (userId: string): Promise<MockUser | null> =
 
 // --- Posts (Bulletin Board) ---
 
-// Create a new post or reply
 export const createPost = async (author: MockUser, content: string): Promise<void> => {
-  if (!content.trim()) {
-    throw new Error("Post content cannot be empty.");
-  }
-
-  const postData = {
-    author: {
-        uid: author.uid,
-        displayName: author.displayName,
-        photoURL: author.photoURL,
-    },
-    content,
-    // parentId: null, // parentId is removed for now
-    createdAt: serverTimestamp(),
-    likes: [],
-    likeCount: 0,
-    // replyCount: 0, // replyCount is removed for now
-  };
-  
-  await addDoc(collection(db, 'posts'), postData);
+    if (!content.trim()) {
+        throw new Error("Post content cannot be empty.");
+    }
+    const postData = {
+        author: {
+            uid: author.uid,
+            displayName: author.displayName,
+            photoURL: author.photoURL,
+        },
+        content,
+        createdAt: serverTimestamp(),
+        likes: [],
+        likeCount: 0,
+    };
+    await addDoc(collection(db, 'posts'), postData);
 };
 
 
-// Listen for all top-level posts
 export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   const postsCollection = collection(db, 'posts');
   const q = query(
     postsCollection, 
-    // where('parentId', '==', null), // No longer needed
     orderBy('createdAt', 'desc'),
     limit(50)
   );
@@ -506,26 +500,6 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   });
 };
 
-/*
-// Listen for replies to a specific post
-export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => void) => {
-  const postsCollection = collection(db, 'posts');
-  const q = query(
-    postsCollection,
-    where('parentId', '==', postId)
-  );
-  return onSnapshot(q, (snapshot) => {
-    const replies: Post[] = [];
-    snapshot.forEach((doc) => {
-      replies.push({ id: doc.id, ...doc.data() } as Post);
-    });
-    callback(replies);
-  });
-};
-*/
-
-
-// Listen for posts by a specific user (both top-level and replies)
 export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) => void) => {
     const postsCollection = collection(db, 'posts');
     const q = query(
@@ -559,10 +533,8 @@ export const togglePostLike = async (postId: string, userId: string): Promise<vo
         let newLikes;
 
         if (likes.includes(userId)) {
-            // User has liked, so unlike
             newLikes = likes.filter(uid => uid !== userId);
         } else {
-            // User has not liked, so like
             newLikes = [...likes, userId];
         }
 
@@ -573,30 +545,9 @@ export const togglePostLike = async (postId: string, userId: string): Promise<vo
     });
 };
 
-// Delete a post and all its replies
 export const deletePost = async (postId: string): Promise<void> => {
     const postRef = doc(db, 'posts', postId);
     await deleteDoc(postRef);
-    
-    // Deleting replies is commented out as the functionality is disabled
-    /*
-    // First, find all replies to this post
-    const repliesQuery = query(collection(db, 'posts'), where('parentId', '==', postId));
-    const repliesSnapshot = await getDocs(repliesQuery);
-
-    const batch = writeBatch(db);
-
-    // Delete all replies
-    repliesSnapshot.forEach(replyDoc => {
-        batch.delete(replyDoc.ref);
-    });
-
-    // Delete the parent post itself
-    batch.delete(postRef);
-
-    // Commit the batch
-    await batch.commit();
-    */
 };
 
 
@@ -606,23 +557,14 @@ export const deletePost = async (postId: string): Promise<void> => {
 const CARD_CACHE_KEY = 'cardverse-card-cache';
 const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 
-/**
- * Fetches all card definitions from Firestore, with caching.
- * @param forceRefresh If true, bypasses the cache and fetches fresh data from Firestore.
- * @returns A promise that resolves to an array of CardData.
- */
 export const getCards = async (forceRefresh: boolean = false): Promise<CardData[]> => {
-    // 1. Check localStorage for cached data if not forcing a refresh
     if (!forceRefresh) {
         try {
             const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
             if (cachedItem) {
                 const { timestamp, data } = JSON.parse(cachedItem);
                 if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
-                    console.log(`Returning all cached cards`);
                     return data as CardData[];
-                } else {
-                    console.log("Card cache expired.");
                 }
             }
         } catch (e) {
@@ -630,8 +572,6 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
         }
     }
     
-    // 2. If no valid cache or forcing refresh, fetch from Firestore
-    console.log("Fetching all cards from Firestore...");
     const cardsCollection = collection(db, 'cards');
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
@@ -639,72 +579,134 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
         cards.push({ id: doc.id, ...doc.data() } as CardData);
     });
 
-    // 3. Cache the new data in localStorage
     try {
         const cacheItem = { timestamp: Date.now(), data: cards };
         localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(cacheItem));
-        console.log(`Cached ${cards.length} cards.`);
     } catch (e) {
         console.error("Error writing to card cache", e);
-    }
-
-    if (cards.length === 0) {
-        console.warn(`No cards found in Firestore at all. The game may not work correctly.`);
     }
 
     return cards;
 };
 
 
-/**
- * Uploads a card image and adds the card data to Firestore.
- * @param cardData The card data to add, without id and imageUrl.
- * @param imageFile The image file to upload for the card.
- */
 export const addCard = async (
   cardData: Omit<CardData, 'id' | 'imageUrl'>,
   imageFile: File
 ): Promise<void> => {
-  // 1. Upload image to Firebase Storage
   const filePath = `cards/${Date.now()}_${imageFile.name}`;
   const imageRef = ref(storage, filePath);
   const uploadResult = await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(uploadResult.ref);
 
-  // 2. Add card data to Firestore
   const cardsCollection = collection(db, 'cards');
   await addDoc(cardsCollection, {
     ...cardData,
-    imageUrl: imageUrl, // Add the retrieved image URL
+    imageUrl: imageUrl,
     createdAt: serverTimestamp(),
   });
 
-  // 3. Force refresh the cache after adding a new card
   await getCards(true);
 };
 
 
-/**
- * Deletes a card from Firestore and its image from Storage.
- * @param card The card object to delete.
- */
 export const deleteCard = async (card: CardData): Promise<void> => {
-    // 1. Delete the document from Firestore
     const cardRef = doc(db, 'cards', card.id);
     await deleteDoc(cardRef);
 
-    // 2. Delete the image from Firebase Storage
-    // It's important to handle cases where imageUrl might not be a Firebase Storage URL
     if (card.imageUrl && card.imageUrl.includes('firebasestorage.googleapis.com')) {
         try {
             const imageRef = ref(storage, card.imageUrl);
             await deleteObject(imageRef);
         } catch (error) {
-            // If the image doesn't exist, Storage throws an error. We can often ignore this.
             console.warn(`Could not delete image ${card.imageUrl} from Storage. It might not exist.`, error);
         }
     }
 
-    // 3. Force refresh the cache
     await getCards(true);
+};
+
+// --- Chat ---
+
+// Create or get a chat room between two users
+export const getOrCreateChatRoom = async (user1Id: string, user2Id: string): Promise<string> => {
+    const members = [user1Id, user2Id].sort();
+    const chatRoomId = members.join('-');
+    const chatRoomRef = doc(db, 'chatRooms', chatRoomId);
+    const chatRoomSnap = await getDoc(chatRoomRef);
+
+    if (!chatRoomSnap.exists()) {
+        const user1Profile = await getUserProfile(user1Id);
+        const user2Profile = await getUserProfile(user2Id);
+
+        if (!user1Profile || !user2Profile) {
+            throw new Error("One or more user profiles not found.");
+        }
+
+        await setDoc(chatRoomRef, {
+            participantIds: members,
+            participantsInfo: {
+                [user1Id]: { displayName: user1Profile.displayName, photoURL: user1Profile.photoURL },
+                [user2Id]: { displayName: user2Profile.displayName, photoURL: user2Profile.photoURL }
+            },
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            lastMessage: '',
+        });
+    }
+
+    return chatRoomId;
+};
+
+// Listen for a user's chat rooms
+export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[]) => void) => {
+    const q = query(
+        collection(db, 'chatRooms'),
+        where('participantIds', 'array-contains', userId),
+        orderBy('updatedAt', 'desc')
+    );
+
+    return onSnapshot(q, (querySnapshot) => {
+        const rooms: ChatRoom[] = [];
+        querySnapshot.forEach((doc) => {
+            rooms.push({ id: doc.id, ...doc.data() } as ChatRoom);
+        });
+        callback(rooms);
+    });
+};
+
+// Listen for messages in a specific chat room
+export const subscribeToMessages = (chatRoomId: string, callback: (messages: ChatMessage[]) => void) => {
+    const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
+    const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(100));
+
+    return onSnapshot(q, (querySnapshot) => {
+        const messages: ChatMessage[] = [];
+        querySnapshot.forEach((doc) => {
+            messages.push({ id: doc.id, ...doc.data() } as ChatMessage);
+        });
+        callback(messages);
+    });
+};
+
+// Send a message
+export const sendMessage = async (chatRoomId: string, senderId: string, text: string, senderInfo: { displayName: string, photoURL: string }) => {
+    const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
+    const chatRoomRef = doc(db, 'chatRooms', chatRoomId);
+
+    const messageData = {
+        senderId,
+        text,
+        createdAt: serverTimestamp(),
+    };
+
+    await addDoc(messagesRef, messageData);
+    
+    // Update the chat room's last message and timestamp
+    await updateDoc(chatRoomRef, {
+        lastMessage: text,
+        updatedAt: serverTimestamp(),
+        // Make sure participantsInfo is up-to-date
+        [`participantsInfo.${senderId}`]: senderInfo
+    });
 };
