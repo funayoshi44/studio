@@ -5,6 +5,7 @@ import { GameProvider } from '@/contexts/game-context';
 import { AuthProvider } from '@/contexts/auth-context';
 import { Header } from '@/components/header';
 import { Toaster } from '@/components/ui/toaster';
+import { CardCacheProvider } from '@/contexts/card-cache-context';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
@@ -23,13 +24,15 @@ export default function RootLayout({
       <body className={`${inter.variable} font-body antialiased`}>
         <AuthProvider>
           <GameProvider>
-            <div className="relative flex min-h-screen w-full flex-col">
-              <Header />
-              <main className="flex-1 container mx-auto px-4 py-8">
-                {children}
-              </main>
-            </div>
-            <Toaster />
+            <CardCacheProvider>
+              <div className="relative flex min-h-screen w-full flex-col">
+                <Header />
+                <main className="flex-1 container mx-auto px-4 py-8">
+                  {children}
+                </main>
+              </div>
+              <Toaster />
+            </CardCacheProvider>
           </GameProvider>
         </AuthProvider>
       </body>

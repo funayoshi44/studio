@@ -1,6 +1,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -90,8 +91,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 };
 
 
-const getInitialDuelGameState = async (playerIds: string[] = []) => {
-    const allCards = await getCards();
+const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = []) => {
 
     const gameState: any = {
         currentRound: 1,
@@ -135,8 +135,8 @@ const getInitialJankenGameState = (playerIds: string[] = []) => {
 };
 
 
-const getInitialPokerGameState = async (playerIds: string[] = []) => {
-    const deck = await createPokerDeck();
+const getInitialPokerGameState = (allCards: CardData[], playerIds: string[] = []) => {
+    const deck = createPokerDeck(allCards);
     const gameState: any = {
         phase: 'dealing', // dealing -> exchanging -> showdown -> finished
         deck: [],
@@ -165,15 +165,16 @@ const getInitialPokerGameState = async (playerIds: string[] = []) => {
 
 
 const getInitialStateForGame = async (gameType: GameType, playerIds: string[]) => {
+    const allCards = await getCards(true); // Always get fresh cards when starting a game
     switch (gameType) {
         case 'duel':
-            return getInitialDuelGameState(playerIds);
+            return getInitialDuelGameState(allCards, playerIds);
         case 'janken':
             return getInitialJankenGameState(playerIds);
         case 'poker':
-            return getInitialPokerGameState(playerIds);
+            return getInitialPokerGameState(allCards, playerIds);
         default:
-            return getInitialDuelGameState(playerIds);
+            return getInitialDuelGameState(allCards, playerIds);
     }
 }
 
@@ -684,16 +685,18 @@ const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): Card
 
 export const getCards = async (forceRefresh: boolean = false): Promise<CardData[]> => {
     if (!forceRefresh) {
-        try {
-            const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
-            if (cachedItem) {
-                const { timestamp, data } = JSON.parse(cachedItem);
-                if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
-                    return data as CardData[];
+        if (typeof window !== 'undefined') {
+            try {
+                const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
+                if (cachedItem) {
+                    const { timestamp, data } = JSON.parse(cachedItem);
+                    if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
+                        return data as CardData[];
+                    }
                 }
+            } catch (e) {
+                console.error("Error reading from card cache", e);
             }
-        } catch (e) {
-            console.error("Error reading from card cache", e);
         }
     }
     
@@ -705,11 +708,13 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
         cards.push(deriveCompatibilityFields(data, doc.id));
     });
 
-    try {
-        const cacheItem = { timestamp: Date.now(), data: cards };
-        localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(cacheItem));
-    } catch (e) {
-        console.error("Error writing to card cache", e);
+    if (typeof window !== 'undefined') {
+        try {
+            const cacheItem = { timestamp: Date.now(), data: cards };
+            localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(cacheItem));
+        } catch (e) {
+            console.error("Error writing to card cache", e);
+        }
     }
 
     return cards;
@@ -977,4 +982,3 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
 };
 
     
-

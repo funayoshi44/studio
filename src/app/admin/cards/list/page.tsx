@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { getCards, deleteCard, type CardData } from "@/lib/firestore";
+import { deleteCard, type CardData } from "@/lib/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,43 +12,28 @@ import Image from "next/image";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import Link from "next/link";
+import { useCardCache } from "@/contexts/card-cache-context";
 
 export default function CardListPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [cards, setCards] = useState<CardData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { cards, loading: isLoading, forceRefresh } = useCardCache();
+  const [sortedCards, setSortedCards] = useState<CardData[]>([]);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  const fetchCards = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const allCards = await getCards(true); // Force refresh
-      setCards(allCards.sort((a, b) => {
+  useEffect(() => {
+    const sorted = [...cards].sort((a, b) => {
         if (a.seriesName && b.seriesName) {
             const seriesCompare = a.seriesName.localeCompare(b.seriesName);
             if (seriesCompare !== 0) return seriesCompare;
         }
-        // Fallback or rank sorting
         return (typeof a.rank === 'number' && typeof b.rank === 'number') 
             ? a.rank - b.rank 
             : String(a.rank).localeCompare(String(b.rank));
-      }));
-    } catch (error) {
-      console.error(error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch cards.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  }, [toast]);
+    });
+    setSortedCards(sorted);
+  }, [cards]);
 
-  useEffect(() => {
-    fetchCards();
-  }, [fetchCards]);
 
   const handleDelete = async (card: CardData) => {
     setIsDeleting(card.id);
@@ -59,7 +44,7 @@ export default function CardListPage() {
         description: `Card "${card.title}" has been deleted.`,
       });
       // Refetch cards to update the list
-      await fetchCards();
+      await forceRefresh();
     } catch (error) {
       console.error(error);
       toast({
@@ -108,8 +93,8 @@ export default function CardListPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cards.length > 0 ? (
-                cards.map((card) => (
+              {sortedCards.length > 0 ? (
+                sortedCards.map((card) => (
                   <TableRow key={card.id}>
                     <TableCell>
                       <Image

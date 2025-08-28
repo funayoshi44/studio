@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData, deleteGame } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';

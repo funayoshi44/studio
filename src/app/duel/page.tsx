@@ -12,10 +12,10 @@ import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
 import { PokerCard as GameCardComponent } from '@/components/ui/poker-card';
-import { getCards } from '@/lib/firestore';
 import type { CardData } from '@/lib/types';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
+import { useCardCache } from '@/contexts/card-cache-context';
 
 
 const TOTAL_ROUNDS = 13;
@@ -109,25 +109,25 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 export default function DuelPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
   const { t } = useTranslation();
+  const { cards: allCards, loading: cardsLoading } = useCardCache();
   const [state, setState] = useState<DuelState>({ ...initialDuelState, playerCards: [], cpuCards: [], isLoading: true });
   const [loading, setLoading] = useState(false);
   const playVictorySound = useVictorySound();
 
-  const initializeDecks = useCallback(async () => {
+  const initializeDecks = useCallback(() => {
+    if (cardsLoading || allCards.length === 0) return;
+
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
-        const allCards = await getCards(true); // Force refresh
-        
-        // createRandomDeck will handle the logic of falling back to default cards
         const playerDeck = createRandomDeck(allCards);
         const cpuDeck = createRandomDeck(allCards);
 
         setState(prevState => ({
             ...prevState,
             ...initialDuelState,
-            round: 1, // Always reset round
-            playerScore: 0, // Always reset score
-            cpuScore: 0, // Always reset score
+            round: 1, 
+            playerScore: 0,
+            cpuScore: 0,
             playerCards: playerDeck,
             cpuCards: cpuDeck,
             isLoading: false,
@@ -146,7 +146,7 @@ export default function DuelPage() {
              finalResult: "Error initializing game."
         }));
     }
-  }, []);
+  }, [allCards, cardsLoading]);
 
   useEffect(() => {
     initializeDecks();

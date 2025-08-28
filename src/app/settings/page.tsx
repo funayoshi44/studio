@@ -13,13 +13,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Heart, Trash2, Scissors, ImageUp } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { subscribeToUserPosts, deletePost, togglePostLike, type Post, getCards, type CardData, updateMyCards, getJankenActions, setJankenAction, type JankenAction } from "@/lib/firestore";
+import { subscribeToUserPosts, deletePost, togglePostLike, type Post, type CardData, updateMyCards, getJankenActions, setJankenAction, type JankenAction } from "@/lib/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { PokerCard } from "@/components/ui/poker-card";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { useCardCache } from "@/contexts/card-cache-context";
 
 type JankenMoveType = 'rock' | 'paper' | 'scissors';
 
@@ -92,6 +93,7 @@ const JankenActionEditor = ({
 
 export default function SettingsPage() {
   const { user, updateUser, loading: authLoading } = useContext(AuthContext);
+  const { cards: allCards, loading: cardsLoading } = useCardCache();
   const router = useRouter();
   const { toast } = useToast();
 
@@ -103,7 +105,6 @@ export default function SettingsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
 
   // For My Cards
-  const [allCards, setAllCards] = useState<CardData[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>(user?.myCards || []);
   const [isCardDialogOpen, setIsCardDialogOpen] = useState(false);
   
@@ -124,8 +125,6 @@ export default function SettingsPage() {
         });
 
         const fetchInitialData = async () => {
-          const cards = await getCards(true);
-          setAllCards(cards);
           const actions = await getJankenActions(user.uid);
           setJankenActions(actions);
         }
@@ -238,7 +237,7 @@ export default function SettingsPage() {
   }
 
 
-  if (authLoading || !user) {
+  if (authLoading || !user || cardsLoading) {
     return <div className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto" /></div>;
   }
 

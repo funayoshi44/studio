@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useContext, useEffect, useCallback } from 'react';
@@ -10,13 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getAIMove } from '../actions';
 import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-adjustment';
 import Link from 'next/link';
-import { evaluatePokerHand, createPokerDeck, type PokerCard } from '@/lib/game-logic/poker';
+import { evaluatePokerHand, type PokerCard } from '@/lib/game-logic/poker';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
 import { PokerCard as PokerCardComponent } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
+import { useCardCache } from '@/contexts/card-cache-context';
 
 
 type PokerState = {
@@ -49,20 +49,88 @@ const initialPokerState: PokerState = {
   playerHandRank: null,
   cpuHandRank: null,
   resultText: '',
-  aiRationale: null,
+aiRationale: null,
   isVictory: false,
+};
+
+// A fallback function to create a default deck if Firestore is empty
+const createDefaultPokerDeck = (): PokerCard[] => {
+    const suits = ['spade', 'heart', 'diamond', 'club'];
+    const ranks = [
+        { name: 'A', value: 14, number: 1 }, { name: '2', value: 2, number: 2 }, { name: '3', value: 3, number: 3 },
+        { name: '4', value: 4, number: 4 }, { name: '5', value: 5, number: 5 }, { name: '6', value: 6, number: 6 },
+        { name: '7', value: 7, number: 7 }, { name: '8', value: 8, number: 8 }, { name: '9', value: 9, number: 9 },
+        { name: '10', value: 10, number: 10 }, { name: 'J', value: 11, number: 11 }, { name: 'Q', value: 12, number: 12 },
+        { name: 'K', value: 13, number: 13 }
+    ];
+    const deck: PokerCard[] = [];
+    let idCounter = 0;
+    for (const suit of suits) {
+        for (const rank of ranks) {
+             const suitSymbol = suit === 'spade' ? '♠️' : suit === 'heart' ? '♥️' : suit === 'diamond' ? '♦️' : '♣️';
+            deck.push({
+                id: `default-poker-${rank.name}${suit}${idCounter++}`, // Ensure unique ID
+                frontImageUrl: `https://picsum.photos/seed/card-poker-${rank.name}${suit}/200/300`,
+                suit: suit,
+                rank: rank.number,
+                title: `${rank.name} of ${suit}`,
+                caption: ``,
+                hashtags: [],
+                seriesName: 'Poker',
+                authorName: 'System',
+                authorId: 'system',
+                createdAt: new Date() as any,
+                updatedAt: new Date() as any,
+                gameType: 'poker',
+                number: rank.number,
+                value: rank.value,
+                name: `${rank.name} of ${suit}`,
+                artist: 'System',
+                imageUrl: `https://picsum.photos/seed/card-poker-${rank.name}${suit}/200/300`,
+                rarity: 'common',
+                tags: []
+            });
+        }
+    }
+    return deck;
+}
+
+const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+};
+
+// This function now uses the cards from the cache.
+export const createPokerDeck = (allCards: PokerCard[]): PokerCard[] => {
+    let pokerCards = allCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
+
+    if (pokerCards.length < 52) {
+        const defaultDeck = createDefaultPokerDeck();
+        const needed = 52 - pokerCards.length;
+        const existingSignatures = new Set(pokerCards.map(c => `${c.number}-${c.suit}`));
+        const uniqueDefaults = defaultDeck.filter(dc => !existingSignatures.has(`${dc.number}-${dc.suit}`));
+        pokerCards.push(...uniqueDefaults.slice(0, needed));
+    }
+    
+    return shuffleDeck(pokerCards.slice(0, 52));
 };
 
 export default function PokerPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
   const { t } = useTranslation();
+  const { cards: allCards, loading: cardsLoading } = useCardCache();
   const [state, setState] = useState<PokerState>(initialPokerState);
   const [loading, setLoading] = useState(false);
   const playVictorySound = useVictorySound();
 
-  const dealNewHand = useCallback(async () => {
+  const dealNewHand = useCallback(() => {
+    if (cardsLoading || allCards.length === 0) return;
+    
     setState(prev => ({ ...prev, phase: 'loading', resultText: '', playerHandRank: null, cpuHandRank: null, aiRationale: null, selectedIndices: [], isVictory: false }));
-    const deck = await createPokerDeck();
+    const deck = createPokerDeck(allCards);
     if (deck.length < 10) {
       console.error("Not enough cards to deal.");
        setState(prev => ({ ...prev, resultText: "Error: Could not create a deck."}));
@@ -80,7 +148,7 @@ export default function PokerPage() {
         cpuHand,
         phase: 'betting'
     }));
-  }, []);
+  }, [allCards, cardsLoading]);
 
 
   useEffect(() => {

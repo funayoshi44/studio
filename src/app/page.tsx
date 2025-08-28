@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { DifficultySelector } from '@/components/difficulty-selector';
 import { Swords, Scissors, Layers, Users, Eye, Loader2, Megaphone, HelpCircle } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
-import { getCards, subscribeToAnnouncements, type CardData, type Announcement } from '@/lib/firestore';
+import { subscribeToAnnouncements, type Announcement, type CardData } from '@/lib/firestore';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { PokerCard } from '@/components/ui/poker-card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -16,6 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
+import { useCardCache } from '@/contexts/card-cache-context';
 
 const shuffleArray = <T,>(array: T[]): T[] => {
   const newArray = [...array];
@@ -108,25 +109,11 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
 
 export default function HomePage() {
   const { t, language } = useTranslation();
-  const [cards, setCards] = useState<CardData[]>([]);
+  const { cards, loading: isLoadingCards } = useCardCache();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [isLoadingCards, setIsLoadingCards] = useState(true);
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
 
   useEffect(() => {
-    const fetchCards = async () => {
-      setIsLoadingCards(true);
-      try {
-        const fetchedCards = await getCards();
-        setCards(fetchedCards);
-      } catch (error) {
-        console.error("Failed to fetch cards:", error);
-      } finally {
-        setIsLoadingCards(false);
-      }
-    };
-    fetchCards();
-
     const unsubscribeAnnouncements = subscribeToAnnouncements((data) => {
         setAnnouncements(data);
         setIsLoadingAnnouncements(false);
@@ -295,4 +282,3 @@ export default function HomePage() {
     </div>
   );
 }
-

@@ -1,6 +1,6 @@
 
 import type { CardData } from '@/lib/types';
-import { getCards } from '@/lib/firestore';
+
 
 // Re-exporting CardData as PokerCard for semantic clarity in the Poker game context.
 export type PokerCard = CardData;
@@ -23,8 +23,18 @@ const createDefaultPokerDeck = (): PokerCard[] => {
              const suitSymbol = suit === 'spade' ? '♠️' : suit === 'heart' ? '♥️' : suit === 'diamond' ? '♦️' : '♣️';
             deck.push({
                 id: `default-poker-${rank.name}${suit}${idCounter++}`, // Ensure unique ID
-                gameType: 'poker',
+                frontImageUrl: `https://picsum.photos/seed/card-poker-${rank.name}${suit}/200/300`,
                 suit: suit,
+                rank: rank.number,
+                title: `${rank.name} of ${suit}`,
+                caption: ``,
+                hashtags: [],
+                seriesName: 'Poker',
+                authorName: 'System',
+                authorId: 'system',
+                createdAt: new Date() as any,
+                updatedAt: new Date() as any,
+                gameType: 'poker',
                 number: rank.number,
                 value: rank.value,
                 name: `${rank.name} of ${suit}`,
@@ -38,28 +48,6 @@ const createDefaultPokerDeck = (): PokerCard[] => {
     return deck;
 }
 
-// This function now fetches card data from Firestore.
-export const createPokerDeck = async (): Promise<PokerCard[]> => {
-    let allCards = await getCards(true); // Force refresh to get latest cards
-    let pokerCards = allCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
-
-    // If we don't have enough cards for a full 52-card deck, supplement with defaults
-    if (pokerCards.length < 52) {
-        const defaultDeck = createDefaultPokerDeck();
-        const needed = 52 - pokerCards.length;
-        
-        // Find default cards that are not already represented in the custom cards
-        const existingSignatures = new Set(pokerCards.map(c => `${c.number}-${c.suit}`));
-        const uniqueDefaults = defaultDeck.filter(dc => !existingSignatures.has(`${dc.number}-${dc.suit}`));
-
-        pokerCards.push(...uniqueDefaults.slice(0, needed));
-    }
-    
-    // Ensure we have exactly 52 cards, and shuffle them
-    return shuffleDeck(pokerCards.slice(0, 52));
-};
-
-
 const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
   for (let i = deck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -67,6 +55,22 @@ const shuffleDeck = (deck: PokerCard[]): PokerCard[] => {
   }
   return deck;
 };
+
+// This function now uses the cards from the cache.
+export const createPokerDeck = (allCards: PokerCard[]): PokerCard[] => {
+    let pokerCards = allCards.filter(c => c.gameType === 'poker' || c.gameType === 'common');
+
+    if (pokerCards.length < 52) {
+        const defaultDeck = createDefaultPokerDeck();
+        const needed = 52 - pokerCards.length;
+        const existingSignatures = new Set(pokerCards.map(c => `${c.number}-${c.suit}`));
+        const uniqueDefaults = defaultDeck.filter(dc => !existingSignatures.has(`${dc.number}-${dc.suit}`));
+        pokerCards.push(...uniqueDefaults.slice(0, needed));
+    }
+    
+    return shuffleDeck(pokerCards.slice(0, 52));
+};
+
 
 const checkStraight = (sortedRanks: number[]): boolean => {
     if (sortedRanks.length !== 5) return false;

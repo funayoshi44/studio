@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom, getCards, type CardData, getJankenActions, JankenAction } from '@/lib/firestore';
+import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom, type CardData, getJankenActions, JankenAction } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Heart, Trash2, Send, Award, Scissors } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { PokerCard } from '@/components/ui/poker-card';
 import Image from 'next/image';
+import { useCardCache } from '@/contexts/card-cache-context';
 
 export default function UserProfilePage() {
     const params = useParams();
@@ -22,6 +23,7 @@ export default function UserProfilePage() {
     const { user: currentUser } = useAuth(); // The currently logged-in user
     const { toast } = useToast();
     const router = useRouter();
+    const { cards: allCards, loading: cardsLoading } = useCardCache();
 
     const [profileUser, setProfileUser] = useState<MockUser | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
@@ -38,8 +40,7 @@ export default function UserProfilePage() {
                 const userProfile = await getUserProfile(userId);
                 if (userProfile) {
                     setProfileUser(userProfile);
-                    if (userProfile.myCards && userProfile.myCards.length > 0) {
-                        const allCards = await getCards();
+                    if (userProfile.myCards && userProfile.myCards.length > 0 && allCards.length > 0) {
                         const userMyCards = allCards.filter(card => userProfile.myCards!.includes(card.id));
                         setMyCards(userMyCards);
                     }
@@ -56,7 +57,9 @@ export default function UserProfilePage() {
             }
         };
 
-        fetchAllData();
+        if(!cardsLoading) {
+            fetchAllData();
+        }
 
         const unsubscribePosts = subscribeToUserPosts(userId, (userPosts) => {
             // Sort posts by creation date client-side
@@ -65,7 +68,7 @@ export default function UserProfilePage() {
         });
 
         return () => unsubscribePosts();
-    }, [userId, toast]);
+    }, [userId, toast, cardsLoading, allCards]);
     
     const handleLikePost = async (postId: string) => {
         if (!currentUser) return;
@@ -112,7 +115,7 @@ export default function UserProfilePage() {
     );
 
 
-    if (loading) {
+    if (loading || cardsLoading) {
         return <div className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto" /></div>;
     }
     
