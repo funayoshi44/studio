@@ -710,3 +710,5 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
         [`participantsInfo.${senderId}`]: senderInfo
     });
 };
+
+    
