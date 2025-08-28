@@ -24,7 +24,16 @@ export default function CardListPage() {
     setIsLoading(true);
     try {
       const allCards = await getCards(true); // Force refresh
-      setCards(allCards.sort((a, b) => a.seriesName.localeCompare(b.seriesName) || (typeof a.rank === 'number' && typeof b.rank === 'number' ? a.rank - b.rank : String(a.rank).localeCompare(String(b.rank)))));
+      setCards(allCards.sort((a, b) => {
+        if (a.seriesName && b.seriesName) {
+            const seriesCompare = a.seriesName.localeCompare(b.seriesName);
+            if (seriesCompare !== 0) return seriesCompare;
+        }
+        // Fallback or rank sorting
+        return (typeof a.rank === 'number' && typeof b.rank === 'number') 
+            ? a.rank - b.rank 
+            : String(a.rank).localeCompare(String(b.rank));
+      }));
     } catch (error) {
       console.error(error);
       toast({
