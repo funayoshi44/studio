@@ -63,18 +63,31 @@ const initialDuelState: Omit<DuelState, 'playerCards' | 'cpuCards'> = {
 };
 
 const createDefaultDeck = (count = 13): CardData[] => {
-    return Array.from({ length: count }, (_, i) => ({
-        id: `default-${i + 1}`,
-        gameType: 'common',
-        suit: 'default',
-        number: i + 1,
-        value: i + 1,
-        name: `Default Card ${i + 1}`,
-        artist: 'System',
-        imageUrl: `https://picsum.photos/seed/card-default-${i+1}/200/300`,
-        rarity: 'common',
-        tags: []
-    }));
+    return Array.from({ length: count }, (_, i) => {
+        const rank = i + 1;
+        return {
+            id: `default-${rank}`,
+            frontImageUrl: `https://picsum.photos/seed/card-default-${rank}/200/300`,
+            suit: 'default',
+            rank: rank,
+            title: `Default Card ${rank}`,
+            caption: `This is a default card. Number ${rank}.`,
+            hashtags: ['default'],
+            seriesName: 'Default Series',
+            authorName: 'System',
+            authorId: 'system',
+            createdAt: new Date() as any,
+            updatedAt: new Date() as any,
+            number: rank,
+            value: rank,
+            name: `Default Card ${rank}`,
+            artist: 'System',
+            imageUrl: `https://picsum.photos/seed/card-default-${rank}/200/300`,
+            rarity: 'common',
+            tags: ['default'],
+            gameType: 'common',
+        };
+    });
 };
 
 const createRandomDeck = (allCards: CardData[]): CardData[] => {
