@@ -467,10 +467,23 @@ export const createPost = async (author: MockUser, content: string, parentId: st
   if (!content.trim()) {
     throw new Error("Post content cannot be empty.");
   }
-  const postsCollection = collection(db, 'posts');
 
   await runTransaction(db, async (transaction) => {
-    // Add the new post/reply
+    let parentRef;
+    let parentData;
+
+    // All reads must happen before writes in a transaction.
+    if (parentId) {
+      parentRef = doc(db, 'posts', parentId);
+      const parentSnap = await transaction.get(parentRef);
+      if (!parentSnap.exists()) {
+        throw new Error("Parent post does not exist.");
+      }
+      parentData = parentSnap.data();
+    }
+    
+    // Now perform the writes.
+    const postsCollection = collection(db, 'posts');
     const newPostRef = doc(postsCollection);
     transaction.set(newPostRef, {
       author: {
@@ -486,15 +499,9 @@ export const createPost = async (author: MockUser, content: string, parentId: st
       replyCount: 0,
     });
 
-    // If it's a reply, increment the parent's replyCount
-    if (parentId) {
-      const parentRef = doc(db, 'posts', parentId);
-      const parentSnap = await transaction.get(parentRef);
-      if (parentSnap.exists()) {
-        const parentData = parentSnap.data();
-        const newReplyCount = (parentData.replyCount || 0) + 1;
-        transaction.update(parentRef, { replyCount: newReplyCount });
-      }
+    if (parentId && parentRef && parentData) {
+      const newReplyCount = (parentData.replyCount || 0) + 1;
+      transaction.update(parentRef, { replyCount: newReplyCount });
     }
   });
 };
@@ -506,6 +513,7 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
   const q = query(
     postsCollection, 
     where('parentId', '==', null), // Only fetch top-level posts
+    orderBy('createdAt', 'desc'),
     limit(50)
   );
 
@@ -523,7 +531,8 @@ export const subscribeToReplies = (postId: string, callback: (posts: Post[]) => 
   const postsCollection = collection(db, 'posts');
   const q = query(
     postsCollection,
-    where('parentId', '==', postId)
+    where('parentId', '==', postId),
+    orderBy('createdAt', 'asc')
   );
   return onSnapshot(q, (snapshot) => {
     const replies: Post[] = [];
@@ -541,6 +550,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId),
+        orderBy('createdAt', 'desc'),
         limit(50)
     );
 
