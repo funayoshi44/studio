@@ -46,6 +46,19 @@ export type Post = {
     // replyCount: number;
 };
 
+// Represents a single announcement from admins
+export type Announcement = {
+    id: string;
+    author: {
+        uid: string;
+        displayName: string;
+    };
+    title: string;
+    content: string;
+    createdAt: Timestamp;
+    updatedAt?: Timestamp;
+}
+
 // Represents a single card's data stored in Firestore, based on user's detailed spec
 export type CardData = {
     id: string;

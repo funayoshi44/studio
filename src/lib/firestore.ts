@@ -21,7 +21,7 @@ import {
   increment,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage } from './types';
+import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement } from './types';
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
@@ -667,6 +667,49 @@ export const deleteCard = async (card: CardData): Promise<void> => {
 
     await getCards(true);
 };
+
+// --- Announcements ---
+
+export const createAnnouncement = async (author: MockUser, title: string, content: string): Promise<string> => {
+    const announcementCollection = collection(db, 'announcements');
+    const docRef = await addDoc(announcementCollection, {
+        author: {
+            uid: author.uid,
+            displayName: author.displayName,
+        },
+        title,
+        content,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    });
+    return docRef.id;
+};
+
+export const updateAnnouncement = async (id: string, title: string, content: string): Promise<void> => {
+    const announcementRef = doc(db, 'announcements', id);
+    await updateDoc(announcementRef, {
+        title,
+        content,
+        updatedAt: serverTimestamp(),
+    });
+};
+
+export const deleteAnnouncement = async (id: string): Promise<void> => {
+    const announcementRef = doc(db, 'announcements', id);
+    await deleteDoc(announcementRef);
+};
+
+export const subscribeToAnnouncements = (callback: (announcements: Announcement[]) => void) => {
+    const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (querySnapshot) => {
+        const announcements: Announcement[] = [];
+        querySnapshot.forEach((doc) => {
+            announcements.push({ id: doc.id, ...doc.data() } as Announcement);
+        });
+        callback(announcements);
+    });
+};
+
 
 // --- Chat ---
 

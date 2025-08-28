@@ -4,13 +4,29 @@
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FilePlus2, List } from "lucide-react";
+import { FilePlus2, List, Megaphone } from "lucide-react";
 
 export default function AdminPage() {
   return (
     <div className="container mx-auto py-8">
       <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle>Manage Announcements</CardTitle>
+            <CardDescription>
+              Create, edit, or delete announcements for all users.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/admin/announcements">
+              <Button className="w-full">
+                <Megaphone className="mr-2 h-4 w-4" />
+                Manage Announcements
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Add New Card</CardTitle>
@@ -20,7 +36,7 @@ export default function AdminPage() {
           </CardHeader>
           <CardContent>
             <Link href="/admin/cards">
-              <Button className="w-full">
+              <Button className="w-full" variant="secondary">
                 <FilePlus2 className="mr-2 h-4 w-4" />
                 Add Card
               </Button>
@@ -43,7 +59,6 @@ export default function AdminPage() {
             </Link>
           </CardContent>
         </Card>
-        {/* Future admin panels can be added here */}
       </div>
     </div>
   );

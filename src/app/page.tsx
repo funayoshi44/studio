@@ -6,17 +6,22 @@ import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DifficultySelector } from '@/components/difficulty-selector';
-import { Swords, Scissors, Layers, Users, Eye, Loader2 } from 'lucide-react';
+import { Swords, Scissors, Layers, Users, Eye, Loader2, Megaphone } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getCards } from '@/lib/firestore';
-import type { CardData } from '@/lib/types';
+import { getCards, subscribeToAnnouncements, type CardData, type Announcement } from '@/lib/firestore';
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { PokerCard } from '@/components/ui/poker-card';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { formatDistanceToNow } from 'date-fns';
+import { ja } from 'date-fns/locale';
 
 export default function HomePage() {
   const t = useTranslation();
+  const { language } = useTranslation();
   const [cards, setCards] = useState<CardData[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoadingCards, setIsLoadingCards] = useState(true);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
 
   useEffect(() => {
     const fetchCards = async () => {
@@ -31,6 +36,15 @@ export default function HomePage() {
       }
     };
     fetchCards();
+
+    const unsubscribeAnnouncements = subscribeToAnnouncements((data) => {
+        setAnnouncements(data);
+        setIsLoadingAnnouncements(false);
+    });
+
+    return () => {
+        unsubscribeAnnouncements();
+    }
   }, []);
 
 
@@ -53,6 +67,44 @@ export default function HomePage() {
       </div>
 
       <div className="w-full max-w-6xl space-y-8">
+
+         {/* Announcements Section */}
+        {isLoadingAnnouncements ? (
+             <Card><CardContent className="p-6"><Loader2 className="mx-auto animate-spin" /></CardContent></Card>
+        ) : announcements.length > 0 && (
+            <Card className="bg-card/80 backdrop-blur-sm">
+                <CardHeader>
+                    <div className="flex items-center gap-3">
+                    <Megaphone className="w-8 h-8 text-primary" />
+                    <div>
+                        <CardTitle className="text-2xl">Announcements</CardTitle>
+                        <CardDescription>Latest news from the administrators.</CardDescription>
+                    </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <Accordion type="single" collapsible className="w-full">
+                        {announcements.slice(0, 3).map(item => (
+                             <AccordionItem value={item.id} key={item.id}>
+                                <AccordionTrigger>
+                                    <div className="flex justify-between w-full pr-4">
+                                        <span>{item.title}</span>
+                                        <span className="text-sm text-muted-foreground font-normal">
+                                            {formatDistanceToNow(item.createdAt.toDate(), { addSuffix: true, locale: language === 'ja' ? ja : undefined })}
+                                        </span>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="whitespace-pre-wrap text-muted-foreground">
+                                    {item.content}
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                </CardContent>
+            </Card>
+        )}
+
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Play Online Card */}
           <Card className="md:col-span-2 transform hover:scale-[1.02] transition-transform duration-300 bg-gradient-to-br from-primary/10 via-background to-background shadow-lg border-primary/20">
