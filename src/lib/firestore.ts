@@ -662,7 +662,7 @@ export const deletePost = async (postId: string): Promise<void> => {
 
 // --- Card Management ---
 
-const CARD_CACHE_KEY = 'cardverse-card-cache';
+const CARD_CACHE_KEY = 'cardverse-card2-cache';
 const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 
 const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): CardData => {
@@ -696,7 +696,7 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
         }
     }
     
-    const cardsCollection = collection(db, 'cards');
+    const cardsCollection = collection(db, 'cards2');
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
     querySnapshot.forEach((doc) => {
@@ -721,20 +721,20 @@ export const addCard = async (
   author: MockUser,
   backImageFile?: File | null
 ): Promise<void> => {
-  const filePath = `cards/${Date.now()}_${imageFile.name}`;
+  const filePath = `cards2/${Date.now()}_${imageFile.name}`;
   const imageRef = ref(storage, filePath);
   const uploadResult = await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(uploadResult.ref);
   
   let backImageUrl: string | undefined = undefined;
   if (backImageFile) {
-      const backFilePath = `cards/backs/${Date.now()}_${backImageFile.name}`;
+      const backFilePath = `cards2/backs/${Date.now()}_${backImageFile.name}`;
       const backImageRef = ref(storage, backFilePath);
       const backUploadResult = await uploadBytes(backImageRef, backImageFile);
       backImageUrl = await getDownloadURL(backUploadResult.ref);
   }
 
-  const cardsCollection = collection(db, 'cards');
+  const cardsCollection = collection(db, 'cards2');
   await addDoc(cardsCollection, {
     ...cardData,
     frontImageUrl: imageUrl,
@@ -749,7 +749,7 @@ export const addCard = async (
 
 
 export const deleteCard = async (card: CardData): Promise<void> => {
-    const cardRef = doc(db, 'cards', card.id);
+    const cardRef = doc(db, 'cards2', card.id);
     await deleteDoc(cardRef);
 
     if (card.frontImageUrl && card.frontImageUrl.includes('firebasestorage.googleapis.com')) {
