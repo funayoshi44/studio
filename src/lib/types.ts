@@ -87,9 +87,21 @@ export interface Game {
   status: 'waiting' | 'in-progress' | 'finished';
   createdAt: Timestamp;
   gameState: any;
-  winner?: string | null; // UID of the winner
+  winner?: string | 'draw' | null;
   maxPlayers?: number;
 }
+
+export type OnlineGameRecord = {
+    id: string;
+    gameType: GameType;
+    opponent: {
+        displayName: string;
+        photoURL: string;
+    };
+    result: 'win' | 'loss' | 'draw';
+    playedAt: Date;
+}
+
 
 // --- Chat Types ---
 

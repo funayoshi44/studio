@@ -365,6 +365,7 @@ export const findAvailableGames = async (): Promise<Game[]> => {
   const q = query(
     gamesCollection,
     where('status', '==', 'waiting'),
+    orderBy('createdAt', 'desc'),
     limit(20)
   );
   const querySnapshot = await getDocs(q);
@@ -547,7 +548,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId),
-        // orderBy('createdAt', 'desc'), // This requires a composite index
+        orderBy('createdAt', 'desc'),
         limit(50)
     );
 
@@ -667,6 +668,27 @@ export const deleteCard = async (card: CardData): Promise<void> => {
 
     await getCards(true);
 };
+
+
+// --- Game History ---
+export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
+    const gamesCollection = collection(db, 'games');
+    const q = query(
+        gamesCollection,
+        where('playerIds', 'array-contains', userId),
+        where('status', '==', 'finished'),
+        orderBy('createdAt', 'desc'),
+        limit(50) 
+    );
+
+    const querySnapshot = await getDocs(q);
+    const history: Game[] = [];
+    querySnapshot.forEach((doc) => {
+        history.push({ id: doc.id, ...doc.data() } as Game);
+    });
+    return history;
+};
+
 
 // --- Announcements ---
 
