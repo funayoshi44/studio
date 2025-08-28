@@ -47,8 +47,8 @@ export default function OnlineLobbyPage() {
       return;
     }
     fetchGames();
-    const interval = setInterval(fetchGames, 10000); // Refresh every 10 seconds
-    return () => clearInterval(interval);
+    // Removed the automatic interval fetching to reduce database reads.
+    // Users can now manually refresh the list.
   }, [user, router, fetchGames]);
   
   const handleMatchmaking = async (gameType: GameType) => {
