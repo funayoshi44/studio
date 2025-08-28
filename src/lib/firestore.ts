@@ -726,23 +726,23 @@ export const addCard = async (
   const uploadResult = await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(uploadResult.ref);
   
-  let backImageUrl: string | undefined = undefined;
+  const cardToSave: any = {
+    ...cardData,
+    frontImageUrl: imageUrl,
+    authorId: author.uid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
   if (backImageFile) {
       const backFilePath = `cards2/backs/${Date.now()}_${backImageFile.name}`;
       const backImageRef = ref(storage, backFilePath);
       const backUploadResult = await uploadBytes(backImageRef, backImageFile);
-      backImageUrl = await getDownloadURL(backUploadResult.ref);
+      cardToSave.backImageUrl = await getDownloadURL(backUploadResult.ref);
   }
 
   const cardsCollection = collection(db, 'cards2');
-  await addDoc(cardsCollection, {
-    ...cardData,
-    frontImageUrl: imageUrl,
-    backImageUrl: backImageUrl,
-    authorId: author.uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
+  await addDoc(cardsCollection, cardToSave);
 
   await getCards(true);
 };
@@ -963,3 +963,5 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
         [`participantsInfo.${senderId}`]: senderInfo
     });
 };
+
+    
