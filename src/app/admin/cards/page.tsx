@@ -30,6 +30,8 @@ type Inputs = {
   hashtags: string; // Comma-separated
   image: FileList;
   backImage?: FileList;
+  authorName: string;
+  detailPageUrl?: string;
 };
 
 export default function AddCardPage() {
@@ -104,6 +106,12 @@ export default function AddCardPage() {
                 {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
                 </div>
 
+                {/* Author Name */}
+                <div className="space-y-2">
+                    <Label htmlFor="authorName">Author Name</Label>
+                    <Input id="authorName" {...register("authorName")} placeholder="e.g. John Doe" />
+                </div>
+
                 {/* Series Name */}
                 <div className="space-y-2">
                 <Label htmlFor="seriesName">Series Name</Label>
@@ -160,6 +168,13 @@ export default function AddCardPage() {
                     />
                     {errors.rank && <p className="text-xs text-destructive">{errors.rank.message}</p>}
                 </div>
+
+                {/* Detail Page URL */}
+                <div className="space-y-2">
+                    <Label htmlFor="detailPageUrl">Detail Page URL</Label>
+                    <Input id="detailPageUrl" type="url" {...register("detailPageUrl")} placeholder="https://example.com/card/1" />
+                </div>
+
 
                 <div className="space-y-2 md:col-span-2">
                     <Label htmlFor="caption">Caption</Label>

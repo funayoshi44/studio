@@ -716,7 +716,7 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
 
 
 export const addCard = async (
-  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'backImageUrl' | 'createdAt' | 'updatedAt' | 'authorName' | 'authorId'>,
+  cardData: Omit<CardData, 'id' | 'frontImageUrl' | 'backImageUrl' | 'createdAt' | 'updatedAt' | 'authorId'>,
   imageFile: File,
   author: MockUser,
   backImageFile?: File | null
@@ -739,7 +739,6 @@ export const addCard = async (
     ...cardData,
     frontImageUrl: imageUrl,
     backImageUrl: backImageUrl,
-    authorName: author.displayName,
     authorId: author.uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
