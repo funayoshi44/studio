@@ -4,9 +4,9 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom, getCards, type CardData } from '@/lib/firestore';
+import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom, getCards, type CardData, getJankenActions, JankenAction } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Heart, Trash2, Send, Award } from 'lucide-react';
+import { Loader2, Heart, Trash2, Send, Award, Scissors } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
@@ -14,6 +14,7 @@ import { ja } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { PokerCard } from '@/components/ui/poker-card';
+import Image from 'next/image';
 
 export default function UserProfilePage() {
     const params = useParams();
@@ -25,6 +26,7 @@ export default function UserProfilePage() {
     const [profileUser, setProfileUser] = useState<MockUser | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
     const [myCards, setMyCards] = useState<CardData[]>([]);
+    const [jankenActions, setJankenActions] = useState<{[key: string]: JankenAction}>({});
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -41,6 +43,8 @@ export default function UserProfilePage() {
                         const userMyCards = allCards.filter(card => userProfile.myCards!.includes(card.id));
                         setMyCards(userMyCards);
                     }
+                    const userJankenActions = await getJankenActions(userId);
+                    setJankenActions(userJankenActions);
                 } else {
                     toast({ title: "User not found", variant: "destructive" });
                 }
@@ -95,6 +99,18 @@ export default function UserProfilePage() {
         }
     };
 
+    const JankenHandDisplay = ({ action }: { action: JankenAction }) => (
+        <div className="flex flex-col items-center gap-2">
+            <div className="relative w-40 h-40 rounded-lg overflow-hidden border">
+                <Image src={action.imageUrl} alt={action.title} layout="fill" objectFit="cover" />
+            </div>
+            <div className="text-center">
+                <p className="font-bold">{action.title}</p>
+                <p className="text-sm text-muted-foreground">{action.comment}</p>
+            </div>
+        </div>
+    );
+
 
     if (loading) {
         return <div className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto" /></div>;
@@ -104,6 +120,7 @@ export default function UserProfilePage() {
         return <div className="text-center py-10">User profile not found.</div>;
     }
 
+    const hasJankenActions = Object.keys(jankenActions).length > 0;
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -146,6 +163,22 @@ export default function UserProfilePage() {
                             {myCards.map(card => (
                                 <PokerCard key={card.id} card={card} revealed={true} />
                             ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {hasJankenActions && (
+                 <Card className="mb-8">
+                    <CardHeader>
+                        <CardTitle>My Hands</CardTitle>
+                        <CardDescription>{profileUser.displayName}'s custom Janken actions.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex justify-around md:justify-start gap-4 flex-wrap">
+                             {jankenActions.rock && <JankenHandDisplay action={jankenActions.rock} />}
+                             {jankenActions.paper && <JankenHandDisplay action={jankenActions.paper} />}
+                             {jankenActions.scissors && <JankenHandDisplay action={jankenActions.scissors} />}
                         </div>
                     </CardContent>
                 </Card>
@@ -194,3 +227,5 @@ export default function UserProfilePage() {
         </div>
     );
 }
+
+    
