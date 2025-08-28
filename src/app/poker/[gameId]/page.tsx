@@ -62,11 +62,17 @@ export default function OnlinePokerPage() {
 
         // Check for opponent disconnect only if game is in progress
         if (game?.status === 'in-progress' && gameData.status === 'finished') {
-             if (gameData.winner === user.uid) {
+             if (gameData.winner && Array.isArray(gameData.winner) && gameData.winner.includes(user.uid)) {
                 toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
              }
-             // Redirect to lobby after a disconnect is detected and handled.
-             setTimeout(() => router.push('/online'), 3000);
+        }
+        
+        const oldWinners = game?.gameState?.winners;
+        const newWinners = gameData.gameState?.winners;
+        if (user && newWinners && Array.isArray(newWinners) && JSON.stringify(oldWinners) !== JSON.stringify(newWinners)) {
+          if (newWinners.includes(user.uid)) {
+            playVictorySound();
+          }
         }
 
         setGame(gameData);
@@ -76,14 +82,7 @@ export default function OnlinePokerPage() {
       }
     });
     return () => unsubscribe();
-  }, [gameId, user, router, toast, t, game?.status]);
-  
-  // Play sound/animation on win
-  useEffect(() => {
-    if (user && gameState && gameState.winners && Array.isArray(gameState.winners) && gameState.winners.includes(user.uid)) {
-        playVictorySound();
-    }
-  }, [gameState, user, playVictorySound]);
+  }, [gameId, user, router, toast, t, game?.status, game?.gameState?.winners, playVictorySound]);
 
 
   const handleSelectCard = (index: number) => {
@@ -148,8 +147,14 @@ export default function OnlinePokerPage() {
   }
 
   const handleNextRound = async () => {
-    if (!user || game?.playerIds[0] !== user.uid) return;
-    await updateGameState(gameId, { ...game.gameState, phase: 'dealing', winners: null, resultText: '' });
+    if (!isHost || !game || !user) return;
+    try {
+      await startGameAction(gameId); // Re-use the start game action to deal new cards
+      toast({title: "New Round Started", description: "Dealing new hands..."});
+    } catch (error) {
+        console.error(error);
+        toast({ title: "Error", description: "Failed to start the next round.", variant: 'destructive'})
+    }
   };
 
   const PlayerDisplay = ({ uid }: { uid: string }) => {

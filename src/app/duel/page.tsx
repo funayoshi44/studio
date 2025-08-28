@@ -83,7 +83,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
     if (deck.length < 13) {
         const needed = 13 - deck.length;
         const defaultCards = createDefaultDeck(13); // Create a full default deck
-        // Get unique default cards that don't clash with registered ones
+        // Get unique default cards that don't clash with registered ones by number
         const uniqueDefaults = defaultCards.filter(dc => !deck.some(rc => rc.number === dc.number));
         deck.push(...uniqueDefaults.slice(0, needed));
     }
@@ -253,7 +253,9 @@ export default function DuelPage() {
         history: newHistory,
     }));
 
-    checkGameEnd(nextRound, newPlayerScore, newCpuScore, newPlayerKyuso, newCpuKyuso, isSpecialWin, winType, winner);
+    setTimeout(() => {
+        checkGameEnd(nextRound, newPlayerScore, newCpuScore, newPlayerKyuso, newCpuKyuso, isSpecialWin, winType, winner);
+    }, 2000);
     setLoading(false);
   };
   
@@ -300,6 +302,8 @@ export default function DuelPage() {
     if(ended) {
         setState(prev => ({ ...prev, gameEnded: true, finalResult, finalDetail }));
         if(winner === 'player') playVictorySound();
+    } else {
+        advanceToNextRound();
     }
   };
 
@@ -344,7 +348,7 @@ export default function DuelPage() {
 
   return (
     <div className="text-center">
-      {state.resultText === t('youWin') && <VictoryAnimation />}
+      {state.resultText === t('youWin') && !state.gameEnded && <VictoryAnimation />}
       {state.finalResult === t('duelFinalResultWin') && <VictoryAnimation />}
       <h2 className="text-3xl font-bold mb-2">{t('duelTitle')}</h2>
       <div className="mb-4 text-muted-foreground">
@@ -400,9 +404,6 @@ export default function DuelPage() {
                   </AccordionItem>
                 </Accordion>
               )}
-              <Button onClick={advanceToNextRound} className="mt-4" size="lg">
-                {t('nextRound')}
-              </Button>
             </div>
           )}
         </>
