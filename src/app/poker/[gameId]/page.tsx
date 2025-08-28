@@ -37,7 +37,7 @@ export default function OnlinePokerPage() {
   const params = useParams();
   const gameId = params.gameId as string;
   const { toast } = useToast();
-  const t = useTranslation();
+  const { t } = useTranslation();
 
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(false);

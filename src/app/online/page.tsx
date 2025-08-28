@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 export default function OnlineLobbyPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const t = useTranslation();
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const [isMatching, setIsMatching] = useState(false);

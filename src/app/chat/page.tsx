@@ -16,8 +16,7 @@ import { ja } from 'date-fns/locale';
 export default function ChatInboxPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
-    const t = useTranslation();
-    const { language } = t;
+    const { t, language } = useTranslation();
 
     const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
     const [loading, setLoading] = useState(true);

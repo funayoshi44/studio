@@ -16,8 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
 export default function HomePage() {
-  const t = useTranslation();
-  const { language } = useTranslation();
+  const { t, language } = useTranslation();
   const [cards, setCards] = useState<CardData[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [isLoadingCards, setIsLoadingCards] = useState(true);

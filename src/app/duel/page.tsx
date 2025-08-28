@@ -86,7 +86,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 
 export default function DuelPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
-  const t = useTranslation();
+  const { t } = useTranslation();
   const [state, setState] = useState<DuelState>({ ...initialDuelState, playerCards: [], cpuCards: [], isLoading: true });
   const [loading, setLoading] = useState(false);
 

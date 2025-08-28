@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData } from '@/lib/firestore';
+import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData, deleteGame } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -38,7 +38,7 @@ export default function OnlineDuelPage() {
   const gameId = params.gameId as string;
   const { toast } = useToast();
 
-  const t = useTranslation();
+  const { t } = useTranslation();
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -48,9 +48,9 @@ export default function OnlineDuelPage() {
 
   // Handle user leaving the page
   useEffect(() => {
-    const handleBeforeUnload = () => {
-        if (user && gameId && game?.status === 'in-progress') {
-            leaveGame(gameId, user.uid);
+    const handleBeforeUnload = async () => {
+        if (user && gameId && game?.status !== 'finished') {
+            await leaveGame(gameId, user.uid);
         }
     };
 

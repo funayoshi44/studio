@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useContext } from 'react';
@@ -48,7 +49,7 @@ const initialJankenState: JankenState = {
 
 export default function JankenPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
-  const t = useTranslation();
+  const { t } = useTranslation();
   const [state, setState] = useState<JankenState>(initialJankenState);
   const [loading, setLoading] = useState(false);
 

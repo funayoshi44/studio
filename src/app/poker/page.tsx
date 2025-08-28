@@ -51,7 +51,7 @@ const initialPokerState: PokerState = {
 
 export default function PokerPage() {
   const { difficulty, recordGameResult } = useContext(GameContext);
-  const t = useTranslation();
+  const { t } = useTranslation();
   const [state, setState] = useState<PokerState>(initialPokerState);
   const [loading, setLoading] = useState(false);
 

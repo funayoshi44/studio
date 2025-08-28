@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useContext } from 'react';
@@ -11,7 +12,7 @@ const difficulties: Difficulty[] = ['easy', 'normal', 'hard'];
 
 export function DifficultySelector() {
   const { difficulty, setDifficulty } = useContext(GameContext);
-  const t = useTranslation();
+  const { t } = useTranslation();
 
   const getVariant = (diff: Difficulty) => {
     if (diff === difficulty) {

@@ -20,7 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 
 export function Header() {
-  const t = useTranslation();
+  const { t } = useTranslation();
   const { user, logOut } = useContext(AuthContext);
 
   return (

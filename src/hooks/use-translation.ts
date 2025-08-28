@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useContext } from 'react';
@@ -7,11 +8,12 @@ import { translations } from '@/lib/i18n';
 type TranslationKey = keyof typeof translations['en'];
 
 export const useTranslation = () => {
-  const { language } = useContext(GameContext);
+  const context = useContext(GameContext);
+  const language = context?.language || 'en';
 
   const t = (key: TranslationKey): string => {
-    return translations[language][key] || key;
+    return translations[language]?.[key] || key;
   };
 
-  return t;
+  return { t, language };
 };

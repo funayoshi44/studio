@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useContext } from 'react';
@@ -15,7 +16,7 @@ import { useTranslation } from '@/hooks/use-translation';
 
 export function LanguageToggle() {
   const { setLanguage } = useContext(GameContext);
-  const t = useTranslation();
+  const { t } = useTranslation();
 
   return (
     <DropdownMenu>
