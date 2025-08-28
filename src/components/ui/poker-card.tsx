@@ -63,10 +63,11 @@ export function PokerCard({ card, revealed = false, className, disablePopover = 
           />
       ) : (
          <Image
-            src="https://picsum.photos/seed/card-back/200/300"
+            src="https://firebasestorage.googleapis.com/v0/b/cardverse-oajwb.firebasestorage.app/o/system-use?alt=media"
             alt="Generic card back"
             layout="fill"
             objectFit="cover"
+            unoptimized
           />
       )}
     </div>
@@ -146,7 +147,7 @@ export function PokerCard({ card, revealed = false, className, disablePopover = 
                     </div>
                 </div>
                  {card.backImageUrl && (
-                    <div className="relative h-28 w-20 overflow-hidden rounded-lg border-4 border-gray-300 bg-white text-black shadow-lg md:h-32 md:w-24 mt-[138px] -ml-[90px] -z-10">
+                    <div className="relative h-28 w-20 overflow-hidden rounded-lg border-4 border-gray-300 bg-white text-black shadow-lg md:h-32 md:w-24 mt-[138px] -ml-[90px] z-40">
                          <Image
                             src={card.backImageUrl}
                             alt={`${card.title} - Back`}
