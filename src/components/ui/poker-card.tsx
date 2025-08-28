@@ -3,7 +3,10 @@
 
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
-import type { CardData } from '@/lib/types'; // Correctly import CardData from types
+import type { CardData } from '@/lib/types';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Badge } from '@/components/ui/badge';
+import { User, Tag, Crown } from 'lucide-react';
 
 type PokerCardProps = {
   card: CardData | null;
@@ -15,21 +18,23 @@ type PokerCardProps = {
 export function PokerCard({ card, revealed = false, className }: PokerCardProps) {
   const cardValue = card ? `${card.number}${card.suit}` : '?';
 
+  const cardBack = (
+    <div
+      className={cn(
+        'relative flex h-28 w-20 items-center justify-center rounded-lg border-4 border-gray-500 bg-gray-400 text-3xl font-bold text-white shadow-md md:h-32 md:w-24',
+        className
+      )}
+    >
+      ?
+    </div>
+  );
+
   if (!revealed || !card) {
-    return (
-      <div
-        className={cn(
-          'relative flex h-28 w-20 items-center justify-center rounded-lg border-4 border-gray-500 bg-gray-400 text-3xl font-bold text-white shadow-md md:h-32 md:w-24',
-          className
-        )}
-      >
-        ?
-      </div>
-    );
+    return cardBack;
   }
 
-  return (
-    <div
+  const cardFace = (
+     <div
       className={cn(
         'relative h-28 w-20 overflow-hidden rounded-lg border-4 border-gray-300 bg-white text-black shadow-md md:h-32 md:w-24',
         className
@@ -50,10 +55,39 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
          </div>
       )}
       <div className="absolute bottom-0 left-0 right-0 bg-black/50 px-2 py-1 text-center font-bold text-white backdrop-blur-sm">
-        <span className="text-lg md:text-xl">{card.number}{card.suit}</span>
+        <span className="text-lg md:text-xl">{card.number === 0 ? 'Joker' : card.number}{card.suit}</span>
       </div>
     </div>
   );
-}
 
-    
+  return (
+    <TooltipProvider delayDuration={300}>
+        <Tooltip>
+            <TooltipTrigger asChild>{cardFace}</TooltipTrigger>
+            <TooltipContent className="max-w-xs break-words">
+                <div className="space-y-3 p-2">
+                    <h3 className="text-lg font-bold">{card.name}</h3>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <User className="h-4 w-4 shrink-0" />
+                        <span>{card.artist}</span>
+                    </div>
+                     <div className="flex items-center gap-2 text-sm text-muted-foreground capitalize">
+                        <Crown className="h-4 w-4 shrink-0" />
+                        <span>{card.rarity}</span>
+                    </div>
+                    {card.tags && card.tags.length > 0 && (
+                        <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <Tag className="h-4 w-4 shrink-0 mt-1" />
+                            <div className="flex flex-wrap gap-1">
+                                {card.tags.map(tag => (
+                                    <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </TooltipContent>
+        </Tooltip>
+    </TooltipProvider>
+  );
+}
