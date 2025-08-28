@@ -26,17 +26,19 @@ export default function OnlineLobbyPage() {
   const [matchingGameType, setMatchingGameType] = useState<GameType | null>(null);
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [joinGameId, setJoinGameId] = useState('');
-  const [gamesToList, setGamesToList] = useState<Game[]>([]);
-
+  
   const fetchGames = useCallback(async () => {
+    if(!user) return;
     try {
       const games = await findAvailableGames();
-      setAvailableGames(games);
+      // Filter out games the user is already in
+      const filteredGames = games.filter(g => !g.playerIds.includes(user.uid));
+      setAvailableGames(filteredGames);
     } catch (error) {
       console.error("Failed to fetch available games:", error);
       toast({ title: "Error", description: "Could not fetch games list."});
     }
-  }, [toast]);
+  }, [toast, user]);
 
 
   useEffect(() => {
@@ -48,13 +50,6 @@ export default function OnlineLobbyPage() {
     const interval = setInterval(fetchGames, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
   }, [user, router, fetchGames]);
-  
-  useEffect(() => {
-    if (user) {
-      const filteredGames = availableGames.filter(g => g.playerIds[0] !== user.uid);
-      setGamesToList(filteredGames);
-    }
-  }, [availableGames, user]);
   
   const handleMatchmaking = async (gameType: GameType) => {
     if (!user || isMatching) return;
@@ -105,7 +100,8 @@ export default function OnlineLobbyPage() {
         // This is a simplification. We don't know the game type from the ID alone.
         // `joinGame` will handle the transaction, but for redirection we need the type.
         // We'll try to find it in the available games list first.
-        const game = availableGames.find(g => g.id === joinGameId);
+        const allGames = await findAvailableGames(); // fetch all to find the game
+        const game = allGames.find(g => g.id === joinGameId);
         
         await joinGame(joinGameId, user);
 
@@ -203,8 +199,8 @@ export default function OnlineLobbyPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-            {gamesToList.length > 0 ? (
-                gamesToList.map(game => {
+            {availableGames.length > 0 ? (
+                availableGames.map(game => {
                     const host = game.players[game.playerIds[0]];
                     if (!host) return null;
                     return (
