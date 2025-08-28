@@ -26,7 +26,25 @@ import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 const TOTAL_ROUNDS = 13;
 
+const createDefaultDeck = (count = 13): CardData[] => {
+    return Array.from({ length: count }, (_, i) => ({
+        id: `default-${i + 1}`,
+        gameType: 'common',
+        suit: 'default',
+        number: i + 1,
+        value: i + 1,
+        name: `Default Card ${i + 1}`,
+        artist: 'System',
+        imageUrl: `https://picsum.photos/seed/card-default-${i+1}/200/300`,
+        rarity: 'common',
+        tags: []
+    }));
+};
+
 const createRandomDeck = (allCards: CardData[]): CardData[] => {
+    if (allCards.length < 13) {
+        return createDefaultDeck(13);
+    }
     const shuffled = [...allCards].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, 13);
 };
@@ -34,10 +52,6 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 
 const getInitialDuelGameState = async (playerIds: string[] = []) => {
     const allCards = await getCards();
-     if (allCards.length < 13) {
-        console.error("Not enough cards in DB for a duel, need at least 13.");
-        // Potentially return a default/fallback deck here
-    }
 
     const gameState: any = {
         currentRound: 1,
@@ -54,7 +68,7 @@ const getInitialDuelGameState = async (playerIds: string[] = []) => {
     };
 
     playerIds.forEach(uid => {
-        // Each player gets a randomized 13-card deck from all available cards
+        // Each player gets a randomized 13-card deck
         gameState.playerHands[uid] = createRandomDeck(allCards);
         gameState.scores[uid] = 0;
         gameState.kyuso[uid] = 0;
@@ -456,6 +470,14 @@ export const getUserProfile = async (userId: string): Promise<MockUser | null> =
     return null;
 }
 
+// Update a user's myCards
+export const updateMyCards = async (userId: string, cardIds: string[]): Promise<void> => {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+        myCards: cardIds,
+    });
+};
+
 // --- Posts (Bulletin Board) ---
 
 export const createPost = async (author: MockUser, content: string): Promise<void> => {
@@ -557,7 +579,7 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
             const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
             if (cachedItem) {
                 const { timestamp, data } = JSON.parse(cachedItem);
-                if (Date.now() - timestamp < CACHE_EXPIRATION_MS) {
+                if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
                     return data as CardData[];
                 }
             }
@@ -709,5 +731,3 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
         [`participantsInfo.${senderId}`]: senderInfo
     });
 };
-
-    

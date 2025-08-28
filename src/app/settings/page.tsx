@@ -13,9 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Heart, Trash2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { subscribeToUserPosts, deletePost, togglePostLike, type Post } from "@/lib/firestore";
+import { subscribeToUserPosts, deletePost, togglePostLike, type Post, getCards, type CardData, updateMyCards } from "@/lib/firestore";
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { PokerCard } from "@/components/ui/poker-card";
+import { cn } from "@/lib/utils";
+
 
 export default function SettingsPage() {
   const { user, updateUser, loading: authLoading } = useContext(AuthContext);
@@ -29,6 +33,11 @@ export default function SettingsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [posts, setPosts] = useState<Post[]>([]);
 
+  // For My Cards
+  const [allCards, setAllCards] = useState<CardData[]>([]);
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>(user?.myCards || []);
+  const [isCardDialogOpen, setIsCardDialogOpen] = useState(false);
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -36,10 +45,18 @@ export default function SettingsPage() {
         setDisplayName(user.displayName);
         setBio(user.bio || "");
         setPreview(user.photoURL);
+        setSelectedCardIds(user.myCards || []);
 
         const unsubscribe = subscribeToUserPosts(user.uid, (userPosts) => {
             setPosts(userPosts);
         });
+
+        const fetchAllCards = async () => {
+          const cards = await getCards(true);
+          setAllCards(cards);
+        }
+        fetchAllCards();
+
         return () => unsubscribe();
     }
   }, [user, authLoading, router]);
@@ -100,6 +117,35 @@ export default function SettingsPage() {
       }
   }
 
+  const handleCardSelect = (cardId: string) => {
+    setSelectedCardIds(prev => {
+        if (prev.includes(cardId)) {
+            return prev.filter(id => id !== cardId);
+        }
+        if (prev.length < 3) {
+            return [...prev, cardId];
+        }
+        toast({ title: "You can only select up to 3 cards.", variant: "destructive" });
+        return prev;
+    });
+  }
+
+  const handleSaveMyCards = async () => {
+    if (!user) return;
+    setIsLoading(true);
+    try {
+        await updateMyCards(user.uid, selectedCardIds);
+        toast({ title: "Success", description: "Your favorite cards have been updated." });
+        setIsCardDialogOpen(false);
+         // Manually update context user state
+        user.myCards = selectedCardIds;
+    } catch (error) {
+        toast({ title: "Error", description: "Failed to update your cards.", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
+    }
+  }
+
 
   if (authLoading || !user) {
     return <div className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto" /></div>;
@@ -107,7 +153,7 @@ export default function SettingsPage() {
 
   return (
     <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-1">
+        <div className="md:col-span-1 space-y-8">
             <Card>
                 <CardHeader>
                 <CardTitle>Profile Settings</CardTitle>
@@ -159,6 +205,48 @@ export default function SettingsPage() {
                     Save Changes
                     </Button>
                 </form>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>My Cards</CardTitle>
+                    <CardDescription>Select up to 3 favorite cards to show on your profile.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Dialog open={isCardDialogOpen} onOpenChange={setIsCardDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button className="w-full" variant="outline">Select My Cards</Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-4xl h-[90vh]">
+                            <DialogHeader>
+                                <DialogTitle>Select Your Favorite Cards</DialogTitle>
+                                <DialogDescription>Choose up to 3 cards. Click a card to select or deselect it.</DialogDescription>
+                            </DialogHeader>
+                            <div className="overflow-y-auto pr-4 -mr-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 py-4">
+                                    {allCards.map(card => (
+                                        <div 
+                                            key={card.id} 
+                                            onClick={() => handleCardSelect(card.id)}
+                                            className={cn("cursor-pointer rounded-lg transition-all", selectedCardIds.includes(card.id) && "ring-4 ring-primary ring-offset-2 ring-offset-background")}
+                                        >
+                                            <PokerCard card={card} revealed={true} />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <DialogFooter>
+                               <DialogClose asChild>
+                                    <Button variant="ghost">Cancel</Button>
+                                </DialogClose>
+                                <Button onClick={handleSaveMyCards} disabled={isLoading}>
+                                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Save ({selectedCardIds.length}/3)
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </CardContent>
             </Card>
         </div>

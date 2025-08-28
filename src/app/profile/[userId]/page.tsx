@@ -4,15 +4,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom } from '@/lib/firestore';
+import { getUserProfile, subscribeToUserPosts, deletePost, togglePostLike, type Post, type MockUser, getOrCreateChatRoom, getCards, type CardData } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Heart, Trash2, Send } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardContent, CardFooter, CardTitle, CardDescription } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { PokerCard } from '@/components/ui/poker-card';
 
 export default function UserProfilePage() {
     const params = useParams();
@@ -23,17 +24,23 @@ export default function UserProfilePage() {
 
     const [profileUser, setProfileUser] = useState<MockUser | null>(null);
     const [posts, setPosts] = useState<Post[]>([]);
+    const [myCards, setMyCards] = useState<CardData[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!userId) return;
 
-        const fetchUser = async () => {
+        const fetchAllData = async () => {
             setLoading(true);
             try {
                 const userProfile = await getUserProfile(userId);
                 if (userProfile) {
                     setProfileUser(userProfile);
+                    if (userProfile.myCards && userProfile.myCards.length > 0) {
+                        const allCards = await getCards();
+                        const userMyCards = allCards.filter(card => userProfile.myCards!.includes(card.id));
+                        setMyCards(userMyCards);
+                    }
                 } else {
                     toast({ title: "User not found", variant: "destructive" });
                 }
@@ -45,7 +52,7 @@ export default function UserProfilePage() {
             }
         };
 
-        fetchUser();
+        fetchAllData();
 
         const unsubscribePosts = subscribeToUserPosts(userId, (userPosts) => {
             setPosts(userPosts.sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis()));
@@ -122,6 +129,22 @@ export default function UserProfilePage() {
                 </CardContent>
             </Card>
 
+            {myCards.length > 0 && (
+                <Card className="mb-8">
+                    <CardHeader>
+                        <CardTitle>My Cards</CardTitle>
+                        <CardDescription>{profileUser.displayName}'s favorite cards.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex justify-center md:justify-start gap-4 flex-wrap">
+                            {myCards.map(card => (
+                                <PokerCard key={card.id} card={card} revealed={true} />
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
             <h2 className="text-2xl font-bold mb-4">Posts by {profileUser.displayName}</h2>
              <div className="space-y-4">
                 {posts.length > 0 ? (
@@ -140,7 +163,7 @@ export default function UserProfilePage() {
                                         {post.createdAt ? formatDistanceToNow(post.createdAt.toDate(), { addSuffix: true, locale: ja }) : '...'}
                                     </p>
                                 </div>
-                            </CardHeader>
+                            </Header>
                             <CardContent>
                                 <p className="whitespace-pre-wrap">{post.content}</p>
                             </CardContent>

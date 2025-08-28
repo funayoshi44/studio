@@ -25,6 +25,7 @@ export type MockUser = {
   bio?: string; // Optional bio field
   isAdmin: boolean; // Admin flag
   isGuest?: boolean; // Guest flag
+  myCards?: string[]; // Array of Card IDs
 };
 
 // Represents a post on the bulletin board
