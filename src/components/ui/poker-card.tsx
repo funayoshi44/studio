@@ -49,11 +49,26 @@ export function PokerCard({ card, revealed = false, className, disablePopover = 
   const cardBack = (
     <div
       className={cn(
-        'relative flex h-28 w-20 items-center justify-center rounded-lg border-4 border-gray-500 bg-gray-400 text-3xl font-bold text-white shadow-md md:h-32 md:w-24',
+        'relative flex h-28 w-20 items-center justify-center rounded-lg border-4 border-gray-500 bg-gray-400 text-3xl font-bold text-white shadow-md md:h-32 md:w-24 overflow-hidden',
         className
       )}
     >
-      ?
+      {card && card.backImageUrl ? (
+         <Image
+            src={card.backImageUrl}
+            alt="Card back"
+            layout="fill"
+            objectFit="cover"
+            unoptimized
+          />
+      ) : (
+         <Image
+            src="https://picsum.photos/seed/card-back/200/300"
+            alt="Generic card back"
+            layout="fill"
+            objectFit="cover"
+          />
+      )}
     </div>
   );
 
@@ -130,21 +145,20 @@ export function PokerCard({ card, revealed = false, className, disablePopover = 
                         )}
                     </div>
                 </div>
+                 {card.backImageUrl && (
+                    <div className="relative h-28 w-20 overflow-hidden rounded-lg border-4 border-gray-300 bg-white text-black shadow-lg md:h-32 md:w-24 mt-[138px] -ml-[90px] -z-10">
+                         <Image
+                            src={card.backImageUrl}
+                            alt={`${card.title} - Back`}
+                            fill
+                            style={{ objectFit: 'cover' }}
+                            data-ai-hint="card back design"
+                            unoptimized
+                        />
+                    </div>
+                )}
             </div>
-             {card.backImageUrl && (
-                <div className="relative h-28 w-20 overflow-hidden rounded-lg border-4 border-gray-300 bg-white text-black shadow-lg md:h-32 md:w-24 mt-[-60px] ml-[150px] -z-10">
-                     <Image
-                        src={card.backImageUrl}
-                        alt={`${card.title} - Back`}
-                        fill
-                        style={{ objectFit: 'cover' }}
-                        data-ai-hint="card back design"
-                        unoptimized
-                    />
-                </div>
-            )}
         </PopoverContent>
     </Popover>
   );
 }
-

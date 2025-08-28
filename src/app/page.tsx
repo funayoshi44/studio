@@ -32,16 +32,16 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
 
     const setupGame = useCallback(() => {
-        const cardsWithBacks = allCards.filter(c => c.backImageUrl);
-        if (cardsWithBacks.length < 3) return; // Not enough cards to play
+        const cardsWithFronts = allCards.filter(c => c.frontImageUrl);
+        if (cardsWithFronts.length < 3) return;
 
         const jokers = allCards.filter(c => c.rank === 'Joker');
-        const nonJokersWithBacks = cardsWithBacks.filter(c => c.rank !== 'Joker');
+        const nonJokers = cardsWithFronts.filter(c => c.rank !== 'Joker');
         
-        if (jokers.length === 0 || nonJokersWithBacks.length < 2) return;
+        if (jokers.length === 0 || nonJokers.length < 2) return;
 
         const winningCard = jokers[Math.floor(Math.random() * jokers.length)];
-        const losingCards = shuffleArray(nonJokersWithBacks).slice(0, 2);
+        const losingCards = shuffleArray(nonJokers).slice(0, 2);
         
         setGameCards(shuffleArray([winningCard, ...losingCards]));
         setRevealed(false);
@@ -67,7 +67,7 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
             <Card className="bg-card/80 backdrop-blur-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card!</CardTitle>
-                    <CardDescription>Not enough cards with back images to play. Please add at least 3 cards (including one Joker) with back images in the admin panel.</CardDescription>
+                    <CardDescription>Not enough cards to play. Please add at least 3 cards (including one Joker) in the admin panel.</CardDescription>
                 </CardHeader>
             </Card>
         );
@@ -88,13 +88,7 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
                 <div className="flex justify-center gap-4 mb-4">
                     {gameCards.map((card, index) => (
                         <button key={index} onClick={() => handleCardClick(card)} disabled={revealed}>
-                            {revealed ? (
-                                <PokerCard card={card} revealed={true} />
-                            ) : (
-                                <div className="relative h-28 w-20 md:h-32 md:w-24">
-                                     <Image src={card.backImageUrl!} alt="Card back" layout="fill" objectFit="cover" className="rounded-lg" unoptimized/>
-                                </div>
-                            )}
+                           <PokerCard card={card} revealed={revealed} />
                         </button>
                     ))}
                 </div>
