@@ -38,7 +38,8 @@ export default function SettingsPage() {
         setPreview(user.photoURL);
 
         const unsubscribe = subscribeToUserPosts(user.uid, (userPosts) => {
-            setPosts(userPosts);
+            const sortedPosts = [...userPosts].sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+            setPosts(sortedPosts);
         });
         return () => unsubscribe();
     }

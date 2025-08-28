@@ -27,7 +27,7 @@ const PostCard = ({ post, onReplySubmit }: { post: Post; onReplySubmit: (content
         if (post.replyCount > 0) {
             const unsubscribe = subscribeToReplies(post.id, (fetchedReplies) => {
                 // Sort replies by creation date
-                const sortedReplies = fetchedReplies.sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
+                const sortedReplies = [...fetchedReplies].sort((a, b) => a.createdAt.toMillis() - b.createdAt.toMillis());
                 setReplies(sortedReplies);
             });
             return () => unsubscribe();
