@@ -26,6 +26,7 @@ export default function OnlineLobbyPage() {
   const [matchingGameType, setMatchingGameType] = useState<GameType | null>(null);
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [joinGameId, setJoinGameId] = useState('');
+  const [gamesToList, setGamesToList] = useState<Game[]>([]);
 
   const fetchGames = useCallback(async () => {
     try {
@@ -47,6 +48,13 @@ export default function OnlineLobbyPage() {
     const interval = setInterval(fetchGames, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
   }, [user, router, fetchGames]);
+  
+  useEffect(() => {
+    if (user) {
+      const filteredGames = availableGames.filter(g => g.playerIds[0] !== user.uid);
+      setGamesToList(filteredGames);
+    }
+  }, [availableGames, user]);
   
   const handleMatchmaking = async (gameType: GameType) => {
     if (!user || isMatching) return;
@@ -121,31 +129,11 @@ export default function OnlineLobbyPage() {
       }
   }
 
-  const GameCard = ({ gameType, icon: Icon, disabled = false }: { gameType: GameType; icon: React.ElementType, disabled?: boolean }) => (
-    <Card className={`text-center ${disabled || isMatching ? 'bg-muted/50' : ''}`}>
-      <CardHeader>
-        <div className="flex justify-center mb-4">
-          <Icon className={`w-12 h-12 ${disabled || isMatching ? 'text-muted-foreground' : 'text-primary'}`} />
-        </div>
-        <CardTitle className={disabled || isMatching ? 'text-muted-foreground' : ''}>{t(`${gameType}Title`)}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {isMatching && matchingGameType === gameType ? (
-          <div className="flex flex-col items-center gap-2">
-            <Loader2 className="w-8 h-8 animate-spin" />
-            <p className="text-muted-foreground">{t('autoMatching')}</p>
-          </div>
-        ) : (
-          <Button onClick={() => handleMatchmaking(gameType)} disabled={isMatching || disabled}>
-            {disabled ? t('comingSoon') : t('autoMatch')}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  // Filter out games hosted by the current user
-  const gamesToList = user ? availableGames.filter(g => g.playerIds[0] !== user.uid) : [];
+  const matchmakingGames: { name: GameType; icon: React.ElementType, disabled?: boolean }[] = [
+    { name: 'duel', icon: Swords },
+    { name: 'janken', icon: Scissors },
+    { name: 'poker', icon: Layers },
+  ];
 
   return (
     <div className="container mx-auto">
@@ -154,13 +142,28 @@ export default function OnlineLobbyPage() {
       <div className="grid md:grid-cols-2 gap-8 mb-8">
         <Card>
             <CardHeader>
-            <CardTitle>{t('findMatch')}</CardTitle>
-            <CardDescription>{t('findMatchDescription')}</CardDescription>
+                <CardTitle>{t('findMatch')}</CardTitle>
+                <CardDescription>{t('findMatchDescription')}</CardDescription>
             </CardHeader>
-            <CardContent className="grid sm:grid-cols-3 gap-6">
-            <GameCard gameType="duel" icon={Swords} />
-            <GameCard gameType="janken" icon={Scissors} />
-            <GameCard gameType="poker" icon={Layers} />
+            <CardContent className="space-y-4">
+                {matchmakingGames.map((game) => (
+                    <div key={game.name} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                         <div className="flex items-center gap-4">
+                            <game.icon className="w-8 h-8 text-primary" />
+                            <span className="font-bold text-lg">{t(`${game.name}Title`)}</span>
+                        </div>
+                        {isMatching && matchingGameType === game.name ? (
+                            <div className="flex items-center gap-2 px-4">
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span className="text-muted-foreground">{t('autoMatching')}</span>
+                            </div>
+                        ) : (
+                             <Button onClick={() => handleMatchmaking(game.name)} disabled={isMatching || game.disabled}>
+                                {game.disabled ? t('comingSoon') : t('autoMatch')}
+                            </Button>
+                        )}
+                    </div>
+                ))}
             </CardContent>
         </Card>
         <Card>
@@ -235,5 +238,3 @@ export default function OnlineLobbyPage() {
     </div>
   );
 }
-
-    
