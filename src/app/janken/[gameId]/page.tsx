@@ -61,8 +61,12 @@ export default function OnlineJankenPage() {
         const fetchAllActions = async () => {
             const allActions: { [uid: string]: { [key in Move]?: JankenAction } } = {};
             for (const uid of game.playerIds) {
-                const userActions = await getJankenActions(uid);
-                allActions[uid] = userActions;
+                try {
+                    const userActions = await getJankenActions(uid);
+                    allActions[uid] = userActions;
+                } catch (error) {
+                    console.error(`Failed to fetch janken actions for user ${uid}`, error);
+                }
             }
             setJankenActions(allActions);
         };
@@ -384,8 +388,8 @@ export default function OnlineJankenPage() {
                             Opponent's first move was: <MoveDisplay uid={opponentId} phase='initial'/>
                         </div>
                      )}
-                     <JankenMoveSelector onSelect={handleSelectMove} disabled={loading || myMoves[gameState.phase] != null} />
-                    {myMoves[gameState.phase] && opponentMoves && !opponentMoves[gameState.phase] && (
+                     <JankenMoveSelector onSelect={handleSelectMove} disabled={loading || (myMoves && myMoves[gameState.phase] != null)} />
+                    {myMoves && myMoves[gameState.phase] && opponentMoves && !opponentMoves[gameState.phase] && (
                         <p className="mt-4 animate-pulse">{t('waitingForOpponentMove')}</p>
                     )}
                 </div>
