@@ -27,30 +27,26 @@ export default function OnlineLobbyPage() {
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [joinGameId, setJoinGameId] = useState('');
 
+  const fetchGames = useCallback(async () => {
+    try {
+      const games = await findAvailableGames();
+      setAvailableGames(games);
+    } catch (error) {
+      console.error("Failed to fetch available games:", error);
+      toast({ title: "Error", description: "Could not fetch games list."});
+    }
+  }, [toast]);
+
+
   useEffect(() => {
     if (!user) {
       router.push('/login');
       return;
     }
-  }, [user, router]);
-
-  const fetchGames = useCallback(async () => {
-    if(!user) return;
-    try {
-      const games = await findAvailableGames();
-      setAvailableGames(games.filter(g => g.playerIds[0] !== user.uid));
-    } catch (error) {
-      console.error("Failed to fetch available games:", error);
-      toast({ title: "Error", description: "Could not fetch games list."});
-    }
-  }, [user, toast]);
-
-
-  useEffect(() => {
     fetchGames();
     const interval = setInterval(fetchGames, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [fetchGames]);
+  }, [user, router, fetchGames]);
   
   const handleMatchmaking = async (gameType: GameType) => {
     if (!user || isMatching) return;
@@ -79,9 +75,7 @@ export default function OnlineLobbyPage() {
     setIsJoining(gameId);
     try {
         await joinGame(gameId, user);
-        // Find the correct game type from the game object to redirect.
-        const gameToJoin = availableGames.find(g => g.id === gameId) ?? { gameType: 'duel' };
-        router.push(`/${gameToJoin.gameType}/${gameId}`);
+        router.push(`/${gameType}/${gameId}`);
     } catch (error) {
         console.error("Failed to join game:", error);
         toast({
@@ -100,25 +94,21 @@ export default function OnlineLobbyPage() {
       setIsJoining(joinGameId);
       
       try {
-        // Attempt to join the game first to ensure it's valid
-        await joinGame(joinGameId, user);
-        
         // This is a simplification. We don't know the game type from the ID alone.
-        // We will push to a generic path and let the game page logic handle it.
-        // A more robust solution involves fetching the game doc from Firestore first,
-        // which we do implicitly in joinGame. Let's redirect based on that.
-        // For now, we'll try to find it in the available games list first.
+        // `joinGame` will handle the transaction, but for redirection we need the type.
+        // We'll try to find it in the available games list first.
         const game = availableGames.find(g => g.id === joinGameId);
         
+        await joinGame(joinGameId, user);
+
         if (game) {
             router.push(`/${game.gameType}/${joinGameId}`);
         } else {
-            // If not in the list, it's a private game. We need to fetch its type.
-            // For now, we assume a default and let the destination page handle it.
-            // This part is tricky without an extra DB read. We'll rely on joinGame succeeding.
-            // Let's assume duel for now as a fallback, but this could be improved.
-            // A better way is to have `joinGame` return the game data.
-            router.push(`/duel/${joinGameId}`); // Fallback, may not work for janken
+            // If not in the public list, it might be a private game.
+            // We have to assume a game type or fetch the doc.
+            // For simplicity, we'll try to redirect and let the page handle it.
+            // This is not ideal. A better `joinGame` would return the game data.
+            router.push(`/duel/${joinGameId}`); // Fallback to a default
         }
       } catch (error) {
           console.error("Failed to join game with ID:", error);
@@ -153,6 +143,9 @@ export default function OnlineLobbyPage() {
       </CardContent>
     </Card>
   );
+
+  // Filter out games hosted by the current user
+  const gamesToList = user ? availableGames.filter(g => g.playerIds[0] !== user.uid) : [];
 
   return (
     <div className="container mx-auto">
@@ -207,8 +200,8 @@ export default function OnlineLobbyPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-            {availableGames.length > 0 ? (
-                availableGames.map(game => {
+            {gamesToList.length > 0 ? (
+                gamesToList.map(game => {
                     const host = game.players[game.playerIds[0]];
                     if (!host) return null;
                     return (
