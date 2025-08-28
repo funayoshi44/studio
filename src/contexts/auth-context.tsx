@@ -75,18 +75,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocSnap = await getDoc(userDocRef);
         const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
         let userData: MockUser;
+        const isCurrentlyAdmin = fbUser.email === adminEmail;
 
         if (userDocSnap.exists()) {
             userData = userDocSnap.data() as MockUser;
             // Ensure isAdmin status is correctly updated on login
-            const isAdmin = userData.email === adminEmail;
-            if (userData.isAdmin !== isAdmin) {
-                await updateDoc(userDocRef, { isAdmin });
-                userData.isAdmin = isAdmin;
+            if (userData.isAdmin !== isCurrentlyAdmin) {
+                await updateDoc(userDocRef, { isAdmin: isCurrentlyAdmin });
+                userData.isAdmin = isCurrentlyAdmin;
             }
         } else {
             // New user profile creation
-            const isAdmin = fbUser.email === adminEmail;
             userData = {
                 uid: fbUser.uid,
                 displayName: fbUser.displayName || (fbUser.isAnonymous ? 'Guest' : 'Anonymous'),
@@ -94,7 +93,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 photoURL: fbUser.photoURL || `https://i.pravatar.cc/150?u=${fbUser.uid}`,
                 bio: fbUser.isAnonymous ? 'A guest user.' : '',
                 isGuest: fbUser.isAnonymous,
-                isAdmin: isAdmin,
+                isAdmin: isCurrentlyAdmin,
                 points: 0,
                 lastLogin: serverTimestamp() as Timestamp,
             };
