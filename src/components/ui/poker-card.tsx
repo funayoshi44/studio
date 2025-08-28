@@ -95,7 +95,7 @@ export function PokerCard({ card, revealed = false, className }: PokerCardProps)
         >
             {cardFace}
         </PopoverTrigger>
-        <PopoverContent side="right" align="start" sideOffset={15} className="w-auto p-0 border-none bg-transparent shadow-none">
+        <PopoverContent side="right" align="start" sideOffset={15} className="w-auto p-0 border-none bg-transparent shadow-none z-50">
             <div className="flex items-start">
                 <div className="bg-card text-card-foreground p-4 rounded-lg shadow-lg max-w-xs ml-2">
                     <div className="space-y-3">
