@@ -3,6 +3,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -619,7 +620,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId),
-        orderBy('createdAt', 'desc'),
+        // orderBy('createdAt', 'desc'), // This requires a composite index
         limit(50)
     );
 
