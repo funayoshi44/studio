@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useContext, useEffect, useMemo, useCallback } from 'react';
+import { useState, useContext, useEffect, useCallback } from 'react';
 import { GameContext } from '@/contexts/game-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
@@ -60,8 +60,27 @@ const initialDuelState: Omit<DuelState, 'playerCards' | 'cpuCards'> = {
   isLoading: true,
 };
 
+const createDefaultDeck = (count = 13): CardData[] => {
+    return Array.from({ length: count }, (_, i) => ({
+        id: `default-${i + 1}`,
+        gameType: 'common',
+        suit: 'default',
+        number: i + 1,
+        value: i + 1,
+        name: `Default Card ${i + 1}`,
+        artist: 'System',
+        imageUrl: `https://picsum.photos/seed/card-default-${i+1}/200/300`,
+        rarity: 'common',
+        tags: []
+    }));
+};
+
 // Function to create a random 13-card deck from all available cards
 const createRandomDeck = (allCards: CardData[]): CardData[] => {
+    if (allCards.length < 13) {
+      // Not enough registered cards, use default deck as fallback
+      return createDefaultDeck(13);
+    }
     const shuffled = [...allCards].sort(() => 0.5 - Math.random());
     return shuffled.slice(0, 13);
 };
@@ -75,18 +94,16 @@ export default function DuelPage() {
   const initializeDecks = useCallback(async () => {
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
-        const allCards = await getCards();
-        if (allCards.length < 13) {
-            throw new Error("Not enough cards in the database to play. At least 13 are required.");
-        }
-
+        const allCards = await getCards(true); // Force refresh to get latest cards
+        
+        // If not enough cards, createRandomDeck will use the fallback.
         const playerDeck = createRandomDeck(allCards);
         const cpuDeck = createRandomDeck(allCards);
 
         setState(prevState => ({
             ...prevState,
             ...initialDuelState,
-            round: prevState.round, // Keep score across resets if any
+            round: prevState.round,
             playerScore: prevState.playerScore,
             cpuScore: prevState.cpuScore,
             playerCards: playerDeck,
@@ -95,7 +112,18 @@ export default function DuelPage() {
         }));
     } catch (error) {
         console.error("Failed to initialize decks:", error);
-        setState(prevState => ({ ...prevState, isLoading: false, gameEnded: true, finalResult: "Error initializing game." }));
+        // Fallback to default decks in case of any error
+        const playerDeck = createDefaultDeck(13);
+        const cpuDeck = createDefaultDeck(13);
+        setState(prevState => ({
+             ...prevState,
+             ...initialDuelState,
+             playerCards: playerDeck,
+             cpuCards: cpuDeck,
+             isLoading: false,
+             gameEnded: true, 
+             finalResult: "Error initializing game."
+        }));
     }
   }, []);
 
@@ -104,12 +132,11 @@ export default function DuelPage() {
   }, [initializeDecks]);
 
   const restartGame = useCallback(() => {
-    setState(prevState => ({...prevState, ...initialDuelState, playerCards: [], cpuCards: []}));
     initializeDecks();
   }, [initializeDecks]);
 
   const selectPlayerCard = async (card: CardData) => {
-    if (loading || state.gameEnded) return;
+    if (loading || state.gameEnded || state.isLoading) return;
     setLoading(true);
 
     const newPlayerCards = state.playerCards.filter((c) => c.id !== card.id);
