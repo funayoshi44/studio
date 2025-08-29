@@ -133,10 +133,10 @@ export default function OnlineLobbyPage() {
       }
   }
   
-  const matchmakingGames: { name: GameType; icon: React.ElementType, disabled?: boolean }[] = [
+  const matchmakingGames: { name: GameType; icon: React.ElementType }[] = [
     { name: 'duel', icon: Swords },
-    { name: 'janken', icon: Scissors, disabled: true },
-    { name: 'poker', icon: Layers, disabled: true },
+    { name: 'janken', icon: Scissors },
+    { name: 'poker', icon: Layers },
   ];
 
   return (
@@ -171,8 +171,8 @@ export default function OnlineLobbyPage() {
                                 </Button>
                             </div>
                         ) : (
-                             <Button disabled={true}>
-                                {t('comingSoon')}
+                             <Button onClick={() => handleMatchmaking(game.name, 'firestore')} disabled={isMatching} className="w-full">
+                                <Database className="mr-2"/> 従来方式
                             </Button>
                         )}
                     </div>
