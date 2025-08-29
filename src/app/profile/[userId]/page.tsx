@@ -63,13 +63,8 @@ export default function UserProfilePage() {
         }
 
         const unsubscribePosts = subscribeToUserPosts(userId, (userPosts) => {
-            // Sort posts by creation date client-side
-            const sortedPosts = userPosts.sort((a, b) => {
-                const timeA = a.createdAt?.toMillis() || 0;
-                const timeB = b.createdAt?.toMillis() || 0;
-                return timeB - timeA;
-            });
-            setPosts(sortedPosts);
+            // The sorting is now handled within subscribeToUserPosts
+            setPosts(userPosts);
         });
 
         return () => unsubscribePosts();
