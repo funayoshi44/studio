@@ -70,6 +70,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
+    if (!auth || !db) {
+        setLoading(false);
+        setInitialAuthChecked(true);
+        return;
+    }
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setInitialAuthChecked(false);
       if (fbUser) {
@@ -136,6 +141,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const logInWithGoogle = async () => {
+    if (!auth || !googleProvider) return;
     setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
@@ -147,7 +153,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const logInWithEmail = async ({ email, password }: EmailPassCredentials) => {
-    if(!password) return;
+    if(!password || !auth) return;
     setLoading(true);
     try {
         await signInWithEmailAndPassword(auth, email, password);
@@ -159,7 +165,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const signUpWithEmail = async ({ email, password, displayName }: EmailPassCredentials) => {
-      if(!password || !displayName) return;
+      if(!password || !displayName || !auth || !db) return;
       setLoading(true);
       try {
           const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -189,6 +195,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const logInAsGuest = async () => {
+      if (!auth) return;
       setLoading(true);
       try {
           await signInAnonymously(auth);
@@ -201,7 +208,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const updateUser = async (data: UpdateUserInput) => {
-    if (!user) return;
+    if (!user || !db) return;
 
     setLoading(true);
     let newPhotoURL = user.photoURL;
@@ -232,6 +239,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   const logOut = async () => {
+    if (!auth) return;
     const wasGuest = user?.isGuest;
     const userToDelete = auth.currentUser;
     try {

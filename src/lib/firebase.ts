@@ -1,11 +1,11 @@
 
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseOptions } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getDatabase } from "firebase/database";
 import { getFirestore, initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-const firebaseConfig = {
+const firebaseConfig: FirebaseOptions = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
@@ -15,14 +15,29 @@ const firebaseConfig = {
   databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
 };
 
-// Initialize Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// A function to initialize Firebase and return app, creating it if it doesn't exist.
+// This prevents re-initialization in the client-side/hot-reload environment.
+const getFirebaseApp = () => {
+    if (getApps().length === 0) {
+        // Ensure all required config values are present before initializing
+        if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+            return initializeApp(firebaseConfig);
+        } else {
+            // If config is not available, we can't initialize.
+            // This might happen during server-side rendering if env vars aren't available.
+            return null;
+        }
+    }
+    return getApp();
+};
 
-// Initialize services
-const auth = getAuth(app);
-const db = initializeFirestore(app, { localCache: persistentLocalCache() });
-const rtdb = getDatabase(app);
-const storage = getStorage(app);
-const googleProvider = new GoogleAuthProvider();
+const app = getFirebaseApp();
+
+// Lazy initialization for services to avoid errors when app is not available
+const auth = app ? getAuth(app) : null;
+const db = app ? initializeFirestore(app, { localCache: persistentLocalCache() }) : null;
+const rtdb = app ? getDatabase(app) : null;
+const storage = app ? getStorage(app) : null;
+const googleProvider = app ? new GoogleAuthProvider() : null;
 
 export { app, auth, db, rtdb, storage, googleProvider };
