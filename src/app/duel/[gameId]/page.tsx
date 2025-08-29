@@ -86,7 +86,7 @@ export default function OnlineDuelPage() {
             setGameStatus(newStatus)
         }),
         onValue(ref(gameBaseRef, 'players'), snap => setGamePlayers(snap.val())),
-        onValue(ref(gameBase  Ref, 'playerIds'), snap => setPlayerIds(snap.val() || [])),
+        onValue(ref(gameBaseRef, 'playerIds'), snap => setPlayerIds(snap.val() || [])),
         onValue(ref(gameBaseRef, 'gameState'), snap => setGameState(snap.val())),
         onValue(ref(gameBaseRef, 'winner'), snap => setWinner(snap.val())),
     ];
