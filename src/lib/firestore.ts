@@ -966,8 +966,7 @@ export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[
     if (!db) return () => {};
     const q = query(
         collection(db, 'chatRooms'),
-        where('participantIds', 'array-contains', userId),
-        orderBy('updatedAt', 'desc')
+        where('participantIds', 'array-contains', userId)
     );
 
     return onSnapshot(q, (querySnapshot) => {
@@ -975,6 +974,14 @@ export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[
         querySnapshot.forEach((doc) => {
             rooms.push({ id: doc.id, ...doc.data() } as ChatRoom);
         });
+
+        // Sort by 'updatedAt' in descending order on the client
+        rooms.sort((a, b) => {
+            const timeA = a.updatedAt?.toMillis() || 0;
+            const timeB = b.updatedAt?.toMillis() || 0;
+            return timeB - timeA;
+        });
+
         callback(rooms);
     });
 };
@@ -1020,3 +1027,4 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
     
 
     
+
