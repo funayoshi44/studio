@@ -33,11 +33,10 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
 
     const setupGame = useCallback(() => {
-        const cardsWithFronts = allCards.filter(c => c.frontImageUrl);
-        if (cardsWithFronts.length < 3) return;
+        if (allCards.length < 3) return;
 
-        const jokers = allCards.filter(c => c.rank === 'Joker');
-        const nonJokers = cardsWithFronts.filter(c => c.rank !== 'Joker');
+        const jokers = allCards.filter(c => c.rank === 'Joker' || c.rank === 0);
+        const nonJokers = allCards.filter(c => c.rank !== 'Joker' && c.rank !== 0);
         
         if (jokers.length === 0 || nonJokers.length < 2) return;
 
@@ -56,7 +55,7 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
     const handleCardClick = (card: CardData) => {
         if (revealed) return;
         setRevealed(true);
-        if (card.rank === 'Joker') {
+        if (card.rank === 'Joker' || card.rank === 0) {
             setResult('win');
         } else {
             setResult('lose');
