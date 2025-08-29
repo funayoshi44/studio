@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-import { findAndJoinGame, type Game, findAvailableGames, joinGame, subscribeToAvailableGames } from '@/lib/firestore';
+import { findAndJoinGame, type Game, subscribeToAvailableGames, joinGame } from '@/lib/firestore';
 import { findAndJoinRTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -51,11 +51,18 @@ export default function OnlineLobbyPage() {
     setMatchingGameType(gameType);
 
     try {
-      const gameId = dbType === 'rtdb'
-        ? await findAndJoinRTDBGame(user, gameType)
-        : await findAndJoinGame(user, gameType);
+      let gameId: string;
+      let path: string;
+
+      if (dbType === 'rtdb') {
+        gameId = await findAndJoinRTDBGame(user, gameType);
+        path = `/${gameType}/${gameId}`;
+      } else {
+        gameId = await findAndJoinGame(user, gameType);
+        path = gameType === 'duel' ? `/${gameType}-legacy/${gameId}` : `/${gameType}/${gameId}`;
+      }
       
-      router.push(`/${gameType}/${gameId}`);
+      router.push(path);
 
     } catch (error) {
       console.error("Failed to find or create game:", error);
@@ -74,7 +81,8 @@ export default function OnlineLobbyPage() {
     setIsJoining(gameId);
     try {
         await joinGame(gameId, user);
-        router.push(`/${gameType}/${gameId}`);
+        const path = gameType === 'duel' ? `/${gameType}-legacy/${gameId}` : `/${gameType}/${gameId}`;
+        router.push(path);
     } catch (error) {
         console.error("Failed to join game:", error);
         toast({
@@ -92,26 +100,19 @@ export default function OnlineLobbyPage() {
       setIsJoining(joinGameId);
       
       try {
-        // This is a simplification. We don't know the game type from the ID alone.
-        // `joinGame` will handle the transaction, but for redirection we need the type.
-        // We'll try to find it in the available games list first.
         const allGames = await findAvailableGames(); // fetch all to find the game
         const game = allGames.find(g => g.id === joinGameId);
         
-        // This is a temporary solution for joining RTDB games by ID
-        // A better approach would be to have a cloud function that returns game metadata by ID
         if (joinGameId.startsWith('game_')) {
-            router.push(`/duel/${joinGameId}`);
-            return;
+             router.push(`/duel/${joinGameId}`);
+             return;
         }
         
         if (game) {
-            await joinGame(joinGameId, user);
-            router.push(`/${game.gameType}/${joinGameId}`);
+            await handleJoinGame(game.id, game.gameType);
         } else {
-             // If not found in Firestore waiting list, it might be an RTDB game ID
              toast({ title: "Trying to join RTDB game...", description: "If the game exists, you will be redirected."})
-             router.push(`/duel/${joinGameId}`); // Fallback to duel for now
+             router.push(`/duel/${joinGameId}`);
         }
       } catch (error) {
           console.error("Failed to join game with ID:", error);
@@ -154,15 +155,15 @@ export default function OnlineLobbyPage() {
                             </div>
                         ) : (
                             <div className="flex flex-col sm:flex-row gap-2">
-                                <Button onClick={() => handleMatchmaking(game.name, 'firestore')} disabled={isMatching} className="flex-1">
+                                <Button onClick={() => handleMatchmaking(game.name, 'firestore')} disabled={isMatching}>
                                     <Database className="mr-2"/> 従来方式
                                 </Button>
                                 {game.rtdbEnabled ? (
-                                    <Button onClick={() => handleMatchmaking(game.name, 'rtdb')} disabled={isMatching} className="flex-1">
+                                    <Button onClick={() => handleMatchmaking(game.name, 'rtdb')} disabled={isMatching}>
                                         <Zap className="mr-2" /> 高速方式 (RTDB)
                                     </Button>
                                 ) : (
-                                    <Button disabled={true} className="flex-1" variant="secondary">
+                                    <Button disabled={true} variant="secondary">
                                         <Construction className="mr-2" /> 高速方式 (準備中)
                                     </Button>
                                 )}
