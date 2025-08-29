@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { submitMove, updateGameState, leaveGame, awardPoints, type Game, updateShardedGameState } from '@/lib/firestore';
+import { updateShardedGameState, leaveGame } from '@/lib/firestore';
 import { subscribeToGameSharded } from '@/lib/firestore-game-subs';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag, Loader2 } from 'lucide-react';
@@ -17,7 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
-import type { CardData } from '@/lib/types';
+import type { CardData, Game } from '@/lib/types';
 import { useCardsByIds } from '@/hooks/use-cards-by-ids';
 
 
@@ -67,38 +67,38 @@ export default function LegacyOnlineDuelPage() {
     if (!gameId || !user) return;
     if (game?.status === 'finished') return () => {};
 
-    const unsub = subscribeToGameSharded(gameId, {
-        myUid: user.uid,
-        oppUid: opponentId ?? null,
-        onBase: (base) => {
-            if (!base) {
-                toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
-                router.push('/online');
-                return;
-            }
-             if (game?.status === 'waiting' && base.status === 'in-progress' ) {
-                toast({ title: "Game Started!", description: "Your opponent has joined." });
-            }
-            if (game?.status !== 'finished' && base.status === 'finished') {
-                 if (base.winner && (Array.isArray(base.winner) ? base.winner.includes(user.uid) : base.winner === user.uid)) {
-                    toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
-                    playVictorySound();
-                }
-            }
-            setGame(prev => ({ ...(prev ?? { id: gameId }), ...base }));
-        },
-        onMain: (main) => setGameState(prev => ({ ...prev, ...main })),
-        onScores: (s) => setGameState(prev => ({ ...prev, scores: s })),
-        onKyuso: (k) => setGameState(prev => ({ ...prev, kyuso: k })),
-        onOnly: (o) => setGameState(prev => ({ ...prev, only: o })),
-        onMyHand: (hand) => setGameState(prev => ({...prev, playerHands: { ...(prev.playerHands ?? {}), [user.uid]: hand }})),
-        onMyMove: (card) => setGameState(prev => ({...prev, moves: { ...(prev.moves ?? {}), [user.uid]: card }})),
-        onOppMove: (card) => opponentId && setGameState(prev => ({...prev, moves: { ...(prev.moves ?? {}), [opponentId]: card }})),
-        onLastHistory: (h) => setGameState(prev => ({ ...prev, lastHistory: h })),
+    const unsub = subscribeToGameSharded({
+      gameId,
+      myUid: user.uid,
+      oppUid: opponentId ?? null,
+      onBase: (base) => {
+        if (!base) {
+          toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
+          router.push('/online');
+          return;
+        }
+        if (game?.status === 'waiting' && base.status === 'in-progress' ) {
+          toast({ title: "Game Started!", description: "Your opponent has joined." });
+        }
+        if (game?.status !== 'finished' && base.status === 'finished') {
+          if (base.winner && (Array.isArray(base.winner) ? base.winner.includes(user.uid) : base.winner === user.uid)) {
+            toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+            playVictorySound();
+          }
+        }
+        setGame(prev => ({ ...(prev ?? { id: gameId }), ...base }));
+      },
+      onMain: (main) => setGameState(prev => ({ ...prev, ...main })),
+      onScores: (s) => setGameState(prev => ({ ...prev, scores: s })),
+      onKyuso: (k) => setGameState(prev => ({ ...prev, kyuso: k })),
+      onOnly: (o) => setGameState(prev => ({ ...prev, only: o })),
+      onMyHand: (hand) => setGameState(prev => ({...prev, playerHands: { ...(prev.playerHands ?? {}), [user.uid]: hand }})),
+      onMyMove: (card) => setGameState(prev => ({...prev, moves: { ...(prev.moves ?? {}), [user.uid]: card }})),
+      onOppMove: (card) => opponentId && setGameState(prev => ({...prev, moves: { ...(prev.moves ?? {}), [opponentId]: card }})),
+      onLastHistory: (h) => setGameState(prev => ({ ...prev, lastHistory: h })),
     });
 
     return () => unsub();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, user?.uid, opponentId, game?.status, router, toast, t, playVictorySound]);
 
   // Evaluate round when both players have moved
@@ -106,7 +106,7 @@ export default function LegacyOnlineDuelPage() {
     if (!gameState.moves || !user || !opponentId) return;
 
     // Only host evaluates to prevent race conditions
-    if (user.uid !== game?.playerIds?.[0]) return;
+    if (!isHost) return;
     
     const myMove = gameState.moves?.[user.uid];
     const opponentMove = gameState.moves?.[opponentId];
@@ -115,12 +115,13 @@ export default function LegacyOnlineDuelPage() {
       evaluateRound();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.moves, user?.uid, opponentId]);
+  }, [gameState.moves, user?.uid, opponentId, isHost, gameState.roundWinner]);
   
    useEffect(() => {
-    if(gameState.roundWinner === user?.uid) playVictorySound();
-    if(game?.winner === user?.uid) playVictorySound();
-  }, [gameState.roundWinner, game?.winner, user?.uid, playVictorySound]);
+    if(user && (gameState.roundWinner === user.uid || game?.winner === user.uid)) {
+      playVictorySound();
+    }
+  }, [gameState.roundWinner, game?.winner, user, playVictorySound]);
 
   const handleSelectCard = async (card: CardData) => {
     if (loading || !user || !gameState) return;
@@ -238,7 +239,6 @@ export default function LegacyOnlineDuelPage() {
       }
 
       if (ended) {
-          // awardPoints should be handled by a Cloud Function triggered by status change.
           const gameBaseRef = doc(db, 'games', gameId);
           await updateDoc(gameBaseRef, { status: 'finished', winner: finalWinnerId });
       } else {

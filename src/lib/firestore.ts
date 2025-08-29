@@ -92,7 +92,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 };
 
 
-const getInitialDuelGameState = async (allCards: CardData[], playerIds: string[]) => {
+const getInitialDuelGameState = (allCards: CardData[], playerIds: string[]) => {
     const hands: { [uid: string]: any[] } = {};
     const scores: { [uid: string]: number } = {};
     const kyuso: { [uid: string]: number } = {};
@@ -255,10 +255,24 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         
         if (isGameStarting) {
             const initialGameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
+            // This needs to be a batch write outside the transaction or handled differently
+            // We'll write it after the transaction for simplicity here.
             const batch = writeBatch(db);
             for (const key in initialGameState) {
-                const subDocRef = doc(db, 'games', gameId, 'state', key);
-                batch.set(subDocRef, initialGameState[key]);
+                if (key === 'hands' || key === 'moves') { // These are sub-collections
+                    for (const playerId in initialGameState[key]) {
+                        const subColPath = key; // 'hands' or 'moves'
+                        const playerSubDocRef = doc(db, 'games', gameId, subColPath, playerId);
+                        if(key === 'hands') {
+                             batch.set(playerSubDocRef, { cards: initialGameState[key][playerId] });
+                        } else {
+                             batch.set(playerSubDocRef, { card: initialGameState[key][playerId] });
+                        }
+                    }
+                } else { // These are documents in the 'state' subcollection
+                    const stateSubDocRef = doc(db, 'games', gameId, 'state', key);
+                    batch.set(stateSubDocRef, initialGameState[key]);
+                }
             }
             await batch.commit();
         }
@@ -282,17 +296,21 @@ export const startGame = async (gameId: string) => {
         
         transaction.update(gameRef, { status: 'in-progress' });
         
-        // This needs to be a batch write outside the transaction or handled differently
         const batch = writeBatch(db);
         for (const key in initialGameState) {
-            const subDocRef = doc(db, 'games', gameId, 'state', key);
             if (key === 'hands' || key === 'moves') { // these are collections, not docs
                 for (const playerId in initialGameState[key]) {
-                    const playerSubDocRef = doc(db, 'games', gameId, 'state', key, playerId);
-                    batch.set(playerSubDocRef, { cards: initialGameState[key][playerId] });
+                    const subColPath = key;
+                    const playerSubDocRef = doc(db, 'games', gameId, subColPath, playerId);
+                    if (key === 'hands') {
+                        batch.set(playerSubDocRef, { cards: initialGameState[key][playerId] });
+                    } else {
+                        batch.set(playerSubDocRef, { card: initialGameState[key][playerId] });
+                    }
                 }
             } else {
-                 batch.set(subDocRef, initialGameState[key]);
+                 const stateSubDocRef = doc(db, 'games', gameId, 'state', key);
+                 batch.set(stateSubDocRef, initialGameState[key]);
             }
         }
         await batch.commit();
@@ -325,7 +343,8 @@ export const updateShardedGameState = async (gameId: string, payload: any) => {
     for (const key in payload) {
         if (key === 'hands' || key === 'moves') {
              for (const playerId in payload[key]) {
-                const subDocRef = doc(db, 'games', gameId, 'state', key, playerId);
+                const subColPath = key;
+                const subDocRef = doc(db, 'games', gameId, subColPath, playerId);
                 if (payload[key][playerId] === null) {
                     batch.set(subDocRef, { card: null });
                 } else if (Array.isArray(payload[key][playerId])) {
@@ -335,8 +354,8 @@ export const updateShardedGameState = async (gameId: string, payload: any) => {
                 }
             }
         } else {
-             const subDocRef = doc(db, 'games', gameId, 'state', key);
-             batch.set(subDocRef, payload[key], { merge: true });
+             const stateSubDocRef = doc(db, 'games', gameId, 'state', key);
+             batch.set(stateSubDocRef, payload[key], { merge: true });
         }
     }
     await batch.commit();
@@ -345,10 +364,9 @@ export const updateShardedGameState = async (gameId: string, payload: any) => {
 
 // Submit a move to its own document
 export const submitMove = async (gameId: string, userId: string, move: any) => {
-    const moveDocRef = doc(db, 'games', gameId, 'state', 'moves', userId);
+    const moveDocRef = doc(db, 'games', gameId, 'moves', userId);
     await setDoc(moveDocRef, { card: move });
     
-    // Also update lastMoveBy in the main state doc
     const mainStateRef = doc(db, 'games', gameId, 'state', 'main');
     await updateDoc(mainStateRef, { lastMoveBy: userId });
 };
@@ -443,7 +461,8 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
             for (const key in initialGameState) {
                 if (key === 'hands' || key === 'moves') { // These are sub-collections
                     for(const playerId in initialGameState[key]) {
-                        const subDocRef = doc(db, 'games', suitableGameId, 'state', key, playerId);
+                        const subColPath = key;
+                        const subDocRef = doc(db, 'games', suitableGameId, subColPath, playerId);
                         if (key === 'hands') {
                              batch.set(subDocRef, { cards: initialGameState[key][playerId] });
                         } else {
