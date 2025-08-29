@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, leaveGame, awardPoints, type Game } from '@/lib/firestore';
+import { submitMove, updateGameState, leaveGame, awardPoints, type Game, updateShardedGameState } from '@/lib/firestore';
+import { subscribeToGameSharded } from '@/lib/firestore-game-subs';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,20 +18,22 @@ import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
 import type { CardData } from '@/lib/types';
+import { useCardCache } from '@/contexts/card-cache-context';
 
 
 type DuelGameState = {
   currentRound: number;
-  playerHands: { [uid: string]: CardData[] };
+  playerHands: { [uid: string]: any[] };
   scores: { [uid: string]: number };
   kyuso: { [uid: string]: number };
   only: { [uid: string]: number };
-  moves: { [uid: string]: CardData | null };
+  moves: { [uid: string]: any | null };
   lastMoveBy: string | null;
   history: { [round: number]: { [uid: string]: number } };
   roundWinner: string | 'draw' | null;
   roundResultText: string;
   roundResultDetail: string;
+  lastHistory: any;
 };
 
 const TOTAL_ROUNDS = 13;
@@ -43,54 +46,61 @@ export default function LegacyOnlineDuelPage() {
   const { toast } = useToast();
   const playVictorySound = useVictorySound();
 
-  const [game, setGame] = useState<Game | null>(null);
+  const [game, setGame] = useState<Partial<Game> & { id: string } | null>(null);
+  const [gameState, setGameState] = useState<Partial<DuelGameState>>({});
   const [loading, setLoading] = useState(false);
+  const { cards: allCards, loading: cardsLoading } = useCardCache();
+  const cardMap = useMemo(() => new Map(allCards.map(c => [c.id, c])), [allCards]);
 
   const { t } = useTranslation();
 
-  const gameState = game?.gameState as DuelGameState | undefined;
-  const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
-  const isHost = useMemo(() => user && game && game.playerIds.length > 0 && game.playerIds[0] === user.uid, [user, game]);
+  const opponentId = useMemo(() => game?.playerIds?.find(p => p !== user?.uid), [game?.playerIds, user?.uid]);
+  const isHost = useMemo(() => user && game?.playerIds?.[0] === user.uid, [user, game?.playerIds]);
 
-  // Subscribe to game updates
+  // Subscribe to sharded game updates
   useEffect(() => {
     if (!gameId || !user) return;
-    const unsubscribe = subscribeToGame(gameId, (gameData) => {
-      if (gameData) {
-        if (!gameData.playerIds.includes(user.uid)) {
-          toast({ title: "Access Denied", description: "You are not in this game.", variant: 'destructive' });
-          router.push('/online');
-          return;
-        }
 
-        // Opponent disconnected check
-        if (game?.status === 'in-progress' && gameData.status === 'finished' && gameData.winner === user.uid) {
-            toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
-        }
-        
-        // Play victory sound on win
-        if(gameData.gameState.roundWinner === user.uid && game?.gameState.roundWinner !== user.uid) {
-            playVictorySound();
-        }
-        if(gameData.winner === user.uid && game?.winner !== user.uid) {
-            playVictorySound();
-        }
-        
-        setGame(gameData);
-      } else {
-        toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
-        router.push('/online');
-      }
+    const unsub = subscribeToGameSharded(gameId, {
+        myUid: user.uid,
+        oppUid: opponentId ?? null,
+        onBase: (base) => {
+            if (!base) {
+                toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
+                router.push('/online');
+                return;
+            }
+             if (base.status === 'in-progress' && game?.status === 'waiting') {
+                toast({ title: "Game Started!", description: "Your opponent has joined." });
+            }
+            if (base.status === 'finished' && game?.status !== 'finished') {
+                 if (base.winner && Array.isArray(base.winner) ? base.winner.includes(user.uid) : base.winner === user.uid) {
+                    toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+                    playVictorySound();
+                }
+            }
+            setGame(prev => ({ ...(prev ?? { id: gameId }), ...base }));
+        },
+        onMain: (main) => setGameState(prev => ({ ...prev, ...main })),
+        onScores: (s) => setGameState(prev => ({ ...prev, scores: s })),
+        onKyuso: (k) => setGameState(prev => ({ ...prev, kyuso: k })),
+        onOnly: (o) => setGameState(prev => ({ ...prev, only: o })),
+        onMyHand: (hand) => setGameState(prev => ({...prev, playerHands: { ...(prev.playerHands ?? {}), [user.uid]: hand }})),
+        onMyMove: (card) => setGameState(prev => ({...prev, moves: { ...(prev.moves ?? {}), [user.uid]: card }})),
+        onOppMove: (card) => opponentId && setGameState(prev => ({...prev, moves: { ...(prev.moves ?? {}), [opponentId]: card }})),
+        onLastHistory: (h) => setGameState(prev => ({ ...prev, lastHistory: h })),
     });
-    return () => unsubscribe();
-  }, [gameId, user, router, toast, t, game?.status, game?.winner, game?.gameState.roundWinner, playVictorySound]);
+
+    return () => unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, user?.uid, opponentId, router, toast, t, playVictorySound]);
 
   // Evaluate round when both players have moved
   useEffect(() => {
-    if (!gameState || !user || !opponentId) return;
+    if (!gameState.moves || !user || !opponentId) return;
 
     // Only host evaluates to prevent race conditions
-    if (user.uid !== game?.playerIds[0]) return;
+    if (user.uid !== game?.playerIds?.[0]) return;
     
     const myMove = gameState.moves?.[user.uid];
     const opponentMove = gameState.moves?.[opponentId];
@@ -99,15 +109,23 @@ export default function LegacyOnlineDuelPage() {
       evaluateRound();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState?.moves, user?.uid, opponentId]);
+  }, [gameState.moves, user?.uid, opponentId]);
   
+   useEffect(() => {
+    if(gameState.roundWinner === user?.uid) playVictorySound();
+    if(game?.winner === user?.uid) playVictorySound();
+  }, [gameState.roundWinner, game?.winner, user?.uid, playVictorySound]);
+
   const handleSelectCard = async (card: CardData) => {
     if (loading || !user || !gameState) return;
-    if (gameState.moves?.[user.uid]) return; // Already played
+    const myMove = gameState.moves?.[user.uid];
+    if (myMove) return; // Already played
 
     setLoading(true);
     try {
-      await submitMove(gameId, user.uid, card);
+      // Send lightweight card object
+      const lightCard = { id: card.id, suit: card.suit, rank: card.rank, number: card.number };
+      await submitMove(gameId, user.uid, lightCard);
     } catch (error) {
       console.error("Failed to submit move:", error);
       toast({ title: "Error", description: "Failed to submit move.", variant: 'destructive' });
@@ -115,26 +133,26 @@ export default function LegacyOnlineDuelPage() {
     setLoading(false);
   };
   
-  const evaluateRound = () => {
-    if (!user || !opponentId || !gameState || !game) return;
+  const evaluateRound = async () => {
+    if (!user || !opponentId || !gameState || !game?.playerIds || !game.players) return;
 
     let winnerId: string | 'draw' = 'draw';
     let resultText = '';
     let resultDetail = '';
     let winType = '';
     
-    let newScores = { ...gameState.scores };
-    let newKyuso = { ...gameState.kyuso };
-    let newOnly = { ...gameState.only };
-    let newPlayerHands = { ...gameState.playerHands };
+    const { scores = {}, kyuso = {}, only = {}, playerHands = {}, moves = {} } = gameState;
+    let newScores = { ...scores };
+    let newKyuso = { ...kyuso };
+    let newOnly = { ...only };
 
-    const myCard = gameState.moves[user.uid];
-    const opponentCard = gameState.moves[opponentId];
+    const myLightCard = moves[user.uid];
+    const opponentLightCard = moves[opponentId];
     
-    if (!myCard || !opponentCard) return;
+    if (!myLightCard || !opponentLightCard) return;
 
-    const myCardNumber = myCard.number;
-    const opponentCardNumber = opponentCard.number;
+    const myCardNumber = myLightCard.number;
+    const opponentCardNumber = opponentLightCard.number;
 
     if (myCardNumber === 1 && opponentCardNumber === 13) { winnerId = user.uid; winType = 'only'; }
     else if (opponentCardNumber === 1 && myCardNumber === 13) { winnerId = opponentId; winType = 'only'; }
@@ -145,12 +163,12 @@ export default function LegacyOnlineDuelPage() {
 
 
     if (winnerId !== 'draw') {
-        newScores[winnerId]++;
+        newScores[winnerId] = (newScores[winnerId] || 0) + 1;
         if (winType === 'only') {
-            newOnly[winnerId]++;
+            newOnly[winnerId] = (newOnly[winnerId] || 0) + 1;
             resultDetail = t('duelResultOnlyOne');
         } else if (winType === 'kyuso') {
-            newKyuso[winnerId]++;
+            newKyuso[winnerId] = (newKyuso[winnerId] || 0) + 1;
             resultDetail = t('duelResultKyuso');
         }
     }
@@ -164,69 +182,86 @@ export default function LegacyOnlineDuelPage() {
 
     if(!resultDetail) resultDetail = `${game.players[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${game.players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
 
-    // Update hands (remove used card)
-    newPlayerHands[user.uid] = newPlayerHands[user.uid].filter(c => c.id !== myCard.id);
-    newPlayerHands[opponentId] = newPlayerHands[opponentId].filter(c => c.id !== opponentCard.id);
-    
-    const newHistory = { ...gameState.history, [gameState.currentRound]: { [user.uid]: myCardNumber, [opponentId]: opponentCardNumber }};
+    // Update hands locally first
+    const myNewHand = (playerHands[user.uid] || []).filter(c => c.id !== myLightCard.id);
+    const opponentNewHand = (playerHands[opponentId] || []).filter(c => c.id !== opponentLightCard.id);
 
-    const evaluatedState: DuelGameState = {
-        ...gameState,
+    const updatePayload = {
         scores: newScores,
         kyuso: newKyuso,
         only: newOnly,
-        playerHands: newPlayerHands,
-        roundWinner: winnerId,
-        resultText: resultText,
-        resultDetail: resultDetail,
-        history: newHistory,
+        main: {
+            ...gameState,
+            roundWinner: winnerId,
+            resultText: resultText,
+            resultDetail: resultDetail,
+        },
+        hands: {
+            [user.uid]: myNewHand,
+            [opponentId]: opponentNewHand
+        },
+        lastHistory: {
+            round: gameState.currentRound,
+            [user.uid]: myLightCard,
+            [opponentId]: opponentLightCard
+        }
     };
     
-    updateGameState(gameId, evaluatedState).then(() => {
-        setTimeout(() => {
-            checkGameEnd(evaluatedState);
-        }, 2000);
-    });
+    await updateShardedGameState(gameId, updatePayload);
+    
+    setTimeout(() => {
+        checkGameEnd(newScores, newKyuso, newOnly, gameState.currentRound ?? 1);
+    }, 2000);
   };
   
-  const checkGameEnd = async (currentState: DuelGameState) => {
-     if(!user || !opponentId || !isHost || !game) return;
+  const checkGameEnd = async (currentScores: any, currentKyuso: any, currentOnly: any, currentRound: number) => {
+     if(!user || !opponentId || !isHost || !game?.playerIds) return;
 
-      const { scores, kyuso, only, currentRound } = currentState;
       const p1Id = game.playerIds[0];
       const p2Id = game.playerIds[1];
       let ended = false;
-      let finalWinnerId: string | string[] | 'draw' | null = null;
+      let finalWinnerId: string | 'draw' | null = null;
       
-      if (only[p1Id] > 0) { ended = true; finalWinnerId = p1Id; }
-      else if (only[p2Id] > 0) { ended = true; finalWinnerId = p2Id; }
-      else if (kyuso[p1Id] >= 3) { ended = true; finalWinnerId = p1Id; }
-      else if (kyuso[p2Id] >= 3) { ended = true; finalWinnerId = p2Id; }
+      if (currentOnly[p1Id] > 0) { ended = true; finalWinnerId = p1Id; }
+      else if (currentOnly[p2Id] > 0) { ended = true; finalWinnerId = p2Id; }
+      else if (currentKyuso[p1Id] >= 3) { ended = true; finalWinnerId = p1Id; }
+      else if (currentKyuso[p2Id] >= 3) { ended = true; finalWinnerId = p2Id; }
       else if (currentRound >= TOTAL_ROUNDS) {
           ended = true;
-          if (scores[p1Id] > scores[p2Id]) finalWinnerId = p1Id;
-          else if (scores[p2Id] > scores[p1Id]) finalWinnerId = p2Id;
+          if (currentScores[p1Id] > currentScores[p2Id]) finalWinnerId = p1Id;
+          else if (currentScores[p2Id] > currentScores[p1Id]) finalWinnerId = p2Id;
           else finalWinnerId = 'draw';
       }
 
       if (ended) {
-          if (finalWinnerId !== 'draw' && finalWinnerId !== null) {
-              await awardPoints(Array.isArray(finalWinnerId) ? finalWinnerId[0] : finalWinnerId, 2); // Award 2 points for a win
+          if (finalWinnerId && finalWinnerId !== 'draw') {
+            // awardPoints is now a server-side function triggered by status change
           }
           await updateGameState(gameId, { status: 'finished', winner: finalWinnerId });
       } else {
           // Reset for next round
-          await updateGameState(gameId, {
-            ...currentState,
-            currentRound: currentState.currentRound + 1,
-            moves: { [p1Id]: null, [p2Id]: null },
-            roundWinner: null,
-            roundResultText: '',
-            roundResultDetail: '',
-            lastMoveBy: null,
-          });
+          const nextRoundPayload = {
+              main: {
+                  currentRound: currentRound + 1,
+                  roundWinner: null,
+                  roundResultText: '',
+                  roundResultDetail: '',
+                  lastMoveBy: null,
+              },
+              moves: {
+                  [p1Id]: null,
+                  [p2Id]: null,
+              }
+          }
+          await updateShardedGameState(gameId, nextRoundPayload);
       }
   };
+  
+  const rehydrateCard = (lightCard: any): CardData | null => {
+      if (!lightCard) return null;
+      const fullCard = cardMap.get(lightCard.id);
+      return fullCard ? { ...fullCard, ...lightCard } : null;
+  }
 
   const handleCopyGameId = () => {
     navigator.clipboard.writeText(gameId);
@@ -240,7 +275,7 @@ export default function LegacyOnlineDuelPage() {
     }
   };
 
-  if (!user || !game || !gameState) {
+  if (!user || !game || !game.playerIds) {
     return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
   }
   
@@ -274,10 +309,12 @@ export default function LegacyOnlineDuelPage() {
   }
   
   const ScoreDisplay = () => {
-    if (!game || !gameState) return null;
+    if (!game.playerIds?.[0] || !game.playerIds?.[1] || !gameState.scores) {
+      return null;
+    }
     const p1Id = game.playerIds[0];
     const p2Id = game.playerIds[1];
-    if (!game.players[p1Id] || !game.players[p2Id]) return null;
+    if (!game.players?.[p1Id] || !game.players?.[p2Id]) return null;
 
     return (
       <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
@@ -301,9 +338,14 @@ export default function LegacyOnlineDuelPage() {
     );
   };
 
-  const myHand = gameState.playerHands?.[user.uid] ?? [];
-  const myMove = gameState.moves?.[user.uid];
-  const opponentMove = opponentId ? gameState.moves?.[opponentId] : null;
+  if (!gameState.playerHands?.[user.uid]) {
+     return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game state...</div>;
+  }
+  
+  const myLightHand = gameState.playerHands?.[user.uid] ?? [];
+  const myFullHand = myLightHand.map(rehydrateCard).filter((c): c is CardData => c !== null);
+  const myMove = rehydrateCard(gameState.moves?.[user.uid]);
+  const opponentMove = opponentId ? rehydrateCard(gameState.moves?.[opponentId]) : null;
 
   return (
     <div className="text-center">
@@ -342,7 +384,7 @@ export default function LegacyOnlineDuelPage() {
       </div>
 
       <div className="mb-4 text-muted-foreground">
-        <span>{t('round')} {gameState.currentRound > TOTAL_ROUNDS ? TOTAL_ROUNDS : gameState.currentRound} / {TOTAL_ROUNDS}</span>
+        <span>{t('round')} {gameState.currentRound && gameState.currentRound > TOTAL_ROUNDS ? TOTAL_ROUNDS : gameState.currentRound} / {TOTAL_ROUNDS}</span>
       </div>
       <ScoreDisplay />
       
@@ -354,7 +396,7 @@ export default function LegacyOnlineDuelPage() {
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
-                            {myHand.sort((a,b) => a.number - b.number).map(card => (
+                            {myFullHand.sort((a,b) => a.number - b.number).map(card => (
                               <button key={card.id} onClick={() => handleSelectCard(card)} disabled={loading} className="transition-transform hover:scale-105">
                                   <GameCard card={card} revealed={true} />
                               </button>
@@ -397,7 +439,7 @@ export default function LegacyOnlineDuelPage() {
             <p className="text-4xl font-bold mb-4">
                 {game.winner === 'draw'
                     ? t('duelFinalResultDraw')
-                    : game.winner ? `${game.players[game.winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
+                    : game.winner ? `${game.players?.[game.winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
             </p>
             <div className="space-x-4 mt-6">
                 <Link href="/online" passHref>

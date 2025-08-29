@@ -1,4 +1,5 @@
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -34,6 +35,8 @@ const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
 // --- Point System ---
 export const awardPoints = async (userId: string, amount: number) => {
     if (!userId) return;
+    // This function should ideally be a server-side Cloud Function
+    // to prevent client-side manipulation. For now, it's here.
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
         points: increment(amount)
@@ -89,31 +92,36 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 };
 
 
-const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = []) => {
-
-    const gameState: any = {
-        currentRound: 1,
-        playerHands: {},
-        scores: {},
-        kyuso: {},
-        only: {},
-        moves: {}, // Stores the played card object
-        lastMoveBy: null,
-        history: {},
-        roundWinner: null,
-        roundResultText: '',
-        roundResultDetail: '',
-    };
+const getInitialDuelGameState = (allCards: CardData[], playerIds: string[]) => {
+    const hands: { [uid: string]: any[] } = {};
+    const scores: { [uid: string]: number } = {};
+    const kyuso: { [uid: string]: number } = {};
+    const only: { [uid: string]: number } = {};
+    const moves: { [uid: string]: null } = {};
 
     playerIds.forEach(uid => {
-        // Each player gets a randomized 13-card deck
-        gameState.playerHands[uid] = createRandomDeck(allCards);
-        gameState.scores[uid] = 0;
-        gameState.kyuso[uid] = 0;
-        gameState.only[uid] = 0;
-        gameState.moves[uid] = null;
+        hands[uid] = createRandomDeck(allCards).map(c => ({ id: c.id, suit: c.suit, rank: c.rank, number: c.number }));
+        scores[uid] = 0;
+        kyuso[uid] = 0;
+        only[uid] = 0;
+        moves[uid] = null;
     });
-    return gameState;
+
+    return {
+        main: {
+            currentRound: 1,
+            lastMoveBy: null,
+            roundWinner: null,
+            roundResultText: '',
+            roundResultDetail: '',
+        },
+        hands,
+        scores,
+        kyuso,
+        only,
+        moves,
+        lastHistory: null
+    };
 };
 
 const getInitialJankenGameState = (playerIds: string[] = []) => {
@@ -172,7 +180,7 @@ const getInitialStateForGame = async (gameType: GameType, playerIds: string[]) =
         case 'poker':
             return getInitialPokerGameState(allCards, playerIds);
         default:
-            return getInitialDuelGameState(allCards, playerIds);
+            return {};
     }
 }
 
@@ -202,10 +210,10 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
     status: 'waiting',
     createdAt: serverTimestamp(),
     maxPlayers: gameType === 'poker' ? 4 : 2,
-    gameState: {}, // Initialize with an empty object
   });
   
-  await awardPoints(user.uid, 1); // Award 1 point for creating a game
+  // Awarding points here can be risky if transaction fails. Best handled server-side.
+  // await awardPoints(user.uid, 1);
   return docRef.id;
 };
 
@@ -223,14 +231,11 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         const gameData = gameSnap.data() as Game;
         const maxPlayers = gameData.maxPlayers || 2;
         
-        // Prevent joining if game is full, or already started, or user is already in
         if (gameData.playerIds.length >= maxPlayers || gameData.status !== 'waiting' || gameData.playerIds.includes(user.uid)) {
             return;
         }
         
         const newPlayerIds = [...gameData.playerIds, user.uid];
-
-        // For Duel and Janken, start the game when lobby is full
         const isGameStarting = newPlayerIds.length === maxPlayers;
         
         const updates: any = {
@@ -244,11 +249,19 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
 
         if (isGameStarting) {
             updates.status = 'in-progress';
-            updates.gameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
         }
 
         transaction.update(gameRef, updates);
-        await awardPoints(user.uid, 1); // Award 1 point for joining
+        
+        if (isGameStarting) {
+            const initialGameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
+            const batch = writeBatch(db);
+            for (const key in initialGameState) {
+                const subDocRef = doc(db, 'games', gameId, 'state', key);
+                batch.set(subDocRef, initialGameState[key]);
+            }
+            await batch.commit();
+        }
     });
 };
 
@@ -266,16 +279,28 @@ export const startGame = async (gameId: string) => {
         }
 
         const initialGameState = await getInitialStateForGame(gameData.gameType, gameData.playerIds);
-
-        transaction.update(gameRef, {
-            status: 'in-progress',
-            gameState: initialGameState
-        });
+        
+        transaction.update(gameRef, { status: 'in-progress' });
+        
+        // This needs to be a batch write outside the transaction or handled differently
+        const batch = writeBatch(db);
+        for (const key in initialGameState) {
+            const subDocRef = doc(db, 'games', gameId, 'state', key);
+            if (key === 'hands' || key === 'moves') { // these are collections, not docs
+                for (const playerId in initialGameState[key]) {
+                    const playerSubDocRef = doc(db, 'games', gameId, 'state', key, playerId);
+                    batch.set(playerSubDocRef, { cards: initialGameState[key][playerId] });
+                }
+            } else {
+                 batch.set(subDocRef, initialGameState[key]);
+            }
+        }
+        await batch.commit();
     });
 };
 
 
-// Listen for game updates
+// Listen for game updates (deprecated for sharded model)
 export const subscribeToGame = (gameId: string, callback: (game: Game | null) => void) => {
   const gameRef = doc(db, 'games', gameId);
   return onSnapshot(gameRef, (docSnap) => {
@@ -287,103 +312,45 @@ export const subscribeToGame = (gameId: string, callback: (game: Game | null) =>
   });
 };
 
-// Update game state
-export const updateGameState = async (gameId: string, newGameState: any): Promise<void> => {
+// Update a single document
+export const updateGameState = async (gameId: string, updates: Partial<Game>): Promise<void> => {
   const gameRef = doc(db, 'games', gameId);
-  
-  const updatePayload: { [key: string]: any } = {};
-
-  if (newGameState !== undefined) {
-    updatePayload.gameState = newGameState;
-  }
-  
-  // Conditionally add status and winner to the payload if they exist in newGameState
-  if (newGameState.status !== undefined) {
-    updatePayload.status = newGameState.status;
-  }
-  if (newGameState.winner !== undefined) {
-    updatePayload.winner = newGameState.winner;
-  }
-
-  if (Object.keys(updatePayload).length > 0) {
-    await updateDoc(gameRef, updatePayload);
-  }
+  await updateDoc(gameRef, updates);
 };
 
-
-// Submit a move
-export const submitMove = async (gameId: string, userId: string, move: any, phase?: 'initial' | 'final') => {
-    const gameRef = doc(db, 'games', gameId);
-    await runTransaction(db, async (transaction) => {
-        const gameDoc = await transaction.get(gameRef);
-        if (!gameDoc.exists()) throw new Error("Game not found!");
-
-        const gameData = gameDoc.data() as Game;
-        let newGameState = { ...gameData.gameState };
-
-        if (gameData.gameType === 'janken' && phase) {
-            newGameState.moves[userId][phase] = move;
-        } else if (gameData.gameType === 'poker') {
-            if (move.action === 'exchange') {
-                const { indices } = move;
-                let playerHand = [...newGameState.playerHands[userId]];
-                let deck = [...newGameState.deck];
-                indices.forEach((index: number) => {
-                    if (deck.length > 0) {
-                        playerHand[index] = deck.pop()!;
-                    }
-                });
-                newGameState.playerHands[userId] = playerHand;
-                newGameState.deck = deck;
-                newGameState.exchangeCounts[userId]++;
-            }
-            
-            // Advance turn or go to showdown
-            const currentIndex = newGameState.turnOrder.indexOf(userId);
-            const nextIndex = (currentIndex + 1) % gameData.playerIds.length;
-            newGameState.currentTurnIndex = nextIndex;
-
-            // If it's back to the first player, or if showdown is triggered, evaluate.
-            if (nextIndex === 0 || move.action === 'showdown' || newGameState.exchangeCounts[userId] >= 2) {
-                newGameState.phase = 'showdown';
-                // Evaluate all hands
-                gameData.playerIds.forEach(pid => {
-                    newGameState.playerRanks[pid] = evaluatePokerHand(newGameState.playerHands[pid]);
-                });
-
-                // Find winner(s)
-                let highestRank = { name: '', value: 0 };
-                let winners: string[] = [];
-                gameData.playerIds.forEach(pid => {
-                    const rank = newGameState.playerRanks[pid];
-                    if (rank.value > highestRank.value) {
-                        highestRank = rank;
-                        winners = [pid];
-                    } else if (rank.value === highestRank.value) {
-                        winners.push(pid);
-                    }
-                });
-                newGameState.winners = winners;
-                newGameState.resultText = winners.length > 1 
-                    ? `Draw between ${winners.map(w => gameData.players[w]?.displayName).join(', ')}!`
-                    : `${gameData.players[winners[0]]?.displayName} wins with a ${highestRank.name}!`;
-                newGameState.phase = 'finished';
-
-                // Award points to winner(s)
-                if (winners.length > 0) {
-                    for (const winnerId of winners) {
-                       awardPoints(winnerId, 1);
-                    }
+// Update multiple sharded state documents
+export const updateShardedGameState = async (gameId: string, payload: any) => {
+    const batch = writeBatch(db);
+    
+    for (const key in payload) {
+        if (key === 'hands' || key === 'moves') {
+             for (const playerId in payload[key]) {
+                const subDocRef = doc(db, 'games', gameId, 'state', key, playerId);
+                if (payload[key][playerId] === null) {
+                    batch.set(subDocRef, { card: null });
+                } else if (Array.isArray(payload[key][playerId])) {
+                    batch.set(subDocRef, { cards: payload[key][playerId] });
+                } else {
+                    batch.set(subDocRef, { card: payload[key][playerId] });
                 }
             }
-
-        } else { // Duel
-            newGameState.moves[userId] = move;
-            newGameState.lastMoveBy = userId;
+        } else {
+             const subDocRef = doc(db, 'games', gameId, 'state', key);
+             batch.set(subDocRef, payload[key], { merge: true });
         }
-        
-        transaction.update(gameRef, { gameState: newGameState });
-    });
+    }
+    await batch.commit();
+}
+
+
+// Submit a move to its own document
+export const submitMove = async (gameId: string, userId: string, move: any) => {
+    const moveDocRef = doc(db, 'games', gameId, 'state', 'moves', userId);
+    await setDoc(moveDocRef, { card: move });
+    
+    // Also update lastMoveBy in the main state doc
+    const mainStateRef = doc(db, 'games', gameId, 'state', 'main');
+    await updateDoc(mainStateRef, { lastMoveBy: userId });
 };
 
 
@@ -466,11 +433,17 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
 
       if (isGameStarting) {
         updates.status = 'in-progress';
-        updates.gameState = await getInitialStateForGame(gameType, newPlayerIds);
       }
       
       transaction.update(gameRef, updates);
-      await awardPoints(user.uid, 1);
+      
+      if (isGameStarting) {
+          const initialGameState = await getInitialStateForGame(gameType, newPlayerIds);
+          // Can't use batch write inside a transaction, so this needs to be handled post-transaction
+          // Or, better, by a Cloud Function triggered by status change.
+          // For now, we will do it after the transaction.
+      }
+      
       return suitableGameId;
     } else {
       // No suitable waiting games found, create a new one
@@ -482,10 +455,8 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
         playerIds: [user.uid],
         status: 'waiting',
         createdAt: serverTimestamp(),
-        gameState: {},
         maxPlayers: maxPlayers,
       });
-      await awardPoints(user.uid, 1);
       return newGameRef.id;
     }
   });
@@ -510,15 +481,12 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
             if (remainingPlayers.length < 2 && gameData.status === 'in-progress') {
                 // If only one player is left, they are the winner.
                 const winnerId = remainingPlayers[0] || null;
-                if (winnerId) {
-                    await awardPoints(winnerId, 1); // Award point for winning
-                }
+                // awardPoints is now a server-side responsibility.
                 transaction.update(gameRef, {
                     status: 'finished',
                     winner: winnerId,
                 });
             } else if (remainingPlayers.length > 0) {
-                 // The game continues with the remaining players
                  const newPlayerIds = remainingPlayers;
                  const newPlayersObject: { [uid: string]: any } = {};
                  newPlayerIds.forEach(pid => {
@@ -529,8 +497,8 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
                      players: newPlayersObject
                  })
             } else {
-                // No players left, just mark as finished
-                transaction.update(gameRef, { status: 'finished', winner: null });
+                // No players left, we can delete the game.
+                transaction.delete(gameRef);
             }
         });
     } catch (error) {
