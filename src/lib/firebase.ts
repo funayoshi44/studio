@@ -2,7 +2,7 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getDatabase } from "firebase/database";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
@@ -17,8 +17,10 @@ const firebaseConfig = {
 
 // Initialize Firebase
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Initialize services
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 const rtdb = getDatabase(app);
 const storage = getStorage(app);
 const googleProvider = new GoogleAuthProvider();

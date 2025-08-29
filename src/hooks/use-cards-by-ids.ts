@@ -1,11 +1,10 @@
+
 // hooks/use-cards-by-ids.ts
 import { useEffect, useMemo, useState } from 'react';
-import { initializeFirestore, persistentLocalCache, collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
-import { app } from '@/lib/firebase';
+import { collection, query, where, getDocs, DocumentData } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import type { CardData } from '@/lib/types';
 
-// Initialize with persistent cache if not already done elsewhere
-const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 
 export function useCardsByIds(ids: string[]) {
   const [cards, setCards] = useState<CardData[]>([]);
