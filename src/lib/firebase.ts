@@ -16,14 +16,7 @@ const firebaseConfig: FirebaseOptions = {
 };
 
 // A function to initialize Firebase and return app, creating it if it doesn't exist.
-// This prevents re-initialization in the client-side/hot-reload environment.
 const getFirebaseApp = () => {
-    // Check if all required config values are present before initializing
-    if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-        console.warn("Firebase config not complete, skipping initialization.");
-        return null;
-    }
-
     if (getApps().length === 0) {
         return initializeApp(firebaseConfig);
     }
@@ -32,11 +25,11 @@ const getFirebaseApp = () => {
 
 const app = getFirebaseApp();
 
-// Initialize services only if the app was successfully initialized
-const auth = app ? getAuth(app) : null;
-const db = app ? initializeFirestore(app, { localCache: persistentLocalCache() }) : null;
-const rtdb = app ? getDatabase(app) : null;
-const storage = app ? getStorage(app) : null;
-const googleProvider = app ? new GoogleAuthProvider() : null;
+// Initialize services
+const auth = getAuth(app);
+const db = initializeFirestore(app, { localCache: persistentLocalCache() });
+const rtdb = getDatabase(app);
+const storage = getStorage(app);
+const googleProvider = new GoogleAuthProvider();
 
 export { app, auth, db, rtdb, storage, googleProvider };
