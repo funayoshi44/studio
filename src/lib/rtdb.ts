@@ -263,3 +263,4 @@ export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId
     onDisconnect(playerStatusRef).set(false); // Set to offline on disconnect
     set(playerStatusRef, isOnline);
 }
+
