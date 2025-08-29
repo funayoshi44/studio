@@ -9,7 +9,7 @@ import { findAndJoinGame, type Game, findAvailableGames, joinGame } from '@/lib/
 import { findAndJoinRTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn } from 'lucide-react';
+import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database } from 'lucide-react';
 import type { GameType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -52,15 +52,14 @@ export default function OnlineLobbyPage() {
     // Users can now manually refresh the list.
   }, [user, router, fetchGames]);
   
-  const handleMatchmaking = async (gameType: GameType) => {
+  const handleMatchmaking = async (gameType: GameType, dbType: 'firestore' | 'rtdb') => {
     if (!user || isMatching) return;
 
     setIsMatching(true);
     setMatchingGameType(gameType);
 
     try {
-      // Use RTDB for Duel, Firestore for others
-      const gameId = gameType === 'duel'
+      const gameId = dbType === 'rtdb'
         ? await findAndJoinRTDBGame(user, gameType)
         : await findAndJoinGame(user, gameType);
       
@@ -114,13 +113,14 @@ export default function OnlineLobbyPage() {
             router.push(`/duel/${joinGameId}`);
             return;
         }
-
-        await joinGame(joinGameId, user);
-
+        
         if (game) {
+            await joinGame(joinGameId, user);
             router.push(`/${game.gameType}/${joinGameId}`);
         } else {
-            router.push(`/duel/${joinGameId}`); // Fallback to a default
+             // If not found in Firestore waiting list, it might be an RTDB game ID
+             toast({ title: "Trying to join RTDB game...", description: "If the game exists, you will be redirected."})
+             router.push(`/duel/${joinGameId}`); // Fallback to duel for now
         }
       } catch (error) {
           console.error("Failed to join game with ID:", error);
@@ -132,7 +132,7 @@ export default function OnlineLobbyPage() {
           setIsJoining(null);
       }
   }
-
+  
   const matchmakingGames: { name: GameType; icon: React.ElementType, disabled?: boolean }[] = [
     { name: 'duel', icon: Swords },
     { name: 'janken', icon: Scissors, disabled: true },
@@ -151,19 +151,28 @@ export default function OnlineLobbyPage() {
             </CardHeader>
             <CardContent className="space-y-4">
                 {matchmakingGames.map((game) => (
-                    <div key={game.name} className="flex items-center justify-between p-3 rounded-lg border bg-background">
+                    <div key={game.name} className="p-3 rounded-lg border bg-background space-y-3">
                          <div className="flex items-center gap-4">
                             <game.icon className="w-8 h-8 text-primary" />
                             <span className="font-bold text-lg">{t(`${game.name}Title` as any)}</span>
                         </div>
                         {isMatching && matchingGameType === game.name ? (
-                            <div className="flex items-center gap-2 px-4">
+                             <div className="flex items-center gap-2 px-4">
                                 <Loader2 className="w-5 h-5 animate-spin" />
                                 <span className="text-muted-foreground">{t('autoMatching')}</span>
                             </div>
+                        ) : game.name === 'duel' ? (
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <Button onClick={() => handleMatchmaking('duel', 'firestore')} disabled={isMatching} className="flex-1">
+                                    <Database className="mr-2"/> 従来方式
+                                </Button>
+                                <Button onClick={() => handleMatchmaking('duel', 'rtdb')} disabled={isMatching} className="flex-1">
+                                    <Zap className="mr-2" /> 高速方式 (RTDB)
+                                </Button>
+                            </div>
                         ) : (
-                             <Button onClick={() => handleMatchmaking(game.name)} disabled={isMatching || game.disabled}>
-                                {game.disabled ? t('comingSoon') : t('autoMatch')}
+                             <Button disabled={true}>
+                                {t('comingSoon')}
                             </Button>
                         )}
                     </div>
