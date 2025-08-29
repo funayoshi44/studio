@@ -5,11 +5,11 @@ import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-import { findAndJoinGame, type Game, findAvailableGames, joinGame } from '@/lib/firestore';
+import { findAndJoinGame, type Game, findAvailableGames, joinGame, subscribeToAvailableGames } from '@/lib/firestore';
 import { findAndJoinRTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database } from 'lucide-react';
+import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database, Construction } from 'lucide-react';
 import type { GameType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -28,29 +28,21 @@ export default function OnlineLobbyPage() {
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [joinGameId, setJoinGameId] = useState('');
   
-  const fetchGames = useCallback(async () => {
-    if(!user) return;
-    try {
-      const games = await findAvailableGames();
-      // Filter out games the user is already in
-      const filteredGames = games.filter(g => !g.playerIds.includes(user.uid));
-      setAvailableGames(filteredGames);
-    } catch (error) {
-      console.error("Failed to fetch available games:", error);
-      toast({ title: "Error", description: "Could not fetch games list."});
-    }
-  }, [toast, user]);
-
-
   useEffect(() => {
     if (!user) {
       router.push('/login');
       return;
     }
-    fetchGames();
-    // Removed the automatic interval fetching to reduce database reads.
-    // Users can now manually refresh the list.
-  }, [user, router, fetchGames]);
+    
+    // Set up a real-time listener for available games
+    const unsubscribe = subscribeToAvailableGames((games) => {
+        const filteredGames = games.filter(g => !g.playerIds.includes(user.uid));
+        setAvailableGames(filteredGames);
+    });
+
+    // Clean up the listener when the component unmounts
+    return () => unsubscribe();
+  }, [user, router]);
   
   const handleMatchmaking = async (gameType: GameType, dbType: 'firestore' | 'rtdb') => {
     if (!user || isMatching) return;
@@ -91,7 +83,6 @@ export default function OnlineLobbyPage() {
             variant: "destructive"
         });
         setIsJoining(null);
-        fetchGames(); // Refresh list
     }
   };
 
@@ -133,10 +124,10 @@ export default function OnlineLobbyPage() {
       }
   }
   
-  const matchmakingGames: { name: GameType; icon: React.ElementType }[] = [
-    { name: 'duel', icon: Swords },
-    { name: 'janken', icon: Scissors },
-    { name: 'poker', icon: Layers },
+  const matchmakingGames: { name: GameType; icon: React.ElementType, rtdbEnabled: boolean }[] = [
+    { name: 'duel', icon: Swords, rtdbEnabled: true },
+    { name: 'janken', icon: Scissors, rtdbEnabled: false },
+    { name: 'poker', icon: Layers, rtdbEnabled: false },
   ];
 
   return (
@@ -157,23 +148,25 @@ export default function OnlineLobbyPage() {
                             <span className="font-bold text-lg">{t(`${game.name}Title` as any)}</span>
                         </div>
                         {isMatching && matchingGameType === game.name ? (
-                             <div className="flex items-center gap-2 px-4">
+                             <div className="flex items-center justify-center gap-2 px-4 py-2">
                                 <Loader2 className="w-5 h-5 animate-spin" />
                                 <span className="text-muted-foreground">{t('autoMatching')}</span>
                             </div>
-                        ) : game.name === 'duel' ? (
+                        ) : (
                             <div className="flex flex-col sm:flex-row gap-2">
-                                <Button onClick={() => handleMatchmaking('duel', 'firestore')} disabled={isMatching} className="flex-1">
+                                <Button onClick={() => handleMatchmaking(game.name, 'firestore')} disabled={isMatching} className="flex-1">
                                     <Database className="mr-2"/> 従来方式
                                 </Button>
-                                <Button onClick={() => handleMatchmaking('duel', 'rtdb')} disabled={isMatching} className="flex-1">
-                                    <Zap className="mr-2" /> 高速方式 (RTDB)
-                                </Button>
+                                {game.rtdbEnabled ? (
+                                    <Button onClick={() => handleMatchmaking(game.name, 'rtdb')} disabled={isMatching} className="flex-1">
+                                        <Zap className="mr-2" /> 高速方式 (RTDB)
+                                    </Button>
+                                ) : (
+                                    <Button disabled={true} className="flex-1" variant="secondary">
+                                        <Construction className="mr-2" /> 高速方式 (準備中)
+                                    </Button>
+                                )}
                             </div>
-                        ) : (
-                             <Button onClick={() => handleMatchmaking(game.name, 'firestore')} disabled={isMatching} className="w-full">
-                                <Database className="mr-2"/> 従来方式
-                            </Button>
                         )}
                     </div>
                 ))}
@@ -212,7 +205,6 @@ export default function OnlineLobbyPage() {
                 <CardTitle>Waiting Games (Firestore)</CardTitle>
                 <CardDescription>{t('orJoinWaitingGame')}</CardDescription>
             </div>
-            <Button variant="ghost" size="icon" onClick={fetchGames}><RefreshCw className="h-5 w-5"/></Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -243,7 +235,7 @@ export default function OnlineLobbyPage() {
                     );
                 })
             ) : (
-                <p className="text-center text-muted-foreground">{t('noGamesAvailable')}</p>
+                <p className="text-center text-muted-foreground py-10">{t('noGamesAvailable')}</p>
             )}
         </CardContent>
       </Card>

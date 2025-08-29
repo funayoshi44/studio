@@ -231,7 +231,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         const newPlayerIds = [...gameData.playerIds, user.uid];
 
         // For Duel and Janken, start the game when lobby is full
-        const isGameStarting = (gameData.gameType === 'duel' || gameData.gameType === 'janken') && newPlayerIds.length === maxPlayers;
+        const isGameStarting = newPlayerIds.length === maxPlayers;
         
         const updates: any = {
              [`players.${user.uid}`]: {
@@ -405,6 +405,28 @@ export const findAvailableGames = async (): Promise<Game[]> => {
   return games;
 };
 
+// Subscribe to available games
+export const subscribeToAvailableGames = (callback: (games: Game[]) => void): (() => void) => {
+    const gamesCollection = collection(db, 'games');
+    const q = query(
+        gamesCollection,
+        where('status', '==', 'waiting'),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const games: Game[] = [];
+        querySnapshot.forEach((doc) => {
+            games.push({ id: doc.id, ...doc.data() } as Game);
+        });
+        callback(games);
+    });
+
+    return unsubscribe;
+};
+
+
 // --- Auto Matchmaking ---
 export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promise<string> => {
   const gamesRef = collection(db, 'games');
@@ -435,7 +457,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     if (suitableGame && suitableGameId) {
       const gameRef = doc(db, 'games', suitableGameId);
       const newPlayerIds = [...suitableGame.playerIds, user.uid];
-      const isGameStarting = (gameType === 'duel' || gameType === 'janken') && newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
+      const isGameStarting = newPlayerIds.length === (suitableGame.maxPlayers || maxPlayers);
       
       const updates: any = {
         [`players.${user.uid}`]: { displayName: user.displayName, photoURL: user.photoURL, bio: user.bio || '' },
@@ -616,7 +638,6 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId),
-        // orderBy('createdAt', 'desc'), // This requires a composite index. We will sort on the client.
         limit(50)
     );
 
@@ -625,7 +646,6 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
         snapshot.forEach((doc) => {
             posts.push({ id: doc.id, ...doc.data() } as Post);
         });
-        // Sort on the client to avoid composite index
         const sortedPosts = posts.sort((a, b) => {
             const timeA = a.createdAt?.toMillis() || 0;
             const timeB = b.createdAt?.toMillis() || 0;
