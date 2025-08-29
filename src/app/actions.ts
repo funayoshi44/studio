@@ -6,7 +6,7 @@ import {
   type AdjustDifficultyInput,
   type AdjustDifficultyOutput,
 } from '@/ai/flows/ai-opponent-difficulty-adjustment';
-import { startGame as startGameInFirestore } from '@/lib/firestore';
+import { startGame as startGameInRTDB } from '@/lib/rtdb';
 import { z } from 'zod';
 
 export async function getAIMove(input: AdjustDifficultyInput): Promise<AdjustDifficultyOutput> {
@@ -34,7 +34,7 @@ export async function getAIMove(input: AdjustDifficultyInput): Promise<AdjustDif
 
 export async function startGameAction(gameId: string) {
     try {
-        await startGameInFirestore(gameId);
+        await startGameInRTDB(gameId);
     } catch (error) {
         console.error("Failed to start game:", error);
         // We might want to throw the error to be handled by the client

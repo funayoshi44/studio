@@ -1,9 +1,9 @@
 
-
 import { rtdb } from './firebase';
-import { ref, set, get, onValue, off, serverTimestamp, runTransaction, onDisconnect, goOffline, goOnline, push } from 'firebase/database';
+import { ref, set, get, onValue, off, serverTimestamp, runTransaction, onDisconnect, goOffline, goOnline, push, update } from 'firebase/database';
 import type { MockUser, CardData, GameType } from './types';
 import { getCards, awardPoints } from './firestore';
+import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 // --- Type Definitions for RTDB ---
 export interface RTDBGame {
@@ -165,7 +165,7 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
                 playerIds: [user.uid],
                 status: 'waiting',
                 createdAt: serverTimestamp(),
-                maxPlayers: 2,
+                maxPlayers: gameType === 'poker' ? 4 : 2,
                 gameState: {},
             };
             currentLobby[newGameKey] = newGame;
@@ -182,6 +182,43 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
 
 
 // --- Game Logic for RTDB ---
+export const startGame = async (gameId: string): Promise<void> => {
+    const gameRef = ref(rtdb, `lobbies/poker/${gameId}`);
+    const gameSnap = await get(gameRef);
+    if (!gameSnap.exists()) {
+        throw new Error("Game not found!");
+    }
+    const gameData: RTDBGame = gameSnap.val();
+    const playerIds = gameData.playerIds;
+
+    const allCards = await getCards();
+    const deck = createPokerDeck(allCards);
+
+    const playerHands: { [uid: string]: any[] } = {};
+    playerIds.forEach(uid => {
+        playerHands[uid] = deck.splice(0, 5).map(c => ({ id: c.id, suit: c.suit, rank: c.rank, number: c.number, value: c.value }));
+    });
+
+    const initialGameState = {
+        phase: 'exchanging',
+        deck,
+        playerHands,
+        selectedCards: {},
+        exchangeCounts: Object.fromEntries(playerIds.map(id => [id, 0])),
+        playerRanks: {},
+        turnOrder: playerIds,
+        currentTurnIndex: 0,
+        winners: null,
+        resultText: '',
+    };
+    
+    await update(gameRef, {
+        status: 'in-progress',
+        gameState: initialGameState
+    });
+};
+
+
 export const subscribeToRTDBGame = (gameType: GameType, gameId: string, callback: (game: RTDBGame | null) => void): (() => void) => {
     if (!rtdb) return () => {};
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
@@ -258,5 +295,3 @@ export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId
     onDisconnect(playerStatusRef).set(false); // Set to offline on disconnect
     set(playerStatusRef, isOnline);
 }
-
-
