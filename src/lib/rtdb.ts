@@ -182,22 +182,27 @@ export const submitRTDBMove = (gameType: GameType, gameId: string, userId: strin
 export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: string) => {
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
     await runTransaction(gameRef, (game: RTDBGame) => {
-        if (!game) return;
+        if (!game) {
+            return;
+        }
 
-        // Remove player
-        if (game.players[userId]) {
+        // Remove player if they exist in the game
+        if (game.players && game.players[userId]) {
             delete game.players[userId];
         }
-        game.playerIds = game.playerIds.filter(id => id !== userId);
+
+        if (game.playerIds) {
+            game.playerIds = game.playerIds.filter(id => id !== userId);
         
-        // If game is in progress and only one player remains, they win.
-        if (game.status === 'in-progress' && game.playerIds.length === 1) {
-            game.status = 'finished';
-            game.winner = game.playerIds[0];
-            awardPoints(game.winner!, 1);
-        } else if (game.playerIds.length === 0) {
-            // If no players left, delete the game from the lobby
-            return null;
+            // If game is in progress and only one player remains, they win.
+            if (game.status === 'in-progress' && game.playerIds.length === 1) {
+                game.status = 'finished';
+                game.winner = game.playerIds[0];
+                awardPoints(game.winner!, 1);
+            } else if (game.playerIds.length === 0) {
+                // If no players left, delete the game from the lobby
+                return null;
+            }
         }
 
         return game;
