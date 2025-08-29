@@ -12,6 +12,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signInAnonymously,
+  deleteUser,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { uploadProfileImage, awardPoints } from '@/lib/firestore';
@@ -233,10 +234,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logOut = async () => {
     const wasGuest = user?.isGuest;
-    const userToDelete = auth.currentUser;
+    const userToDelete = auth.currentUser; // Get user *before* signOut
     try {
         await signOut(auth);
         if (wasGuest && userToDelete) {
+             // If the user was a guest, delete their auth record.
+            await deleteUser(userToDelete);
         }
         router.push('/login');
     } catch (error) {
