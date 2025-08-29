@@ -19,7 +19,7 @@ import type { JankenAction } from '@/lib/firestore';
 import { getJankenActions } from '@/lib/firestore';
 import { rtdb } from '@/lib/firebase';
 import { onValue, ref, update } from 'firebase/database';
-import { leaveRTDBGame, setupPresence, submitRTDBMove, teardownPresence } from '@/lib/rtdb';
+import { leaveRTDBGame, setupPresence, submitRTDBMove, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
@@ -62,8 +62,12 @@ export default function RTDBOnlineJankenPage() {
 
     // Setup user presence
     useEffect(() => {
-        if (user) setupPresence(user.uid);
-        return () => teardownPresence();
+        if (user) {
+            setupPresence(user.uid);
+        }
+        return () => {
+            teardownPresence();
+        }
     }, [user]);
 
     // Granular subscription to RTDB
@@ -84,8 +88,13 @@ export default function RTDBOnlineJankenPage() {
         unsubs.push(onValue(ref(rtdb, `${gs}/moves`), s => setMovesState(s.val() ?? {})));
         unsubs.push(onValue(ref(rtdb, `${gs}/roundWinner`), s => setRoundWinner(s.val() ?? null)));
         unsubs.push(onValue(ref(rtdb, `${gs}/roundResultText`), s => setRoundResultText(s.val() ?? '')));
+        
+        setPlayerOnlineStatus('janken', gameId, user.uid, true);
 
-        return () => unsubs.forEach(u => u());
+        return () => {
+            unsubs.forEach(u => u());
+            setPlayerOnlineStatus('janken', gameId, user.uid, false);
+        };
     }, [gameId, user]);
     
     // Fetch custom janken actions for all players
@@ -366,10 +375,13 @@ export default function RTDBOnlineJankenPage() {
             <div className="grid grid-cols-2 gap-4 my-8">
                 {playerIds.map(uid => (
                     <div key={uid} className="flex flex-col items-center gap-2">
-                        <Avatar className="w-16 h-16">
-                            <AvatarImage src={gamePlayers[uid]?.photoURL ?? undefined} />
-                            <AvatarFallback className="text-2xl">{gamePlayers[uid]?.displayName?.[0]}</AvatarFallback>
-                        </Avatar>
+                         <div className="relative">
+                            <Avatar className="w-16 h-16">
+                                <AvatarImage src={gamePlayers[uid]?.photoURL ?? undefined} />
+                                <AvatarFallback className="text-2xl">{gamePlayers[uid]?.displayName?.[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className={`absolute bottom-0 right-0 block h-4 w-4 rounded-full ${gamePlayers[uid]?.online ? 'bg-green-500' : 'bg-gray-400'} border-2 border-background`} />
+                        </div>
                         <p className="font-bold text-lg">{uid === user?.uid ? t('you') : gamePlayers[uid]?.displayName}</p>
                     </div>
                 ))}

@@ -97,14 +97,18 @@ export const setupPresence = (userId: string) => {
     if (!rtdb) return;
     goOnline(rtdb);
     const userStatusRef = ref(rtdb, `/status/${userId}`);
-    const presenceData = { isOnline: true, lastChanged: serverTimestamp() };
+    const isOnlineData = { isOnline: true, lastChanged: serverTimestamp() };
+    const isOfflineData = { isOnline: false, lastChanged: serverTimestamp() };
     
     onValue(ref(rtdb, '.info/connected'), (snapshot) => {
         if (snapshot.val() === false) {
+            // If we lose connection, mark as offline
+             set(userStatusRef, isOfflineData);
             return;
         }
-        onDisconnect(userStatusRef).set({ isOnline: false, lastChanged: serverTimestamp() }).then(() => {
-            set(userStatusRef, presenceData);
+        // If we are connected, set online status and set up onDisconnect
+        onDisconnect(userStatusRef).set(isOfflineData).then(() => {
+            set(userStatusRef, isOnlineData);
         });
     });
 };
@@ -150,7 +154,9 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
             return currentLobby;
         } else {
             // Create new game
-            const newGameId = `game_${push(lobbyRef).key}`;
+            const newGameKey = push(lobbyRef).key;
+            if (!newGameKey) throw new Error("Could not generate a new game key.");
+            const newGameId = `game_${newGameKey}`;
             const newGame: RTDBGame = {
                 id: newGameId,
                 gameType,

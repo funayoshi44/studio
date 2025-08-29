@@ -6,15 +6,17 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { findAndJoinGame, type Game, subscribeToAvailableGames, joinGame } from '@/lib/firestore';
-import { findAndJoinRTDBGame } from '@/lib/rtdb';
+import { findAndJoinRTDBGame, RTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database, Construction } from 'lucide-react';
+import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database, Construction, UserCheck } from 'lucide-react';
 import type { GameType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { onValue, ref } from 'firebase/database';
+import { rtdb } from '@/lib/firebase';
 
 export default function OnlineLobbyPage() {
   const { user } = useAuth();
@@ -26,6 +28,7 @@ export default function OnlineLobbyPage() {
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [matchingGameType, setMatchingGameType] = useState<GameType | null>(null);
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
+  const [availableRTDBGames, setAvailableRTDBGames] = useState<RTDBGame[]>([]);
   const [joinGameId, setJoinGameId] = useState('');
   
   useEffect(() => {
@@ -34,14 +37,35 @@ export default function OnlineLobbyPage() {
       return;
     }
     
-    // Set up a real-time listener for available games
-    const unsubscribe = subscribeToAvailableGames((games) => {
+    // Firestore listener
+    const unsubscribeFirestore = subscribeToAvailableGames((games) => {
         const filteredGames = games.filter(g => !g.playerIds.includes(user.uid));
         setAvailableGames(filteredGames);
     });
 
-    // Clean up the listener when the component unmounts
-    return () => unsubscribe();
+    // RTDB listener
+    const rtdbGamesRef = ref(rtdb, 'lobbies');
+    const unsubscribeRTDB = onValue(rtdbGamesRef, (snapshot) => {
+        const allLobbies = snapshot.val();
+        const waitingGames: RTDBGame[] = [];
+        if (allLobbies) {
+            Object.keys(allLobbies).forEach(gameType => {
+                const gamesInType = allLobbies[gameType];
+                Object.keys(gamesInType).forEach(gameId => {
+                    const game = gamesInType[gameId];
+                    if (game.status === 'waiting' && !game.playerIds.includes(user.uid)) {
+                        waitingGames.push({ id: gameId, ...game });
+                    }
+                });
+            });
+        }
+        setAvailableRTDBGames(waitingGames);
+    });
+
+    return () => {
+        unsubscribeFirestore();
+        unsubscribeRTDB();
+    };
   }, [user, router]);
   
   const handleMatchmaking = async (gameType: GameType, dbType: 'firestore' | 'rtdb') => {
@@ -76,13 +100,23 @@ export default function OnlineLobbyPage() {
     }
   };
 
-  const handleJoinGame = async (gameId: string, gameType: GameType) => {
+  const handleJoinGame = async (game: Game | RTDBGame) => {
     if (!user) return;
-    setIsJoining(gameId);
+    setIsJoining(game.id);
     try {
-        await joinGame(gameId, user);
-        const path = gameType === 'duel' ? `/${gameType}-legacy/${gameId}` : `/${gameType}/${gameId}`;
+        if ('gameType' in game && 'players' in game && 'id' in game) { // Type guard for RTDBGame
+            const path = game.gameType === 'janken' ? `/janken-rtdb/${game.id}` : `/duel/${game.id}`;
+            await findAndJoinRTDBGame(user, game.gameType); // This will handle joining logic
+            router.push(path);
+            return;
+        }
+
+        // Fallback to Firestore logic
+        const fsGame = game as Game;
+        await joinGame(fsGame.id, user);
+        const path = fsGame.gameType === 'duel' ? `/${fsGame.gameType}-legacy/${fsGame.id}` : `/${fsGame.gameType}/${fsGame.id}`;
         router.push(path);
+
     } catch (error) {
         console.error("Failed to join game:", error);
         toast({
@@ -93,40 +127,6 @@ export default function OnlineLobbyPage() {
         setIsJoining(null);
     }
   };
-
-  const handleJoinWithId = async (e: FormEvent) => {
-      e.preventDefault();
-      if (!joinGameId.trim() || !user) return;
-      setIsJoining(joinGameId);
-      
-      try {
-        const id = joinGameId.trim();
-        if (id.startsWith('game_')) { // RTDB game ID convention
-            const gameType = id.includes('janken') ? 'janken' : 'duel'; // A simple guess
-            const path = gameType === 'janken' ? `/janken-rtdb/${id}` : `/duel/${id}`;
-            router.push(path);
-            return;
-        }
-        
-        // Assume Firestore otherwise
-        const allGames = await findAvailableGames(); // fetch all to find the game
-        const game = allGames.find(g => g.id === id);
-        
-        if (game) {
-            await handleJoinGame(game.id, game.gameType);
-        } else {
-             toast({ title: "Game not found", description: "Could not find a waiting game with that ID in Firestore.", variant: 'destructive'})
-        }
-      } catch (error) {
-          console.error("Failed to join game with ID:", error);
-          toast({
-              title: "Failed to Join",
-              description: "Could not join game. Check the ID and make sure it's available.",
-              variant: "destructive"
-          });
-          setIsJoining(null);
-      }
-  }
   
   const matchmakingGames: { name: GameType; icon: React.ElementType, rtdbEnabled: boolean }[] = [
     { name: 'duel', icon: Swords, rtdbEnabled: true },
@@ -178,71 +178,49 @@ export default function OnlineLobbyPage() {
         </Card>
         <Card>
             <CardHeader>
-                <CardTitle>Join with Game ID</CardTitle>
-                <CardDescription>Enter an ID to join a friend's game.</CardDescription>
+                <CardTitle>Waiting Games</CardTitle>
+                <CardDescription>{t('orJoinWaitingGame')}</CardDescription>
             </CardHeader>
-            <CardContent>
-                <form onSubmit={handleJoinWithId} className="flex items-end gap-2">
-                    <div className="flex-grow">
-                        <Label htmlFor="game-id-input">{t('gameId')}</Label>
-                        <Input
-                            id="game-id-input"
-                            placeholder="Enter Game ID..."
-                            value={joinGameId}
-                            onChange={(e) => setJoinGameId(e.target.value)}
-                            disabled={!!isJoining}
-                        />
-                    </div>
-                    <Button type="submit" disabled={!joinGameId.trim() || !!isJoining}>
-                        {isJoining && isJoining === joinGameId ? <Loader2 className="h-4 w-4 animate-spin"/> : <LogIn className="h-4 w-4" />}
-                        <span className="ml-2 hidden sm:inline">{t('joinGame')}</span>
-                    </Button>
-                </form>
+            <CardContent className="space-y-4 max-h-96 overflow-y-auto">
+                 {[...availableRTDBGames, ...availableGames].length > 0 ? (
+                    [...availableRTDBGames, ...availableGames].map(game => {
+                        const host = game.players[game.playerIds[0]];
+                        if (!host) return null;
+                        const isRTDB = 'createdAt' in game && typeof game.createdAt === 'object';
+                        return (
+                            <div key={game.id} className="flex items-center justify-between p-4 rounded-lg border">
+                                <div className="flex items-center gap-4">
+                                    <div className="relative">
+                                        <Avatar>
+                                            <AvatarImage src={host.photoURL ?? undefined}/>
+                                            <AvatarFallback>{host.displayName?.[0]}</AvatarFallback>
+                                        </Avatar>
+                                        {host.online && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />}
+                                    </div>
+                                    <div>
+                                        <p className="font-bold">{host.displayName}</p>
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                           {isRTDB ? <Zap className="w-4 h-4 text-yellow-500" /> : <Database className="w-4 h-4 text-blue-500" />}
+                                           <span>{t(`${game.gameType}Title` as any)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <Button
+                                    onClick={() => handleJoinGame(game)}
+                                    disabled={!!isJoining}
+                                >
+                                    {isJoining === game.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                    {t('joinGame')}
+                                </Button>
+                            </div>
+                        );
+                    })
+                ) : (
+                    <p className="text-center text-muted-foreground py-10">{t('noGamesAvailable')}</p>
+                )}
             </CardContent>
         </Card>
       </div>
-      
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-                <CardTitle>Waiting Games (Firestore)</CardTitle>
-                <CardDescription>{t('orJoinWaitingGame')}</CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            {availableGames.length > 0 ? (
-                availableGames.map(game => {
-                    const host = game.players[game.playerIds[0]];
-                    if (!host) return null;
-                    return (
-                        <div key={game.id} className="flex items-center justify-between p-4 rounded-lg border">
-                            <div className="flex items-center gap-4">
-                                <Avatar>
-                                    <AvatarImage src={host.photoURL ?? undefined}/>
-                                    <AvatarFallback>{host.displayName?.[0]}</AvatarFallback>
-                                </Avatar>
-                                <div>
-                                    <p className="font-bold">{host.displayName}</p>
-                                    <p className="text-sm text-muted-foreground">{t(`${game.gameType}Title` as any)}</p>
-                                </div>
-                            </div>
-                            <Button
-                                onClick={() => handleJoinGame(game.id, game.gameType)}
-                                disabled={!!isJoining}
-                            >
-                                {isJoining === game.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                {t('joinGame')}
-                            </Button>
-                        </div>
-                    );
-                })
-            ) : (
-                <p className="text-center text-muted-foreground py-10">{t('noGamesAvailable')}</p>
-            )}
-        </CardContent>
-      </Card>
 
     </div>
   );
