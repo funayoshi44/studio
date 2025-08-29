@@ -28,11 +28,12 @@ export function subscribeToGameSharded(opts: {
   unsubs.push(onSnapshot(doc(db, 'games', gameId), s => opts.onBase(s.data())));
 
   // Lightweight state documents
-  unsubs.push(onSnapshot(doc(db, 'games', gameId, 'state', 'main'), s => opts.onMain(s.data())));
-  unsubs.push(onSnapshot(doc(db, 'games', gameId, 'state', 'scores'), s => opts.onScores(s.data() ?? {})));
-  unsubs.push(onSnapshot(doc(db, 'games', gameId, 'state', 'kyuso'), s => opts.onKyuso(s.data() ?? {})));
-  unsubs.push(onSnapshot(doc(db, 'games', gameId, 'state', 'only'), s => opts.onOnly(s.data() ?? {})));
-  unsubs.push(onSnapshot(doc(db, 'games', gameId, 'state', 'lastHistory'), s => opts.onLastHistory(s.data() ?? null)));
+  const stateRef = collection(db, 'games', gameId, 'state');
+  unsubs.push(onSnapshot(doc(stateRef, 'main'), s => opts.onMain(s.data())));
+  unsubs.push(onSnapshot(doc(stateRef, 'scores'), s => opts.onScores(s.data() ?? {})));
+  unsubs.push(onSnapshot(doc(stateRef, 'kyuso'), s => opts.onKyuso(s.data() ?? {})));
+  unsubs.push(onSnapshot(doc(stateRef, 'only'), s => opts.onOnly(s.data() ?? {})));
+  unsubs.push(onSnapshot(doc(stateRef, 'lastHistory'), s => opts.onLastHistory(s.data() ?? null)));
 
   // My hand only
   unsubs.push(onSnapshot(doc(db, 'games', gameId, 'hands', myUid), s => opts.onMyHand(s.data()?.cards ?? [])));
@@ -43,6 +44,18 @@ export function subscribeToGameSharded(opts: {
   // Opponent's move
   if (oppUid) {
     unsubs.push(onSnapshot(doc(db, 'games', gameId, 'moves', oppUid), s => opts.onOppMove(s.data()?.card ?? null)));
+  } else {
+      const unsubPlayerIds = onSnapshot(doc(db, 'games', gameId), (gameDoc) => {
+          const gameData = gameDoc.data();
+          if (gameData && gameData.playerIds) {
+              const opponent = gameData.playerIds.find((pId: string) => pId !== myUid);
+              if (opponent) {
+                  unsubs.push(onSnapshot(doc(db, 'games', gameId, 'moves', opponent), s => opts.onOppMove(s.data()?.card ?? null)));
+                  unsubPlayerIds(); // Unsubscribe once opponent is found
+              }
+          }
+      });
+      unsubs.push(unsubPlayerIds);
   }
 
   return () => unsubs.forEach(u => u());

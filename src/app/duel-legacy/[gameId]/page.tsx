@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { updateShardedGameState, leaveGame } from '@/lib/firestore';
+import { updateShardedGameState, leaveGame, submitMove as submitMoveFirestore } from '@/lib/firestore';
 import { subscribeToGameSharded } from '@/lib/firestore-game-subs';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Flag, Loader2 } from 'lucide-react';
@@ -19,6 +19,8 @@ import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
 import type { CardData, Game } from '@/lib/types';
 import { useCardsByIds } from '@/hooks/use-cards-by-ids';
+import { doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 
 type LightCard = { id: string; suit: string; rank: number | string; number: number; };
@@ -99,7 +101,9 @@ export default function LegacyOnlineDuelPage() {
     });
 
     return () => unsub();
-  }, [gameId, user?.uid, opponentId, game?.status, router, toast, t, playVictorySound]);
+    // DO NOT ADD opponentId to dependency array, it will cause an infinite loop.
+    // The subscription will be re-attached when opponentId is found inside `subscribeToGameSharded`.
+  }, [gameId, user?.uid, game?.status, router, toast, t, playVictorySound]);
 
   // Evaluate round when both players have moved
   useEffect(() => {
@@ -132,7 +136,7 @@ export default function LegacyOnlineDuelPage() {
     try {
       // Send lightweight card object
       const lightCard = { id: card.id, suit: card.suit, rank: card.rank, number: card.number };
-      await submitMove(gameId, user.uid, lightCard);
+      await submitMoveFirestore(gameId, user.uid, lightCard);
     } catch (error) {
       console.error("Failed to submit move:", error);
       toast({ title: "Error", description: "Failed to submit move.", variant: 'destructive' });
@@ -193,7 +197,9 @@ export default function LegacyOnlineDuelPage() {
     const opponentNewHand = (playerHands[opponentId] || []).filter(c => c.id !== opponentLightCard.id);
 
     const handsUpdate: any = { [user.uid]: myNewHand };
-    if (isHost) handsUpdate[opponentId] = opponentNewHand;
+    if (isHost) {
+        handsUpdate[opponentId] = opponentNewHand;
+    }
 
     const updatePayload = {
         scores: newScores,
