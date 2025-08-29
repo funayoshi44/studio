@@ -123,6 +123,7 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
     if (!rtdb) throw new Error("Realtime Database not initialized");
     const lobbyRef = ref(rtdb, `lobbies/${gameType}`);
     const allCards = await getCards();
+    let gameIdToReturn: string | null = null;
 
     const result = await runTransaction(lobbyRef, (currentLobby) => {
         if (currentLobby === null) {
@@ -132,7 +133,7 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
         let suitableGameId: string | null = null;
         for (const gameId in currentLobby) {
             const game: RTDBGame = currentLobby[gameId];
-            if (game.status === 'waiting' && game.playerIds.length < game.maxPlayers && !game.playerIds.includes(user.uid)) {
+            if (game.status === 'waiting' && game.playerIds && game.playerIds.length < game.maxPlayers && !game.playerIds.includes(user.uid)) {
                 suitableGameId = gameId;
                 break;
             }
@@ -145,20 +146,20 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
             game.players[user.uid] = { displayName: user.displayName, photoURL: user.photoURL, online: true };
             if (game.playerIds.length === game.maxPlayers) {
                 game.status = 'in-progress';
-                 if(game.gameType === 'duel') {
+                if(game.gameType === 'duel') {
                     game.gameState = getInitialDuelGameState(allCards, game.playerIds);
                 } else if(game.gameType === 'janken') {
                     game.gameState = getInitialJankenGameState(game.playerIds);
                 }
             }
+            gameIdToReturn = suitableGameId;
             return currentLobby;
         } else {
             // Create new game
             const newGameKey = push(lobbyRef).key;
             if (!newGameKey) throw new Error("Could not generate a new game key.");
-            const newGameId = `game_${newGameKey}`;
             const newGame: RTDBGame = {
-                id: newGameId,
+                id: newGameKey,
                 gameType,
                 players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, online: true } },
                 playerIds: [user.uid],
@@ -167,22 +168,16 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
                 maxPlayers: 2,
                 gameState: {},
             };
-            currentLobby[newGameId] = newGame;
+            currentLobby[newGameKey] = newGame;
+            gameIdToReturn = newGameKey;
             return currentLobby;
         }
     });
 
-    if(!result.committed) throw new Error("Failed to join or create game.");
+    if(!result.committed || !gameIdToReturn) throw new Error("Failed to join or create game.");
     
-    // Use the result of the transaction instead of another GET
-    const finalLobby = result.snapshot.val();
-    for (const gameId in finalLobby) {
-        if (finalLobby[gameId]?.playerIds?.includes(user.uid)) {
-             awardPoints(user.uid, 1);
-             return gameId;
-        }
-    }
-    throw new Error("Could not determine game ID after transaction.");
+    await awardPoints(user.uid, 1);
+    return gameIdToReturn;
 };
 
 
@@ -263,4 +258,5 @@ export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId
     onDisconnect(playerStatusRef).set(false); // Set to offline on disconnect
     set(playerStatusRef, isOnline);
 }
+
 

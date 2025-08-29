@@ -5,8 +5,7 @@ import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-import { findAndJoinGame, type Game, subscribeToAvailableGames, joinGame } from '@/lib/firestore';
-import { findAndJoinRTDBGame, RTDBGame } from '@/lib/rtdb';
+import { RTDBGame, findAndJoinRTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database, Construction, UserCheck } from 'lucide-react';
@@ -85,8 +84,8 @@ export default function OnlineLobbyPage() {
     if (!user) return;
     setIsJoining(game.id);
     try {
-        const path = game.gameType === 'janken' ? `/janken-rtdb/${game.id}` : `/duel/${game.id}`;
         await findAndJoinRTDBGame(user, game.gameType); // This will handle joining logic
+        const path = game.gameType === 'janken' ? `/janken-rtdb/${game.id}` : `/duel/${game.id}`;
         router.push(path);
     } catch (error) {
         console.error("Failed to join game:", error);
