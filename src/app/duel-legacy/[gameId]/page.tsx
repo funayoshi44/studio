@@ -18,16 +18,18 @@ import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
 import type { CardData } from '@/lib/types';
-import { useCardCache } from '@/contexts/card-cache-context';
+import { useCardsByIds } from '@/hooks/use-cards-by-ids';
 
+
+type LightCard = { id: string; suit: string; rank: number | string; number: number; };
 
 type DuelGameState = {
   currentRound: number;
-  playerHands: { [uid: string]: any[] };
+  playerHands: { [uid: string]: LightCard[] };
   scores: { [uid: string]: number };
   kyuso: { [uid: string]: number };
   only: { [uid: string]: number };
-  moves: { [uid: string]: any | null };
+  moves: { [uid: string]: LightCard | null };
   lastMoveBy: string | null;
   history: { [round: number]: { [uid: string]: number } };
   roundWinner: string | 'draw' | null;
@@ -49,17 +51,21 @@ export default function LegacyOnlineDuelPage() {
   const [game, setGame] = useState<Partial<Game> & { id: string } | null>(null);
   const [gameState, setGameState] = useState<Partial<DuelGameState>>({});
   const [loading, setLoading] = useState(false);
-  const { cards: allCards, loading: cardsLoading } = useCardCache();
-  const cardMap = useMemo(() => new Map(allCards.map(c => [c.id, c])), [allCards]);
 
   const { t } = useTranslation();
 
   const opponentId = useMemo(() => game?.playerIds?.find(p => p !== user?.uid), [game?.playerIds, user?.uid]);
   const isHost = useMemo(() => user && game?.playerIds?.[0] === user.uid, [user, game?.playerIds]);
 
+  const myLightHand = useMemo(() => gameState.playerHands?.[user?.uid ?? ''] ?? [], [gameState.playerHands, user?.uid]);
+  const handCardIds = useMemo(() => myLightHand.map(c => c.id), [myLightHand]);
+  const { cardsById: cardMeta, loading: cardsLoading } = useCardsByIds(handCardIds);
+
+
   // Subscribe to sharded game updates
   useEffect(() => {
     if (!gameId || !user) return;
+    if (game?.status === 'finished') return () => {};
 
     const unsub = subscribeToGameSharded(gameId, {
         myUid: user.uid,
@@ -70,11 +76,11 @@ export default function LegacyOnlineDuelPage() {
                 router.push('/online');
                 return;
             }
-             if (base.status === 'in-progress' && game?.status === 'waiting') {
+             if (game?.status === 'waiting' && base.status === 'in-progress' ) {
                 toast({ title: "Game Started!", description: "Your opponent has joined." });
             }
-            if (base.status === 'finished' && game?.status !== 'finished') {
-                 if (base.winner && Array.isArray(base.winner) ? base.winner.includes(user.uid) : base.winner === user.uid) {
+            if (game?.status !== 'finished' && base.status === 'finished') {
+                 if (base.winner && (Array.isArray(base.winner) ? base.winner.includes(user.uid) : base.winner === user.uid)) {
                     toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
                     playVictorySound();
                 }
@@ -93,7 +99,7 @@ export default function LegacyOnlineDuelPage() {
 
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId, user?.uid, opponentId, router, toast, t, playVictorySound]);
+  }, [gameId, user?.uid, opponentId, game?.status, router, toast, t, playVictorySound]);
 
   // Evaluate round when both players have moved
   useEffect(() => {
@@ -182,24 +188,22 @@ export default function LegacyOnlineDuelPage() {
 
     if(!resultDetail) resultDetail = `${game.players[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${game.players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
 
-    // Update hands locally first
     const myNewHand = (playerHands[user.uid] || []).filter(c => c.id !== myLightCard.id);
     const opponentNewHand = (playerHands[opponentId] || []).filter(c => c.id !== opponentLightCard.id);
+
+    const handsUpdate: any = { [user.uid]: myNewHand };
+    if (isHost) handsUpdate[opponentId] = opponentNewHand;
 
     const updatePayload = {
         scores: newScores,
         kyuso: newKyuso,
         only: newOnly,
         main: {
-            ...gameState,
             roundWinner: winnerId,
-            resultText: resultText,
-            resultDetail: resultDetail,
+            roundResultText: resultText,
+            roundResultDetail: resultDetail,
         },
-        hands: {
-            [user.uid]: myNewHand,
-            [opponentId]: opponentNewHand
-        },
+        hands: handsUpdate,
         lastHistory: {
             round: gameState.currentRound,
             [user.uid]: myLightCard,
@@ -234,10 +238,9 @@ export default function LegacyOnlineDuelPage() {
       }
 
       if (ended) {
-          if (finalWinnerId && finalWinnerId !== 'draw') {
-            // awardPoints is now a server-side function triggered by status change
-          }
-          await updateGameState(gameId, { status: 'finished', winner: finalWinnerId });
+          // awardPoints should be handled by a Cloud Function triggered by status change.
+          const gameBaseRef = doc(db, 'games', gameId);
+          await updateDoc(gameBaseRef, { status: 'finished', winner: finalWinnerId });
       } else {
           // Reset for next round
           const nextRoundPayload = {
@@ -257,9 +260,9 @@ export default function LegacyOnlineDuelPage() {
       }
   };
   
-  const rehydrateCard = (lightCard: any): CardData | null => {
+  const rehydrateCard = (lightCard: LightCard | null): CardData | null => {
       if (!lightCard) return null;
-      const fullCard = cardMap.get(lightCard.id);
+      const fullCard = cardMeta.get(lightCard.id);
       return fullCard ? { ...fullCard, ...lightCard } : null;
   }
 
@@ -342,10 +345,9 @@ export default function LegacyOnlineDuelPage() {
      return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game state...</div>;
   }
   
-  const myLightHand = gameState.playerHands?.[user.uid] ?? [];
   const myFullHand = myLightHand.map(rehydrateCard).filter((c): c is CardData => c !== null);
-  const myMove = rehydrateCard(gameState.moves?.[user.uid]);
-  const opponentMove = opponentId ? rehydrateCard(gameState.moves?.[opponentId]) : null;
+  const myMove = rehydrateCard(gameState.moves?.[user.uid] as LightCard | null);
+  const opponentMove = opponentId ? rehydrateCard(gameState.moves?.[opponentId] as LightCard | null) : null;
 
   return (
     <div className="text-center">
@@ -395,6 +397,7 @@ export default function LegacyOnlineDuelPage() {
                 {myMove == null ? (
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
+                        {cardsLoading ? <Loader2 className="animate-spin"/> :
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                             {myFullHand.sort((a,b) => a.number - b.number).map(card => (
                               <button key={card.id} onClick={() => handleSelectCard(card)} disabled={loading} className="transition-transform hover:scale-105">
@@ -402,6 +405,7 @@ export default function LegacyOnlineDuelPage() {
                               </button>
                             ))}
                         </div>
+                        }
                     </>
                 ) : (
                     <p className="text-xl font-semibold text-muted-foreground animate-pulse">{t('waitingForOpponentMove')}</p>

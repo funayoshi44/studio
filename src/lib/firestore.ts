@@ -92,7 +92,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 };
 
 
-const getInitialDuelGameState = (allCards: CardData[], playerIds: string[]) => {
+const getInitialDuelGameState = async (allCards: CardData[], playerIds: string[]) => {
     const hands: { [uid: string]: any[] } = {};
     const scores: { [uid: string]: number } = {};
     const kyuso: { [uid: string]: number } = {};
@@ -313,9 +313,9 @@ export const subscribeToGame = (gameId: string, callback: (game: Game | null) =>
 };
 
 // Update a single document
-export const updateGameState = async (gameId: string, updates: Partial<Game>): Promise<void> => {
+export const updateGameState = async (gameId: string, updates: any): Promise<void> => {
   const gameRef = doc(db, 'games', gameId);
-  await updateDoc(gameRef, updates);
+  await updateDoc(gameRef, { gameState: updates });
 };
 
 // Update multiple sharded state documents
@@ -439,9 +439,23 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
       
       if (isGameStarting) {
           const initialGameState = await getInitialStateForGame(gameType, newPlayerIds);
-          // Can't use batch write inside a transaction, so this needs to be handled post-transaction
-          // Or, better, by a Cloud Function triggered by status change.
-          // For now, we will do it after the transaction.
+          const batch = writeBatch(db);
+            for (const key in initialGameState) {
+                if (key === 'hands' || key === 'moves') { // These are sub-collections
+                    for(const playerId in initialGameState[key]) {
+                        const subDocRef = doc(db, 'games', suitableGameId, 'state', key, playerId);
+                        if (key === 'hands') {
+                             batch.set(subDocRef, { cards: initialGameState[key][playerId] });
+                        } else {
+                             batch.set(subDocRef, { card: initialGameState[key][playerId] });
+                        }
+                    }
+                } else {
+                    const subDocRef = doc(db, 'games', suitableGameId, 'state', key);
+                    batch.set(subDocRef, initialGameState[key]);
+                }
+            }
+          await batch.commit();
       }
       
       return suitableGameId;
