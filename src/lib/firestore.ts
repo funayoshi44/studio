@@ -26,10 +26,8 @@ import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, A
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
-const CARDS_COLLECTION = process.env.NEXT_PUBLIC_CARDS_COLLECTION_NAME || 'cards';
-const CARD_CACHE_KEY = `cardverse-${CARDS_COLLECTION}-cache`;
-const SERIES_CACHE_KEY = `cardverse-series-cache`;
-const CACHE_EXPIRATION_MS = 1000 * 60 * 60; // 1 hour cache
+const CARDS_COLLECTION = 'cards';
+const SERIES_COLLECTION = 'series';
 
 
 // --- Point System ---
@@ -704,22 +702,6 @@ const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): Card
 };
 
 export const getCards = async (forceRefresh: boolean = false): Promise<CardData[]> => {
-    if (!forceRefresh) {
-        if (typeof window !== 'undefined') {
-            try {
-                const cachedItem = localStorage.getItem(CARD_CACHE_KEY);
-                if (cachedItem) {
-                    const { timestamp, data } = JSON.parse(cachedItem);
-                    if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
-                        return data as CardData[];
-                    }
-                }
-            } catch (e) {
-                console.error("Error reading from card cache", e);
-            }
-        }
-    }
-    
     const cardsCollection = collection(db, CARDS_COLLECTION);
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
@@ -727,16 +709,6 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
         const data = doc.data() as Omit<CardData, 'id'>;
         cards.push(deriveCompatibilityFields(data, doc.id));
     });
-
-    if (typeof window !== 'undefined') {
-        try {
-            const cacheItem = { timestamp: Date.now(), data: cards };
-            localStorage.setItem(CARD_CACHE_KEY, JSON.stringify(cacheItem));
-        } catch (e) {
-            console.error("Error writing to card cache", e);
-        }
-    }
-
     return cards;
 };
 
@@ -813,50 +785,19 @@ export const deleteCard = async (card: CardData): Promise<void> => {
 // --- Series Management ---
 
 export const getSeries = async (forceRefresh: boolean = false): Promise<CardSeries[]> => {
-    if (!forceRefresh) {
-        if (typeof window !== 'undefined') {
-            try {
-                const cachedItem = localStorage.getItem(SERIES_CACHE_KEY);
-                if (cachedItem) {
-                    const { timestamp, data } = JSON.parse(cachedItem);
-                    if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
-                        // When retrieving from cache, Firestore Timestamps can be serialized. We need to convert them back.
-                        const parsedData = data.map((item: any) => ({
-                            ...item,
-                            createdAt: item.createdAt?.seconds 
-                                ? new Timestamp(item.createdAt.seconds, item.createdAt.nanoseconds) 
-                                : Timestamp.fromDate(new Date(item.createdAt))
-                        }));
-                        return parsedData as CardSeries[];
-                    }
-                }
-            } catch (e) {
-                console.error("Error reading from series cache", e);
-            }
-        }
-    }
-    const seriesCollection = collection(db, 'series');
+    const seriesCollection = collection(db, SERIES_COLLECTION);
     const q = query(seriesCollection, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
     const series: CardSeries[] = [];
     querySnapshot.forEach((doc) => {
         series.push({ id: doc.id, ...doc.data() } as CardSeries);
     });
-    
-    if (typeof window !== 'undefined') {
-        try {
-            const cacheItem = { timestamp: Date.now(), data: series };
-            localStorage.setItem(SERIES_CACHE_KEY, JSON.stringify(cacheItem));
-        } catch (e) {
-            console.error("Error writing to series cache", e);
-        }
-    }
     return series;
 }
 
 export const addSeries = async (name: string): Promise<string> => {
     // Check if series with the same name already exists to prevent duplicates
-    const seriesCollection = collection(db, 'series');
+    const seriesCollection = collection(db, SERIES_COLLECTION);
     const q = query(seriesCollection, where("name", "==", name));
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
@@ -873,7 +814,7 @@ export const addSeries = async (name: string): Promise<string> => {
 export const deleteSeries = async (id: string): Promise<void> => {
     // Note: This does not delete cards within the series.
     // That logic could be added here if needed (e.g., using a transaction or batch write).
-    const seriesRef = doc(db, 'series', id);
+    const seriesRef = doc(db, SERIES_COLLECTION, id);
     await deleteDoc(seriesRef);
 }
 
@@ -1036,5 +977,7 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
         [`participantsInfo.${senderId}`]: senderInfo
     });
 };
+
+    
 
     
