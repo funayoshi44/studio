@@ -377,7 +377,7 @@ export const submitMove = async (gameId: string, userId: string, move: any) => {
 
 
 // Find available games
-export const findAvailableGames = async (): Promise<Game[]> => {
+export const findAvailableGames = async (gameType?: GameType): Promise<Game[]> => {
   if (!db) return [];
   const gamesCollection = collection(db, 'games');
   const q = query(
@@ -387,10 +387,15 @@ export const findAvailableGames = async (): Promise<Game[]> => {
     limit(20)
   );
   const querySnapshot = await getDocs(q);
-  const games: Game[] = [];
+  let games: Game[] = [];
   querySnapshot.forEach((doc) => {
     games.push({ id: doc.id, ...doc.data() } as Game);
   });
+
+  if (gameType) {
+    games = games.filter(g => g.gameType === gameType);
+  }
+
   return games;
 };
 
@@ -426,9 +431,8 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
   return runTransaction(db, async (transaction) => {
     const q = query(
         gamesRef,
-        where('gameType', '==', gameType),
         where('status', '==', 'waiting'),
-        limit(10)
+        limit(20) // Get all waiting games and filter client-side
       );
 
     const querySnapshot = await getDocs(q);
@@ -438,7 +442,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
     
     for (const doc of querySnapshot.docs) {
         const game = { id: doc.id, ...doc.data() } as Game;
-        if (!game.playerIds.includes(user.uid) && game.playerIds.length < maxPlayers) {
+        if (game.gameType === gameType && !game.playerIds.includes(user.uid) && game.playerIds.length < maxPlayers) {
             suitableGame = game;
             suitableGameId = doc.id;
             break;
@@ -1027,4 +1031,5 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
     
 
     
+
 

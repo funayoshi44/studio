@@ -13,8 +13,6 @@ import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn, Zap, Database, Con
 import type { GameType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { onValue, ref } from 'firebase/database';
 import { rtdb } from '@/lib/firebase';
 
