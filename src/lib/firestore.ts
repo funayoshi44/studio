@@ -5,6 +5,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -567,8 +568,8 @@ export const setJankenAction = async (
     await setDoc(actionRef, actionData, { merge: true });
 };
 
-export const getJankenActions = async (userId: string): Promise<{ [key in Move]?: JankenAction }> => {
-    const actions: { [key in Move]?: JankenAction } = {};
+export const getJankenActions = async (userId: string): Promise<{ [key in 'rock' | 'paper' | 'scissors']?: JankenAction }> => {
+    const actions: { [key in 'rock' | 'paper' | 'scissors']?: JankenAction } = {};
     const q = query(collection(db, 'jankenActions'), where('userId', '==', userId));
     const querySnapshot = await getDocs(q);
     querySnapshot.forEach((doc) => {
@@ -804,7 +805,12 @@ export const getSeries = async (forceRefresh: boolean = false): Promise<CardSeri
                 if (cachedItem) {
                     const { timestamp, data } = JSON.parse(cachedItem);
                     if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
-                        return data as CardSeries[];
+                        // When retrieving from cache, Firestore Timestamps become strings. We need to convert them back.
+                        const parsedData = data.map((item: any) => ({
+                            ...item,
+                            createdAt: new Timestamp(item.createdAt.seconds, item.createdAt.nanoseconds)
+                        }));
+                        return parsedData as CardSeries[];
                     }
                 }
             } catch (e) {
