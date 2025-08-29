@@ -34,13 +34,15 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
 
     const setupGame = useCallback(() => {
-        if (allCards.length < 3) return;
+        // Find cards that have a unique back image to make the game playable
+        const playableCards = allCards.filter(c => c.backImageUrl);
+        if (playableCards.length < 3) return;
 
         // 1. Pick a winning card
-        const newWinningCard = allCards[Math.floor(Math.random() * allCards.length)];
+        const newWinningCard = playableCards[Math.floor(Math.random() * playableCards.length)];
         
         // 2. Pick two other losing cards
-        const otherCards = allCards.filter(c => c.id !== newWinningCard.id);
+        const otherCards = playableCards.filter(c => c.id !== newWinningCard.id);
         const losingCards = shuffleArray(otherCards).slice(0, 2);
 
         if (losingCards.length < 2) return; // Need at least 2 other cards to play
@@ -71,12 +73,12 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
         return null; // Don't render anything while cards are loading
     }
     
-    if (allCards.length < 3) {
+    if (allCards.filter(c => c.backImageUrl).length < 3) {
         return (
             <Card className="bg-card/80 backdrop-blur-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card!</CardTitle>
-                    <CardDescription>Not enough cards to play. Please add at least 3 cards in the admin panel.</CardDescription>
+                    <CardDescription>Not enough cards to play. Please add at least 3 cards with unique back images in the admin panel.</CardDescription>
                 </CardHeader>
             </Card>
         );
@@ -85,16 +87,29 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
     return (
         <Card className="bg-card/80 backdrop-blur-sm">
             <CardHeader>
-                <div className="flex items-center gap-3">
-                    <HelpCircle className="w-8 h-8 text-primary" />
-                    <div>
+                <div className="flex flex-col md:flex-row items-center gap-4">
+                    <HelpCircle className="w-8 h-8 text-primary shrink-0" />
+                    <div className="flex-1">
                         <CardTitle className="text-2xl">Guess the Card!</CardTitle>
-                        <CardDescription>Find the card with the following title. Use the back image as a hint!</CardDescription>
+                        <CardDescription>Find the card using its title and back image as hints.</CardDescription>
                     </div>
                 </div>
                  {winningCard && !revealed && (
-                    <div className="pt-2 text-center">
-                        <p className="text-lg font-semibold text-primary">Find this card: "{winningCard.title}"</p>
+                    <div className="pt-4 text-center flex flex-col md:flex-row justify-center items-center gap-4">
+                        <div className="flex-1">
+                            <p className="text-muted-foreground">Find this card:</p>
+                            <p className="text-xl font-semibold text-primary">"{winningCard.title}"</p>
+                        </div>
+                        <div className="flex-1">
+                            <p className="text-muted-foreground">Hint: It has this back</p>
+                             <div className="relative mx-auto mt-2 h-32 w-24 overflow-hidden rounded-lg border-4 border-accent shadow-lg">
+                                {winningCard.backImageUrl ? (
+                                    <Image src={winningCard.backImageUrl} alt="Hint: Card back" layout="fill" objectFit="cover" unoptimized/>
+                                ): (
+                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs text-muted-foreground">No Back Image</div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                  )}
             </CardHeader>
@@ -295,3 +310,4 @@ export default function HomePage() {
     </div>
   );
 }
+
