@@ -29,7 +29,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoading: boolean }) => {
     const [winningCard, setWinningCard] = useState<CardData | null>(null);
-    const [options, setOptions] = useState<CardData[]>([]); // Cards to derive back images from
+    const [options, setOptions] = useState<CardData[]>([]);
     const [revealed, setRevealed] = useState(false);
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
 
@@ -37,11 +37,11 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
         const playableCards = allCards.filter(c => c.backImageUrl);
         if (playableCards.length < 3) return;
 
-        // 1. Pick a winning card
+        // 1. Pick a winning card with a back image
         const newWinningCard = playableCards[Math.floor(Math.random() * playableCards.length)];
         
         // 2. Pick two other cards to be the losing options
-        const otherCards = playableCards.filter(c => c.id !== newWinningCard.id);
+        const otherCards = allCards.filter(c => c.id !== newWinningCard.id);
         const losingOptions = shuffleArray(otherCards).slice(0, 2);
 
         if (losingOptions.length < 2) return;
@@ -76,7 +76,7 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
         return (
             <Card className="bg-card/80 backdrop-blur-sm">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card's Back!</CardTitle>
+                    <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card!</CardTitle>
                     <CardDescription>Not enough cards to play. Please add at least 3 cards with unique back images in the admin panel.</CardDescription>
                 </CardHeader>
             </Card>
@@ -93,18 +93,23 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
                 <div className="flex flex-col md:flex-row items-center gap-4">
                     <HelpCircle className="w-8 h-8 text-primary shrink-0" />
                     <div className="flex-1">
-                        <CardTitle className="text-2xl">Guess the Card's Back!</CardTitle>
-                        <CardDescription>This card has which back image? Choose from the options below.</CardDescription>
+                        <CardTitle className="text-2xl">Guess the Card's Face!</CardTitle>
+                        <CardDescription>This card back and title belongs to which card face? Choose from the options below.</CardDescription>
                     </div>
                 </div>
                  <div className="pt-4 text-center flex flex-col md:flex-row justify-center items-center gap-4">
                     <div className="flex-1">
-                        <p className="text-muted-foreground">This card:</p>
+                        <p className="text-muted-foreground">Title:</p>
                         <p className="text-xl font-semibold text-primary">"{winningCard.title}"</p>
                     </div>
                     <div className="flex-1">
+                         <p className="text-muted-foreground">Back Image:</p>
                          <div className="relative mx-auto mt-2 h-40 w-28 overflow-hidden rounded-lg border-4 border-accent shadow-lg">
-                            <Image src={winningCard.frontImageUrl} alt="Hint: Card front" layout="fill" objectFit="cover" unoptimized/>
+                            {winningCard.backImageUrl ? (
+                                <Image src={winningCard.backImageUrl} alt="Hint: Card back" layout="fill" objectFit="cover" unoptimized/>
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-gray-200 text-xs text-muted-foreground">No Back Image</div>
+                            )}
                         </div>
                     </div>
                  </div>
@@ -123,10 +128,10 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
                             )}
                         >
                            <div className="relative h-40 w-28 overflow-hidden rounded-lg border-2 border-muted">
-                             {card.backImageUrl ? (
-                                <Image src={card.backImageUrl} alt={`Option ${index+1}`} layout="fill" objectFit="cover" unoptimized/>
+                             {card.frontImageUrl ? (
+                                <Image src={card.frontImageUrl} alt={`Option ${index+1}`} layout="fill" objectFit="cover" unoptimized/>
                              ) : (
-                                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs text-muted-foreground">No Back Image</div>
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs text-muted-foreground">No Front Image</div>
                              )}
                            </div>
                         </button>
@@ -322,4 +327,4 @@ export default function HomePage() {
   );
 }
 
-
+    
