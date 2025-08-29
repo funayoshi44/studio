@@ -29,26 +29,25 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 
 const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoading: boolean }) => {
     const [winningCard, setWinningCard] = useState<CardData | null>(null);
-    const [gameCards, setGameCards] = useState<CardData[]>([]);
+    const [options, setOptions] = useState<CardData[]>([]); // Cards to derive back images from
     const [revealed, setRevealed] = useState(false);
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
 
     const setupGame = useCallback(() => {
-        // Find cards that have a unique back image to make the game playable
         const playableCards = allCards.filter(c => c.backImageUrl);
         if (playableCards.length < 3) return;
 
         // 1. Pick a winning card
         const newWinningCard = playableCards[Math.floor(Math.random() * playableCards.length)];
         
-        // 2. Pick two other losing cards
+        // 2. Pick two other cards to be the losing options
         const otherCards = playableCards.filter(c => c.id !== newWinningCard.id);
-        const losingCards = shuffleArray(otherCards).slice(0, 2);
+        const losingOptions = shuffleArray(otherCards).slice(0, 2);
 
-        if (losingCards.length < 2) return; // Need at least 2 other cards to play
+        if (losingOptions.length < 2) return;
 
         setWinningCard(newWinningCard);
-        setGameCards(shuffleArray([newWinningCard, ...losingCards]));
+        setOptions(shuffleArray([newWinningCard, ...losingOptions]));
         setRevealed(false);
         setResult(null);
     }, [allCards]);
@@ -59,10 +58,10 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
         }
     }, [isLoading, allCards, setupGame]);
 
-    const handleCardClick = (clickedCard: CardData) => {
+    const handleOptionClick = (clickedOption: CardData) => {
         if (revealed || !winningCard) return;
         setRevealed(true);
-        if (clickedCard.id === winningCard.id) {
+        if (clickedOption.id === winningCard.id) {
             setResult('win');
         } else {
             setResult('lose');
@@ -77,11 +76,15 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
         return (
             <Card className="bg-card/80 backdrop-blur-sm">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card!</CardTitle>
+                    <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card's Back!</CardTitle>
                     <CardDescription>Not enough cards to play. Please add at least 3 cards with unique back images in the admin panel.</CardDescription>
                 </CardHeader>
             </Card>
         );
+    }
+    
+    if (!winningCard) {
+        return <Card className="p-4 text-center">Setting up the game...</Card>;
     }
 
     return (
@@ -90,41 +93,49 @@ const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoa
                 <div className="flex flex-col md:flex-row items-center gap-4">
                     <HelpCircle className="w-8 h-8 text-primary shrink-0" />
                     <div className="flex-1">
-                        <CardTitle className="text-2xl">Guess the Card!</CardTitle>
-                        <CardDescription>Find the card using its title and back image as hints.</CardDescription>
+                        <CardTitle className="text-2xl">Guess the Card's Back!</CardTitle>
+                        <CardDescription>This card has which back image? Choose from the options below.</CardDescription>
                     </div>
                 </div>
-                 {winningCard && !revealed && (
-                    <div className="pt-4 text-center flex flex-col md:flex-row justify-center items-center gap-4">
-                        <div className="flex-1">
-                            <p className="text-muted-foreground">Find this card:</p>
-                            <p className="text-xl font-semibold text-primary">"{winningCard.title}"</p>
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-muted-foreground">Hint: It has this back</p>
-                             <div className="relative mx-auto mt-2 h-32 w-24 overflow-hidden rounded-lg border-4 border-accent shadow-lg">
-                                {winningCard.backImageUrl ? (
-                                    <Image src={winningCard.backImageUrl} alt="Hint: Card back" layout="fill" objectFit="cover" unoptimized/>
-                                ): (
-                                    <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs text-muted-foreground">No Back Image</div>
-                                )}
-                            </div>
+                 <div className="pt-4 text-center flex flex-col md:flex-row justify-center items-center gap-4">
+                    <div className="flex-1">
+                        <p className="text-muted-foreground">This card:</p>
+                        <p className="text-xl font-semibold text-primary">"{winningCard.title}"</p>
+                    </div>
+                    <div className="flex-1">
+                         <div className="relative mx-auto mt-2 h-40 w-28 overflow-hidden rounded-lg border-4 border-accent shadow-lg">
+                            <Image src={winningCard.frontImageUrl} alt="Hint: Card front" layout="fill" objectFit="cover" unoptimized/>
                         </div>
                     </div>
-                 )}
+                 </div>
             </CardHeader>
             <CardContent>
                 <div className="flex justify-center gap-4 mb-4">
-                    {gameCards.map((card, index) => (
-                        <button key={index} onClick={() => handleCardClick(card)} disabled={revealed}>
-                           <PokerCard card={card} revealed={revealed} />
+                    {options.map((card, index) => (
+                        <button 
+                            key={index} 
+                            onClick={() => handleOptionClick(card)} 
+                            disabled={revealed}
+                            className={cn(
+                                "rounded-lg transition-transform duration-300 hover:scale-105",
+                                revealed && winningCard.id === card.id && "ring-4 ring-green-500",
+                                revealed && result === 'lose' && winningCard.id !== card.id && "opacity-50"
+                            )}
+                        >
+                           <div className="relative h-40 w-28 overflow-hidden rounded-lg border-2 border-muted">
+                             {card.backImageUrl ? (
+                                <Image src={card.backImageUrl} alt={`Option ${index+1}`} layout="fill" objectFit="cover" unoptimized/>
+                             ) : (
+                                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-xs text-muted-foreground">No Back Image</div>
+                             )}
+                           </div>
                         </button>
                     ))}
                 </div>
                 {result && (
                     <div className="text-center space-y-2">
                         <p className={cn("text-2xl font-bold", result === 'win' ? 'text-accent' : 'text-destructive')}>
-                            {result === 'win' ? `Correct! It was "${winningCard?.title}"` : `Wrong! The correct card was "${winningCard?.title}"`}
+                            {result === 'win' ? "Correct!" : "Wrong!"}
                         </p>
                         <Button onClick={setupGame}>Play Again</Button>
                     </div>
@@ -310,4 +321,5 @@ export default function HomePage() {
     </div>
   );
 }
+
 
