@@ -40,7 +40,7 @@ export default function OnlineDuelPage() {
 
   // Granular state management
   const [gameStatus, setGameStatus] = useState<'waiting' | 'in-progress' | 'finished' | null>(null);
-  const [players, setPlayers] = useState<any>(null);
+  const [gamePlayers, setGamePlayers] = useState<any>(null);
   const [playerIds, setPlayerIds] = useState<string[]>([]);
   const [winner, setWinner] = useState<string | 'draw' | null | undefined>(null);
   
@@ -75,20 +75,20 @@ export default function OnlineDuelPage() {
   useEffect(() => {
     if (!gameId || !user) return;
     
-    const gameBasePath = `lobbies/duel/${gameId}`;
-    const gameStatePath = `${gameBasePath}/gameState`;
+    const gameBaseRef = `lobbies/duel/${gameId}`;
+    const gameStatePath = `${gameBaseRef}/gameState`;
 
     const listeners = [
-        onValue(ref(rtdb, `${gameBasePath}/status`), snap => {
+        onValue(ref(rtdb, `${gameBaseRef}/status`), snap => {
             const newStatus = snap.val();
             if (gameStatus === 'in-progress' && newStatus === 'finished') {
                  toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
             }
             setGameStatus(newStatus)
         }),
-        onValue(ref(rtdb, `${gameBasePath}/players`), snap => setPlayers(snap.val())),
-        onValue(ref(rtdb, `${gameBasePath}/playerIds`), snap => setPlayerIds(snap.val() || [])),
-        onValue(ref(rtdb, `${gameBasePath}/winner`), snap => setWinner(snap.val())),
+        onValue(ref(rtdb, `${gameBaseRef}/players`), snap => setGamePlayers(snap.val())),
+        onValue(ref(rtdb, `${gameBaseRef}/playerIds`), snap => setPlayerIds(snap.val() || [])),
+        onValue(ref(rtdb, `${gameBaseRef}/winner`), snap => setWinner(snap.val())),
         // Granular game state listeners
         onValue(ref(rtdb, `${gameStatePath}/currentRound`), snap => setCurrentRound(snap.val() ?? 1)),
         onValue(ref(rtdb, `${gameStatePath}/playerHands`), snap => setPlayerHands(snap.val() ?? {})),
@@ -162,7 +162,7 @@ export default function OnlineDuelPage() {
   };
   
   const evaluateRound = () => {
-    if (!user || !opponentId || !players) return;
+    if (!user || !opponentId || !gamePlayers) return;
 
     let winnerId: string | 'draw' = 'draw';
     let resultText = '';
@@ -204,11 +204,11 @@ export default function OnlineDuelPage() {
     if (winnerId === 'draw') {
         resultText = t('draw');
     } else {
-        const winnerName = players[winnerId]?.displayName ?? 'Player';
+        const winnerName = gamePlayers[winnerId]?.displayName ?? 'Player';
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${players[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
+    if(!resultDetail) resultDetail = `${gamePlayers[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${gamePlayers[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
 
     // Filter hands using the card's ID
     newPlayerHands[user.uid] = newPlayerHands[user.uid].filter((c: any) => c.id !== myCard.id);
@@ -296,7 +296,7 @@ export default function OnlineDuelPage() {
       return fullCard ? { ...fullCard, ...lightCard } : null;
   }
 
-  if (!user || !gameStatus || !players || cardsLoading) {
+  if (!user || !gameStatus || !gamePlayers || cardsLoading) {
     return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
   }
   
@@ -320,7 +320,7 @@ export default function OnlineDuelPage() {
   }
 
   const PlayerInfo = ({ uid }: { uid: string }) => {
-    const player = players?.[uid];
+    const player = gamePlayers?.[uid];
     if (!player) return null;
     return (
         <div className="flex flex-col items-center gap-2">
@@ -342,20 +342,20 @@ export default function OnlineDuelPage() {
     }
     const p1Id = playerIds[0];
     const p2Id = playerIds[1];
-    if (!players[p1Id] || !players[p2Id]) return null;
+    if (!gamePlayers[p1Id] || !gamePlayers[p2Id]) return null;
 
     return (
       <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
           <>
             <Card className="p-3 md:p-4 bg-blue-100 dark:bg-blue-900/50">
-              <p className="font-bold">{players[p1Id].displayName}: {scores?.[p1Id] ?? 0} {t('wins')}</p>
+              <p className="font-bold">{gamePlayers[p1Id].displayName}: {scores?.[p1Id] ?? 0} {t('wins')}</p>
               <div className="text-sm opacity-80">
                 <span>{t('kyuso')}: {kyuso?.[p1Id] ?? 0} | </span>
                 <span>{t('onlyOne')}: {only?.[p1Id] ?? 0}</span>
               </div>
             </Card>
              <Card className="p-3 md:p-4 bg-red-100 dark:bg-red-900/50">
-                <p className="font-bold">{players[p2Id].displayName}: {scores?.[p2Id] ?? 0} {t('wins')}</p>
+                <p className="font-bold">{gamePlayers[p2Id].displayName}: {scores?.[p2Id] ?? 0} {t('wins')}</p>
                 <div className="text-sm opacity-80">
                     <span>{t('kyuso')}: {kyuso?.[p2Id] ?? 0} | </span>
                     <span>{t('onlyOne')}: {only?.[p2Id] ?? 0}</span>
@@ -463,7 +463,7 @@ export default function OnlineDuelPage() {
             <p className="text-4xl font-bold mb-4">
                 {winner === 'draw'
                     ? t('duelFinalResultDraw')
-                    : winner ? `${players[winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
+                    : winner ? `${gamePlayers[winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
             </p>
             <div className="space-x-4 mt-6">
                 <Link href="/online" passHref>
