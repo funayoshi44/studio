@@ -28,6 +28,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 };
 
 const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
+    const [winningCard, setWinningCard] = useState<CardData | null>(null);
     const [gameCards, setGameCards] = useState<CardData[]>([]);
     const [revealed, setRevealed] = useState(false);
     const [result, setResult] = useState<'win' | 'lose' | null>(null);
@@ -35,15 +36,17 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
     const setupGame = useCallback(() => {
         if (allCards.length < 3) return;
 
-        const jokers = allCards.filter(c => c.rank === 'Joker' || c.rank === 0);
-        const nonJokers = allCards.filter(c => c.rank !== 'Joker' && c.rank !== 0);
+        // 1. Pick a winning card
+        const newWinningCard = allCards[Math.floor(Math.random() * allCards.length)];
         
-        if (jokers.length === 0 || nonJokers.length < 2) return;
+        // 2. Pick two other losing cards
+        const otherCards = allCards.filter(c => c.id !== newWinningCard.id);
+        const losingCards = shuffleArray(otherCards).slice(0, 2);
 
-        const winningCard = jokers[Math.floor(Math.random() * jokers.length)];
-        const losingCards = shuffleArray(nonJokers).slice(0, 2);
-        
-        setGameCards(shuffleArray([winningCard, ...losingCards]));
+        if (losingCards.length < 2) return; // Need at least 2 other cards to play
+
+        setWinningCard(newWinningCard);
+        setGameCards(shuffleArray([newWinningCard, ...losingCards]));
         setRevealed(false);
         setResult(null);
     }, [allCards]);
@@ -52,22 +55,22 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
         setupGame();
     }, [setupGame]);
 
-    const handleCardClick = (card: CardData) => {
-        if (revealed) return;
+    const handleCardClick = (clickedCard: CardData) => {
+        if (revealed || !winningCard) return;
         setRevealed(true);
-        if (card.rank === 'Joker' || card.rank === 0) {
+        if (clickedCard.id === winningCard.id) {
             setResult('win');
         } else {
             setResult('lose');
         }
     };
     
-    if (gameCards.length < 3) {
+    if (allCards.length < 3) {
         return (
             <Card className="bg-card/80 backdrop-blur-sm">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-3"><HelpCircle className="w-8 h-8 text-primary" /> Guess the Card!</CardTitle>
-                    <CardDescription>Not enough cards to play. Please add at least 3 cards (including one Joker) in the admin panel.</CardDescription>
+                    <CardDescription>Not enough cards to play. Please add at least 3 cards in the admin panel.</CardDescription>
                 </CardHeader>
             </Card>
         );
@@ -80,9 +83,14 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
                     <HelpCircle className="w-8 h-8 text-primary" />
                     <div>
                         <CardTitle className="text-2xl">Guess the Card!</CardTitle>
-                        <CardDescription>Find the Joker card. Click on a card to guess.</CardDescription>
+                        <CardDescription>Find the card with the following title. Use the back image as a hint!</CardDescription>
                     </div>
                 </div>
+                 {winningCard && !revealed && (
+                    <div className="pt-2 text-center">
+                        <p className="text-lg font-semibold text-primary">Find this card: "{winningCard.title}"</p>
+                    </div>
+                 )}
             </CardHeader>
             <CardContent>
                 <div className="flex justify-center gap-4 mb-4">
@@ -95,7 +103,7 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
                 {result && (
                     <div className="text-center space-y-2">
                         <p className={cn("text-2xl font-bold", result === 'win' ? 'text-accent' : 'text-destructive')}>
-                            {result === 'win' ? 'You Win!' : 'Try Again!'}
+                            {result === 'win' ? `Correct! It was "${winningCard?.title}"` : `Wrong! The correct card was "${winningCard?.title}"`}
                         </p>
                         <Button onClick={setupGame}>Play Again</Button>
                     </div>
