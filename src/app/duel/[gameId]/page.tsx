@@ -16,10 +16,9 @@ import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
 import type { CardData } from '@/lib/types';
-import { leaveRTDBGame, updateRTDBGameState, submitRTDBMove, setupPresence, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
-import { awardPoints } from '@/lib/firestore';
+import { leaveRTDBGame, submitRTDBMove, setupPresence, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
 import { useCardCache } from '@/contexts/card-cache-context';
-import { onValue, ref, off, update } from 'firebase/database';
+import { onValue, ref, update } from 'firebase/database';
 import { rtdb } from '@/lib/firebase';
 
 const TOTAL_ROUNDS = 13;
@@ -232,10 +231,10 @@ export default function OnlineDuelPage() {
         const winnerName = gamePlayers[winnerId]?.displayName ?? 'Player';
         resultText = `${winnerName} ${t('wins')}!`;
     }
-
+    
     if(!resultDetail) resultDetail = `${gamePlayers[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${gamePlayers[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
 
-    // Filter hands using the card's ID
+    // Filter hand using the card's ID
     newPlayerHands[user.uid] = newPlayerHands[user.uid].filter((c: any) => c.id !== myCard.id);
     
     // Instead of reading opponent hand from DB, just update our local copy
@@ -245,8 +244,7 @@ export default function OnlineDuelPage() {
     }));
     
     const updates: any = {};
-    const gameBasePath = `lobbies/duel/${gameId}`;
-    const gameStatePath = `${gameBasePath}/gameState`;
+    const gameStatePath = `lobbies/duel/${gameId}/gameState`;
 
     updates[`${gameStatePath}/scores`] = newScores;
     updates[`${gameStatePath}/kyuso`] = newKyuso;
@@ -274,7 +272,6 @@ export default function OnlineDuelPage() {
       const p2Id = playerIds[1];
       let ended = false;
       let finalWinnerId: string | 'draw' | null = null;
-      let finalStatus: 'finished' | 'in-progress' = 'in-progress';
       
       if (currentOnly[p1Id] > 0) { ended = true; finalWinnerId = p1Id; }
       else if (currentOnly[p2Id] > 0) { ended = true; finalWinnerId = p2Id; }
@@ -288,10 +285,8 @@ export default function OnlineDuelPage() {
       }
 
       if (ended) {
-          finalStatus = 'finished';
-          // Award points should be handled by a cloud function, not here.
           const finalUpdates: any = {};
-          finalUpdates[`lobbies/duel/${gameId}/status`] = finalStatus;
+          finalUpdates[`lobbies/duel/${gameId}/status`] = 'finished';
           finalUpdates[`lobbies/duel/${gameId}/winner`] = finalWinnerId;
           update(ref(rtdb), finalUpdates);
 
@@ -514,3 +509,5 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
+
+    
