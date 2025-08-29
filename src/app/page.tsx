@@ -27,7 +27,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return newArray;
 };
 
-const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
+const GuessTheCardGame = ({ allCards, isLoading }: { allCards: CardData[], isLoading: boolean }) => {
     const [winningCard, setWinningCard] = useState<CardData | null>(null);
     const [gameCards, setGameCards] = useState<CardData[]>([]);
     const [revealed, setRevealed] = useState(false);
@@ -52,8 +52,10 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
     }, [allCards]);
 
     useEffect(() => {
-        setupGame();
-    }, [setupGame]);
+        if (!isLoading && allCards.length > 0) {
+            setupGame();
+        }
+    }, [isLoading, allCards, setupGame]);
 
     const handleCardClick = (clickedCard: CardData) => {
         if (revealed || !winningCard) return;
@@ -64,6 +66,10 @@ const GuessTheCardGame = ({ allCards }: { allCards: CardData[] }) => {
             setResult('lose');
         }
     };
+    
+    if (isLoading) {
+        return null; // Don't render anything while cards are loading
+    }
     
     if (allCards.length < 3) {
         return (
@@ -283,7 +289,7 @@ export default function HomePage() {
         </Card>
 
         {/* Guess the Card Game Section */}
-        {!isLoadingCards && <GuessTheCardGame allCards={cards} />}
+        <GuessTheCardGame allCards={cards} isLoading={isLoadingCards} />
 
       </div>
     </div>
