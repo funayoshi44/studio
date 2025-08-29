@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { findAndJoinGame, type Game, findAvailableGames, joinGame } from '@/lib/firestore';
+import { findAndJoinRTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Swords, Scissors, Layers, Loader2, RefreshCw, LogIn } from 'lucide-react';
@@ -58,7 +59,11 @@ export default function OnlineLobbyPage() {
     setMatchingGameType(gameType);
 
     try {
-      const gameId = await findAndJoinGame(user, gameType);
+      // Use RTDB for Duel, Firestore for others
+      const gameId = gameType === 'duel'
+        ? await findAndJoinRTDBGame(user, gameType)
+        : await findAndJoinGame(user, gameType);
+      
       router.push(`/${gameType}/${gameId}`);
 
     } catch (error) {
@@ -103,15 +108,18 @@ export default function OnlineLobbyPage() {
         const allGames = await findAvailableGames(); // fetch all to find the game
         const game = allGames.find(g => g.id === joinGameId);
         
+        // This is a temporary solution for joining RTDB games by ID
+        // A better approach would be to have a cloud function that returns game metadata by ID
+        if (joinGameId.startsWith('game_')) {
+            router.push(`/duel/${joinGameId}`);
+            return;
+        }
+
         await joinGame(joinGameId, user);
 
         if (game) {
             router.push(`/${game.gameType}/${joinGameId}`);
         } else {
-            // If not in the public list, it might be a private game.
-            // We have to assume a game type or fetch the doc.
-            // For simplicity, we'll try to redirect and let the page handle it.
-            // This is not ideal. A better `joinGame` would return the game data.
             router.push(`/duel/${joinGameId}`); // Fallback to a default
         }
       } catch (error) {
@@ -127,8 +135,8 @@ export default function OnlineLobbyPage() {
 
   const matchmakingGames: { name: GameType; icon: React.ElementType, disabled?: boolean }[] = [
     { name: 'duel', icon: Swords },
-    { name: 'janken', icon: Scissors },
-    { name: 'poker', icon: Layers },
+    { name: 'janken', icon: Scissors, disabled: true },
+    { name: 'poker', icon: Layers, disabled: true },
   ];
 
   return (
@@ -192,7 +200,7 @@ export default function OnlineLobbyPage() {
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-                <CardTitle>Waiting Games</CardTitle>
+                <CardTitle>Waiting Games (Firestore)</CardTitle>
                 <CardDescription>{t('orJoinWaitingGame')}</CardDescription>
             </div>
             <Button variant="ghost" size="icon" onClick={fetchGames}><RefreshCw className="h-5 w-5"/></Button>

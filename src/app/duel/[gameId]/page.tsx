@@ -8,14 +8,15 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
-import { subscribeToGame, submitMove, updateGameState, type Game, leaveGame, type CardData } from '@/lib/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, Flag } from 'lucide-react';
+import { Copy, Flag, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
+import type { CardData } from '@/lib/types';
+import { type RTDBGame, subscribeToRTDBGame, leaveRTDBGame, updateRTDBGameState, submitRTDBMove, setupPresence, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
 
 const TOTAL_ROUNDS = 13;
 
@@ -42,35 +43,31 @@ export default function OnlineDuelPage() {
   const playVictorySound = useVictorySound();
 
   const { t } = useTranslation();
-  const [game, setGame] = useState<Game | null>(null);
+  const [game, setGame] = useState<RTDBGame | null>(null);
   const [loading, setLoading] = useState(false);
 
   const gameState = game?.gameState as DuelGameState | undefined;
   const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
   const opponentInfo = opponentId ? game?.players[opponentId] : null;
+  const isHost = user && game && game.playerIds[0] === user.uid;
 
-  // Handle user leaving the page
+
+  // Setup user presence in RTDB
   useEffect(() => {
-    const handleBeforeUnload = async () => {
-        if (user && gameId && game?.status !== 'finished') {
-            await leaveGame(gameId, user.uid);
-        }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
+    if (user) {
+        setupPresence(user.uid);
+    }
     return () => {
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [gameId, user, game?.status]);
+        teardownPresence();
+    }
+  }, [user]);
 
-
-  // Subscribe to game updates
+  // Subscribe to game updates from RTDB
   useEffect(() => {
     if (!gameId || !user) return;
-    const unsubscribeGame = subscribeToGame(gameId, (gameData) => {
+    
+    const unsubscribeGame = subscribeToRTDBGame('duel', gameId, (gameData) => {
       if (gameData) {
-        // If user is not part of the game, redirect them.
         if (!gameData.playerIds.includes(user.uid)) {
             toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive' });
             router.push('/online');
@@ -78,10 +75,13 @@ export default function OnlineDuelPage() {
         }
 
         // Check if opponent has disconnected
-        if (game?.status === 'in-progress' && gameData.status === 'finished' && gameData.winner === user.uid) {
+        if (game?.status === 'in-progress' && gameData.status === 'finished' && Array.isArray(gameData.winner) && gameData.winner.includes(user.uid)) {
             toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
             setTimeout(() => router.push('/online'), 3000);
         }
+        
+        // Update my online status within the game
+        setPlayerOnlineStatus('duel', gameId, user.uid, true);
 
         setGame(gameData);
       } else {
@@ -92,6 +92,9 @@ export default function OnlineDuelPage() {
 
     return () => {
       unsubscribeGame();
+       if (user) {
+         setPlayerOnlineStatus('duel', gameId, user.uid, false);
+       }
     };
   }, [gameId, user, router, toast, game?.status, t]);
 
@@ -99,18 +102,17 @@ export default function OnlineDuelPage() {
   useEffect(() => {
     if (!game || !gameState || !user || !opponentId) return;
 
-    // Only the host (player 1) evaluates the round to prevent duplicate updates
-    if (user.uid !== game.playerIds[0]) return;
+    // Only the host evaluates the round to prevent duplicate updates
+    if (!isHost) return;
 
     const playerMove = gameState.moves?.[user.uid];
     const opponentMove = gameState.moves?.[opponentId];
 
-    // Check if both moves have been made and the round winner hasn't been decided yet
     if (playerMove != null && opponentMove != null && gameState.roundWinner === null) {
       evaluateRound(playerMove, opponentMove);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.gameState, game?.playerIds, user, opponentId]);
+  }, [game?.gameState, game?.playerIds, user, opponentId, isHost]);
 
   // Play sound/animation on win
   useEffect(() => {
@@ -123,11 +125,11 @@ export default function OnlineDuelPage() {
   
   const handleSelectCard = async (card: CardData) => {
     if (loading || !user || !game || !gameState) return;
-    if (gameState.moves?.[user.uid]) return; // Already moved
+    if (gameState.moves?.[user.uid]) return;
 
     setLoading(true);
     try {
-      await submitMove(gameId, user.uid, card);
+      await submitRTDBMove('duel', gameId, user.uid, card);
     } catch (error) {
       console.error("Failed to submit move:", error);
       toast({ title: "Error", description: "Failed to submit move.", variant: 'destructive' });
@@ -143,22 +145,19 @@ export default function OnlineDuelPage() {
     let resultDetail = '';
     let winType = '';
     
-    // Create a mutable copy of the current game state
     let newGameState = JSON.parse(JSON.stringify(gameState));
 
     const p1Id = game.playerIds[0];
     const p2Id = game.playerIds[1];
     
-    // Determine which card belongs to which player regardless of who is evaluating
     const p1Card = newGameState.moves[p1Id];
     const p2Card = newGameState.moves[p2Id];
 
-    if (p1Card === null || p2Card === null) return; // Should not happen, but a safeguard
+    if (p1Card === null || p2Card === null) return;
     
     const p1Num = p1Card.number;
     const p2Num = p2Card.number;
 
-    // Determine winner
     if (p1Num === 1 && p2Num === 13) { winnerId = p1Id; winType = 'only'; } 
     else if (p2Num === 1 && p1Num === 13) { winnerId = p2Id; winType = 'only'; } 
     else if (p1Num === p2Num - 1) { winnerId = p1Id; winType = 'kyuso'; }
@@ -167,7 +166,6 @@ export default function OnlineDuelPage() {
     else if (p2Num > p1Num) { winnerId = p2Id; }
 
 
-    // Update scores and special win counts
     if (winnerId !== 'draw') {
         newGameState.scores[winnerId]++;
         if (winType === 'only') {
@@ -188,7 +186,6 @@ export default function OnlineDuelPage() {
 
     if(!resultDetail) resultDetail = `${game.players[p1Id]?.displayName ?? 'P1'}: ${p1Num} vs ${game.players[p2Id]?.displayName ?? 'P2'}: ${p2Num}`;
 
-    // Update game state for UI before checking game end
     const roundHistory = { [p1Id]: p1Card, [p2Id]: p2Card };
     newGameState.history[newGameState.currentRound] = roundHistory;
     newGameState.playerHands[p1Id] = newGameState.playerHands[p1Id].filter((c:CardData) => c.id !== p1Card.id);
@@ -197,12 +194,9 @@ export default function OnlineDuelPage() {
     newGameState.roundResultText = resultText;
     newGameState.roundResultDetail = resultDetail;
     
-    // The evaluation should only happen once, by the host (player 1).
-    // This prevents race conditions.
-    if(user.uid === p1Id) {
-        updateGameState(game.id, newGameState).then(() => {
+    if(isHost) {
+        updateRTDBGameState('duel', game.id, newGameState).then(() => {
             setTimeout(() => {
-                // Pass the updated state to checkGameEnd
                 checkGameEnd(newGameState);
             }, 2000);
         });
@@ -210,12 +204,13 @@ export default function OnlineDuelPage() {
   };
   
   const checkGameEnd = (currentGameState: DuelGameState) => {
-     if(!user || !opponentId || !game) return;
+     if(!user || !opponentId || !game || !isHost) return;
 
       const p1Id = game.playerIds[0];
       const p2Id = game.playerIds[1];
       let ended = false;
       let finalWinnerId: string | 'draw' | null = null;
+      let finalStatus: 'finished' | 'in-progress' = 'in-progress';
       
       if (currentGameState.only[p1Id] > 0) { ended = true; finalWinnerId = p1Id; }
       else if (currentGameState.only[p2Id] > 0) { ended = true; finalWinnerId = p2Id; }
@@ -229,12 +224,13 @@ export default function OnlineDuelPage() {
       }
 
       if (ended) {
-          // Set final game state on the server
-          if(user.uid === p1Id) {
-            updateGameState(game.id, { ...currentGameState, status: 'finished', winner: finalWinnerId });
+          finalStatus = 'finished';
+          if (finalWinnerId && finalWinnerId !== 'draw') {
+             awardPoints(finalWinnerId, 1);
           }
+          const finalState = { ...currentGameState, status: finalStatus, winner: finalWinnerId };
+          updateRTDBGameState('duel', game.id, finalState);
       } else {
-          // Advance to next round on the server
           const nextRoundState: DuelGameState = {
               ...currentGameState,
               currentRound: currentGameState.currentRound + 1,
@@ -243,9 +239,7 @@ export default function OnlineDuelPage() {
               roundResultText: '',
               roundResultDetail: '',
           };
-          if(user.uid === p1Id) {
-            updateGameState(game.id, nextRoundState);
-          }
+          updateRTDBGameState('duel', game.id, nextRoundState);
       }
   };
 
@@ -256,13 +250,13 @@ export default function OnlineDuelPage() {
   
   const handleForfeit = async () => {
     if (user && gameId) {
-        await leaveGame(gameId, user.uid);
+        await leaveRTDBGame('duel', gameId, user.uid);
         router.push('/online');
     }
   };
 
   if (!user || !game) {
-    return <div className="text-center py-10">Loading game...</div>;
+    return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
   }
   
   if (game.status === 'waiting') {
@@ -281,7 +275,7 @@ export default function OnlineDuelPage() {
   }
   
   if (!gameState || !gameState.playerHands || Object.keys(gameState.playerHands).length < 2) {
-     return <div className="text-center py-10">Loading game state...</div>;
+     return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game state...</div>;
   }
 
   const PlayerInfo = ({ uid }: { uid: string }) => {
@@ -289,22 +283,25 @@ export default function OnlineDuelPage() {
     if (!player) return null;
     return (
         <div className="flex flex-col items-center gap-2">
-            <Avatar className="w-16 h-16">
-                <AvatarImage src={player.photoURL ?? undefined} />
-                <AvatarFallback className="text-2xl">{player.displayName?.[0]}</AvatarFallback>
-            </Avatar>
+            <div className="relative">
+                <Avatar className="w-16 h-16">
+                    <AvatarImage src={player.photoURL ?? undefined} />
+                    <AvatarFallback className="text-2xl">{player.displayName?.[0]}</AvatarFallback>
+                </Avatar>
+                <span className={`absolute bottom-0 right-0 block h-4 w-4 rounded-full ${player.online ? 'bg-green-500' : 'bg-gray-400'} border-2 border-background`} />
+            </div>
             <p className="font-bold text-lg">{uid === user.uid ? t('you') : player.displayName}</p>
         </div>
     );
   }
   
   const ScoreDisplay = () => {
-    const p1Id = game.playerIds[0];
-    const p2Id = game.playerIds[1];
-
-    if (!p1Id || !p2Id || !game.players[p1Id] || !game.players[p2Id] || !gameState || !gameState.scores) {
+    if (!game || !gameState || !game.playerIds[0] || !game.playerIds[1] || !gameState.scores) {
       return null;
     }
+    const p1Id = game.playerIds[0];
+    const p2Id = game.playerIds[1];
+    if (!game.players[p1Id] || !game.players[p2Id]) return null;
 
     return (
       <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
