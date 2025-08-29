@@ -29,7 +29,6 @@ export default function OnlineLobbyPage() {
   const [matchingGameType, setMatchingGameType] = useState<GameType | null>(null);
   const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [availableRTDBGames, setAvailableRTDBGames] = useState<RTDBGame[]>([]);
-  const [joinGameId, setJoinGameId] = useState('');
   
   useEffect(() => {
     if (!user) {
@@ -80,7 +79,7 @@ export default function OnlineLobbyPage() {
 
       if (dbType === 'rtdb') {
         gameId = await findAndJoinRTDBGame(user, gameType);
-        path = gameType === 'janken' ? `/janken-rtdb/${gameId}` : `/${gameType}/${gameId}`;
+        path = gameType === 'janken' ? `/janken-rtdb/${gameId}` : `/duel/${gameId}`;
       } else {
         gameId = await findAndJoinGame(user, gameType);
         path = gameType === 'duel' ? `/${gameType}-legacy/${gameId}` : `/${gameType}/${gameId}`;
