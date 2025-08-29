@@ -26,13 +26,13 @@ import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, A
 import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
-const CARDS_COLLECTION = 'cards';
+const CARDS_COLLECTION = process.env.NEXT_PUBLIC_CARDS_COLLECTION_NAME || 'cards';
 const SERIES_COLLECTION = 'series';
 
 
 // --- Point System ---
 export const awardPoints = async (userId: string, amount: number) => {
-    if (!userId) return;
+    if (!userId || !db) return;
     // This function should ideally be a server-side Cloud Function
     // to prevent client-side manipulation. For now, it's here.
     const userRef = doc(db, 'users', userId);
@@ -169,6 +169,7 @@ const getInitialPokerGameState = (allCards: CardData[], playerIds: string[] = []
 
 
 const getInitialStateForGame = async (gameType: GameType, playerIds: string[]) => {
+    if (!db) return {};
     const allCards = await getCards(true); // Always get fresh cards when starting a game
     switch (gameType) {
         case 'duel':
@@ -185,6 +186,7 @@ const getInitialStateForGame = async (gameType: GameType, playerIds: string[]) =
 
 // Upload a profile image and get the URL
 export const uploadProfileImage = async (userId: string, file: File): Promise<string> => {
+    if (!storage) throw new Error("Firebase Storage is not initialized.");
     const storageRef = ref(storage, `profileImages/${userId}/${file.name}`);
     const snapshot = await uploadBytes(storageRef, file);
     const downloadURL = await getDownloadURL(snapshot.ref);
@@ -193,6 +195,7 @@ export const uploadProfileImage = async (userId: string, file: File): Promise<st
 
 // Create a new game
 export const createGame = async (user: MockUser, gameType: GameType): Promise<string> => {
+  if (!db) throw new Error("Firestore is not initialized.");
   const gameCollection = collection(db, 'games');
   
   const docRef = await addDoc(gameCollection, {
@@ -217,6 +220,7 @@ export const createGame = async (user: MockUser, gameType: GameType): Promise<st
 
 // Join a game
 export const joinGame = async (gameId: string, user: MockUser): Promise<void> => {
+    if (!db) throw new Error("Firestore is not initialized.");
     const gameRef = doc(db, 'games', gameId);
 
     await runTransaction(db, async (transaction) => {
@@ -277,6 +281,7 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
 
 // Manually start a game (for Poker)
 export const startGame = async (gameId: string) => {
+    if (!db) throw new Error("Firestore is not initialized.");
     const gameRef = doc(db, 'games', gameId);
     await runTransaction(db, async (transaction) => {
         const gameSnap = await transaction.get(gameRef);
@@ -315,6 +320,7 @@ export const startGame = async (gameId: string) => {
 
 // Listen for game updates (deprecated for sharded model)
 export const subscribeToGame = (gameId: string, callback: (game: Game | null) => void) => {
+  if (!db) return () => {};
   const gameRef = doc(db, 'games', gameId);
   return onSnapshot(gameRef, (docSnap) => {
     if (docSnap.exists()) {
@@ -327,12 +333,14 @@ export const subscribeToGame = (gameId: string, callback: (game: Game | null) =>
 
 // Update a single document
 export const updateGameState = async (gameId: string, updates: any): Promise<void> => {
+  if (!db) return;
   const gameRef = doc(db, 'games', gameId);
   await updateDoc(gameRef, { gameState: updates });
 };
 
 // Update multiple sharded state documents
 export const updateShardedGameState = async (gameId: string, payload: any) => {
+    if (!db) return;
     const batch = writeBatch(db);
     
     for (const key in payload) {
@@ -358,6 +366,7 @@ export const updateShardedGameState = async (gameId: string, payload: any) => {
 
 // Submit a move to its own document
 export const submitMove = async (gameId: string, userId: string, move: any) => {
+    if (!db) return;
     const moveDocRef = doc(db, 'games', gameId, 'moves', userId);
     await setDoc(moveDocRef, { card: move });
     
@@ -369,6 +378,7 @@ export const submitMove = async (gameId: string, userId: string, move: any) => {
 
 // Find available games
 export const findAvailableGames = async (): Promise<Game[]> => {
+  if (!db) return [];
   const gamesCollection = collection(db, 'games');
   const q = query(
     gamesCollection,
@@ -386,6 +396,7 @@ export const findAvailableGames = async (): Promise<Game[]> => {
 
 // Subscribe to available games
 export const subscribeToAvailableGames = (callback: (games: Game[]) => void): (() => void) => {
+    if (!db) return () => {};
     const gamesCollection = collection(db, 'games');
     const q = query(
         gamesCollection,
@@ -408,6 +419,7 @@ export const subscribeToAvailableGames = (callback: (games: Game[]) => void): ((
 
 // --- Auto Matchmaking ---
 export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promise<string> => {
+  if (!db) throw new Error("Firestore is not initialized.");
   const gamesRef = collection(db, 'games');
   const maxPlayers = gameType === 'poker' ? 4 : 2;
   
@@ -490,6 +502,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
 
 // Forfeit a game
 export const leaveGame = async (gameId: string, leavingPlayerId: string): Promise<void> => {
+    if (!db) return;
     try {
         await runTransaction(db, async (transaction) => {
             const gameRef = doc(db, 'games', gameId);
@@ -534,6 +547,7 @@ export const leaveGame = async (gameId: string, leavingPlayerId: string): Promis
 
 // Get a single user's profile
 export const getUserProfile = async (userId: string): Promise<MockUser | null> => {
+    if (!db) return null;
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
     if (userSnap.exists()) {
@@ -544,6 +558,7 @@ export const getUserProfile = async (userId: string): Promise<MockUser | null> =
 
 // Update a user's myCards
 export const updateMyCards = async (userId: string, cardIds: string[]): Promise<void> => {
+    if (!db) return;
     const userRef = doc(db, 'users', userId);
     await updateDoc(userRef, {
         myCards: cardIds,
@@ -557,6 +572,7 @@ export const setJankenAction = async (
     data: { title: string, comment: string },
     imageFile: File | null
 ): Promise<void> => {
+    if (!db || !storage) return;
     const docId = `${userId}_${type}`;
     const actionRef = doc(db, 'jankenActions', docId);
 
@@ -578,6 +594,7 @@ export const setJankenAction = async (
 };
 
 export const getJankenActions = async (userId: string): Promise<{ [key in 'rock' | 'paper' | 'scissors']?: JankenAction }> => {
+    if (!db) return {};
     const actions: { [key in 'rock' | 'paper' | 'scissors']?: JankenAction } = {};
     const q = query(collection(db, 'jankenActions'), where('userId', '==', userId));
     const querySnapshot = await getDocs(q);
@@ -592,6 +609,7 @@ export const getJankenActions = async (userId: string): Promise<{ [key in 'rock'
 // --- Posts (Bulletin Board) ---
 
 export const createPost = async (author: MockUser, content: string): Promise<void> => {
+    if (!db) return;
     if (!content.trim()) {
         throw new Error("Post content cannot be empty.");
     }
@@ -611,6 +629,7 @@ export const createPost = async (author: MockUser, content: string): Promise<voi
 
 
 export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
+  if (!db) return () => {};
   const postsCollection = collection(db, 'posts');
   const q = query(
     postsCollection, 
@@ -628,6 +647,7 @@ export const subscribeToPosts = (callback: (posts: Post[]) => void) => {
 };
 
 export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) => void) => {
+    if (!db) return () => {};
     const postsCollection = collection(db, 'posts');
     const q = query(
         postsCollection, 
@@ -652,6 +672,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
 
 // Like/Unlike a post
 export const togglePostLike = async (postId: string, userId: string): Promise<void> => {
+    if (!db) return;
     const postRef = doc(db, 'posts', postId);
     await runTransaction(db, async (transaction) => {
         const postSnap = await transaction.get(postRef);
@@ -677,6 +698,7 @@ export const togglePostLike = async (postId: string, userId: string): Promise<vo
 };
 
 export const deletePost = async (postId: string): Promise<void> => {
+    if (!db) return;
     const postRef = doc(db, 'posts', postId);
     await deleteDoc(postRef);
 };
@@ -702,6 +724,7 @@ const deriveCompatibilityFields = (card: Omit<CardData, 'id'>, id: string): Card
 };
 
 export const getCards = async (forceRefresh: boolean = false): Promise<CardData[]> => {
+    if (!db) return [];
     const cardsCollection = collection(db, CARDS_COLLECTION);
     const querySnapshot = await getDocs(cardsCollection);
     const cards: CardData[] = [];
@@ -713,6 +736,7 @@ export const getCards = async (forceRefresh: boolean = false): Promise<CardData[
 };
 
 export const getCardById = async (id: string): Promise<CardData | null> => {
+    if (!db) return null;
     const cardRef = doc(db, CARDS_COLLECTION, id);
     const docSnap = await getDoc(cardRef);
 
@@ -730,6 +754,7 @@ export const addCard = async (
   author: MockUser,
   backImageFile?: File | null
 ): Promise<void> => {
+  if (!db || !storage) return;
   const filePath = `${CARDS_COLLECTION}/${Date.now()}_${imageFile.name}`;
   const imageRef = ref(storage, filePath);
   const uploadResult = await uploadBytes(imageRef, imageFile);
@@ -758,6 +783,7 @@ export const addCard = async (
 
 
 export const deleteCard = async (card: CardData): Promise<void> => {
+    if (!db || !storage) return;
     const cardRef = doc(db, CARDS_COLLECTION, card.id);
     await deleteDoc(cardRef);
 
@@ -785,6 +811,7 @@ export const deleteCard = async (card: CardData): Promise<void> => {
 // --- Series Management ---
 
 export const getSeries = async (forceRefresh: boolean = false): Promise<CardSeries[]> => {
+    if (!db) return [];
     const seriesCollection = collection(db, SERIES_COLLECTION);
     const q = query(seriesCollection, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
@@ -796,6 +823,7 @@ export const getSeries = async (forceRefresh: boolean = false): Promise<CardSeri
 }
 
 export const addSeries = async (name: string): Promise<string> => {
+    if (!db) throw new Error("Firestore is not initialized.");
     // Check if series with the same name already exists to prevent duplicates
     const seriesCollection = collection(db, SERIES_COLLECTION);
     const q = query(seriesCollection, where("name", "==", name));
@@ -812,6 +840,7 @@ export const addSeries = async (name: string): Promise<string> => {
 }
 
 export const deleteSeries = async (id: string): Promise<void> => {
+    if (!db) return;
     // Note: This does not delete cards within the series.
     // That logic could be added here if needed (e.g., using a transaction or batch write).
     const seriesRef = doc(db, SERIES_COLLECTION, id);
@@ -821,6 +850,7 @@ export const deleteSeries = async (id: string): Promise<void> => {
 
 // --- Game History ---
 export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
+    if (!db) return [];
     const gamesCollection = collection(db, 'games');
     const q = query(
         gamesCollection,
@@ -842,6 +872,7 @@ export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
 // --- Announcements ---
 
 export const createAnnouncement = async (author: MockUser, title: string, content: string): Promise<string> => {
+    if (!db) throw new Error("Firestore is not initialized.");
     const announcementCollection = collection(db, 'announcements');
     const docRef = await addDoc(announcementCollection, {
         author: {
@@ -857,6 +888,7 @@ export const createAnnouncement = async (author: MockUser, title: string, conten
 };
 
 export const updateAnnouncement = async (id: string, title: string, content: string): Promise<void> => {
+    if (!db) return;
     const announcementRef = doc(db, 'announcements', id);
     await updateDoc(announcementRef, {
         title,
@@ -866,11 +898,13 @@ export const updateAnnouncement = async (id: string, title: string, content: str
 };
 
 export const deleteAnnouncement = async (id: string): Promise<void> => {
+    if (!db) return;
     const announcementRef = doc(db, 'announcements', id);
     await deleteDoc(announcementRef);
 };
 
 export const subscribeToAnnouncements = (callback: (announcements: Announcement[]) => void) => {
+    if (!db) return () => {};
     const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (querySnapshot) => {
         const announcements: Announcement[] = [];
@@ -882,6 +916,7 @@ export const subscribeToAnnouncements = (callback: (announcements: Announcement[
 };
 
 export const subscribeToLatestAnnouncements = (callback: (announcements: Announcement[]) => void) => {
+    if (!db) return () => {};
     const q = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'), limit(3));
     return onSnapshot(q, (querySnapshot) => {
         const announcements: Announcement[] = [];
@@ -897,6 +932,7 @@ export const subscribeToLatestAnnouncements = (callback: (announcements: Announc
 
 // Create or get a chat room between two users
 export const getOrCreateChatRoom = async (user1Id: string, user2Id: string): Promise<string> => {
+    if (!db) throw new Error("Firestore is not initialized.");
     const members = [user1Id, user2Id].sort();
     const chatRoomId = members.join('-');
     const chatRoomRef = doc(db, 'chatRooms', chatRoomId);
@@ -927,6 +963,7 @@ export const getOrCreateChatRoom = async (user1Id: string, user2Id: string): Pro
 
 // Listen for a user's chat rooms
 export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[]) => void) => {
+    if (!db) return () => {};
     const q = query(
         collection(db, 'chatRooms'),
         where('participantIds', 'array-contains', userId),
@@ -944,6 +981,7 @@ export const subscribeToChatRooms = (userId: string, callback: (rooms: ChatRoom[
 
 // Listen for messages in a specific chat room
 export const subscribeToMessages = (chatRoomId: string, callback: (messages: ChatMessage[]) => void) => {
+    if (!db) return () => {};
     const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
     const q = query(messagesRef, orderBy('createdAt', 'asc'), limit(100));
 
@@ -958,6 +996,7 @@ export const subscribeToMessages = (chatRoomId: string, callback: (messages: Cha
 
 // Send a message
 export const sendMessage = async (chatRoomId: string, senderId: string, text: string, senderInfo: { displayName: string, photoURL: string }) => {
+    if (!db) return;
     const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
     const chatRoomRef = doc(db, 'chatRooms', chatRoomId);
 
