@@ -6,6 +6,7 @@
 
 
 
+
 import { db, storage } from './firebase';
 import {
   collection,
@@ -623,7 +624,7 @@ export const subscribeToUserPosts = (userId: string, callback: (posts: Post[]) =
     const q = query(
         postsCollection, 
         where('author.uid', '==', userId),
-        orderBy('createdAt', 'desc'),
+        // orderBy('createdAt', 'desc'), // This requires a composite index. We will sort on the client.
         limit(50)
     );
 
@@ -805,10 +806,10 @@ export const getSeries = async (forceRefresh: boolean = false): Promise<CardSeri
                 if (cachedItem) {
                     const { timestamp, data } = JSON.parse(cachedItem);
                     if (Date.now() - timestamp < CACHE_EXPIRATION_MS && data && data.length > 0) {
-                        // When retrieving from cache, Firestore Timestamps become strings. We need to convert them back.
+                        // When retrieving from cache, Firestore Timestamps can be serialized. We need to convert them back.
                         const parsedData = data.map((item: any) => ({
                             ...item,
-                            createdAt: new Timestamp(item.createdAt.seconds, item.createdAt.nanoseconds)
+                            createdAt: item.createdAt.seconds ? new Timestamp(item.createdAt.seconds, item.createdAt.nanoseconds) : Timestamp.fromDate(new Date(item.createdAt))
                         }));
                         return parsedData as CardSeries[];
                     }
