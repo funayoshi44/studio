@@ -4,8 +4,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
-import { useToast } from '@/components/ui/toast';
-import { onValue, ref, update } from 'firebase/database';
+import { useToast } from '@/hooks/use-toast';
+import { onValue, ref, update, get } from 'firebase/database';
 import { rtdb } from '@/lib/firebase';
 import { setupPresence, teardownPresence, setPlayerOnlineStatus, submitRTDBMove } from '@/lib/rtdb';
 import { useCardCache } from '@/contexts/card-cache-context';
