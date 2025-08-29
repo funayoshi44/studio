@@ -75,20 +75,20 @@ export default function OnlineDuelPage() {
   useEffect(() => {
     if (!gameId || !user) return;
     
-    const gameBaseRef = ref(rtdb, `lobbies/duel/${gameId}`);
+    const gameBasePath = `lobbies/duel/${gameId}`;
 
     const listeners = [
-        onValue(ref(gameBaseRef, 'status'), snap => {
+        onValue(ref(rtdb, `${gameBasePath}/status`), snap => {
             const newStatus = snap.val();
             if (gameStatus === 'in-progress' && newStatus === 'finished') {
                  toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
             }
             setGameStatus(newStatus)
         }),
-        onValue(ref(gameBaseRef, 'players'), snap => setGamePlayers(snap.val())),
-        onValue(ref(gameBaseRef, 'playerIds'), snap => setPlayerIds(snap.val() || [])),
-        onValue(ref(gameBaseRef, 'gameState'), snap => setGameState(snap.val())),
-        onValue(ref(gameBaseRef, 'winner'), snap => setWinner(snap.val())),
+        onValue(ref(rtdb, `${gameBasePath}/players`), snap => setGamePlayers(snap.val())),
+        onValue(ref(rtdb, `${gameBasePath}/playerIds`), snap => setPlayerIds(snap.val() || [])),
+        onValue(ref(rtdb, `${gameBasePath}/gameState`), snap => setGameState(snap.val())),
+        onValue(ref(rtdb, `${gameBasePath}/winner`), snap => setWinner(snap.val())),
     ];
     
     // Update my online status within the game
@@ -240,7 +240,6 @@ export default function OnlineDuelPage() {
       if (ended) {
           finalStatus = 'finished';
           if (finalWinnerId && finalWinnerId !== 'draw') {
-             // Points should be awarded by a Cloud Function listening for status change.
              // awardPoints(finalWinnerId, 1);
           }
           const finalState = { ...currentGameState };
