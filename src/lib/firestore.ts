@@ -429,21 +429,16 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
   const maxPlayers = gameType === 'poker' ? 4 : 2;
   
   return runTransaction(db, async (transaction) => {
-    const q = query(
-        gamesRef,
-        where('status', '==', 'waiting'),
-        limit(20) // Get all waiting games and filter client-side
-      );
-
+    const q = query(gamesRef, where('status', '==', 'waiting'), limit(20));
     const querySnapshot = await getDocs(q);
     
     let suitableGame: Game | null = null;
     let suitableGameId: string | null = null;
     
     for (const doc of querySnapshot.docs) {
-        const game = { id: doc.id, ...doc.data() } as Game;
-        if (game.gameType === gameType && !game.playerIds.includes(user.uid) && game.playerIds.length < maxPlayers) {
-            suitableGame = game;
+        const gameData = doc.data() as Game;
+        if (gameData && gameData.playerIds && gameData.gameType === gameType && !gameData.playerIds.includes(user.uid) && gameData.playerIds.length < maxPlayers) {
+            suitableGame = { id: doc.id, ...gameData };
             suitableGameId = doc.id;
             break;
         }
@@ -1031,5 +1026,6 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
     
 
     
+
 
 
