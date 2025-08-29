@@ -177,7 +177,7 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
     // Use the result of the transaction instead of another GET
     const finalLobby = result.snapshot.val();
     for (const gameId in finalLobby) {
-        if (finalLobby[gameId].playerIds.includes(user.uid)) {
+        if (finalLobby[gameId]?.playerIds?.includes(user.uid)) {
              awardPoints(user.uid, 1);
              return gameId;
         }
