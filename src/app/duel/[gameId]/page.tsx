@@ -17,6 +17,7 @@ import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
 import type { CardData } from '@/lib/types';
 import { type RTDBGame, subscribeToRTDBGame, leaveRTDBGame, updateRTDBGameState, submitRTDBMove, setupPresence, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
+import { awardPoints } from '@/lib/firestore';
 
 const TOTAL_ROUNDS = 13;
 
@@ -109,7 +110,7 @@ export default function OnlineDuelPage() {
     const opponentMove = gameState.moves?.[opponentId];
 
     if (playerMove != null && opponentMove != null && gameState.roundWinner === null) {
-      evaluateRound(playerMove, opponentMove);
+      evaluateRound();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.gameState, game?.playerIds, user, opponentId, isHost]);
@@ -117,7 +118,7 @@ export default function OnlineDuelPage() {
   // Play sound/animation on win
   useEffect(() => {
     if (user && game && gameState) {
-        if (gameState.roundWinner === user.uid || game.winner === user.uid) {
+        if (gameState.roundWinner === user.uid || (Array.isArray(game.winner) && game.winner.includes(user.uid))) {
             playVictorySound();
         }
     }
@@ -137,7 +138,7 @@ export default function OnlineDuelPage() {
     setLoading(false);
   };
   
-  const evaluateRound = (playerCard: CardData, opponentCard: CardData) => {
+  const evaluateRound = () => {
     if (!user || !opponentId || !gameState || !game) return;
 
     let winnerId: string | 'draw' = 'draw';
@@ -147,23 +148,20 @@ export default function OnlineDuelPage() {
     
     let newGameState = JSON.parse(JSON.stringify(gameState));
 
-    const p1Id = game.playerIds[0];
-    const p2Id = game.playerIds[1];
+    const myCard = newGameState.moves[user.uid];
+    const opponentCard = newGameState.moves[opponentId];
     
-    const p1Card = newGameState.moves[p1Id];
-    const p2Card = newGameState.moves[p2Id];
+    if (!myCard || !opponentCard) return;
 
-    if (p1Card === null || p2Card === null) return;
-    
-    const p1Num = p1Card.number;
-    const p2Num = p2Card.number;
+    const myCardNumber = myCard.number;
+    const opponentCardNumber = opponentCard.number;
 
-    if (p1Num === 1 && p2Num === 13) { winnerId = p1Id; winType = 'only'; } 
-    else if (p2Num === 1 && p1Num === 13) { winnerId = p2Id; winType = 'only'; } 
-    else if (p1Num === p2Num - 1) { winnerId = p1Id; winType = 'kyuso'; }
-    else if (p2Num === p1Num - 1) { winnerId = p2Id; winType = 'kyuso'; }
-    else if (p1Num > p2Num) { winnerId = p1Id; }
-    else if (p2Num > p1Num) { winnerId = p2Id; }
+    if (myCardNumber === 1 && opponentCardNumber === 13) { winnerId = user.uid; winType = 'only'; }
+    else if (opponentCardNumber === 1 && myCardNumber === 13) { winnerId = opponentId; winType = 'only'; }
+    else if (myCardNumber === opponentCardNumber - 1) { winnerId = user.uid; winType = 'kyuso'; }
+    else if (opponentCardNumber === myCardNumber - 1) { winnerId = opponentId; winType = 'kyuso'; }
+    else if (myCardNumber > opponentCardNumber) { winnerId = user.uid; }
+    else if (opponentCardNumber > myCardNumber) { winnerId = opponentId; }
 
 
     if (winnerId !== 'draw') {
@@ -184,12 +182,12 @@ export default function OnlineDuelPage() {
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${game.players[p1Id]?.displayName ?? 'P1'}: ${p1Num} vs ${game.players[p2Id]?.displayName ?? 'P2'}: ${p2Num}`;
+    if(!resultDetail) resultDetail = `${game.players[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${game.players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
 
-    const roundHistory = { [p1Id]: p1Card, [p2Id]: p2Card };
+    const roundHistory = { [user.uid]: myCard, [opponentId]: opponentCard };
     newGameState.history[newGameState.currentRound] = roundHistory;
-    newGameState.playerHands[p1Id] = newGameState.playerHands[p1Id].filter((c:CardData) => c.id !== p1Card.id);
-    newGameState.playerHands[p2Id] = newGameState.playerHands[p2Id].filter((c:CardData) => c.id !== p2Card.id);
+    newGameState.playerHands[user.uid] = newGameState.playerHands[user.uid].filter((c:CardData) => c.id !== myCard.id);
+    newGameState.playerHands[opponentId] = newGameState.playerHands[opponentId].filter((c:CardData) => c.id !== opponentCard.id);
     newGameState.roundWinner = winnerId;
     newGameState.roundResultText = resultText;
     newGameState.roundResultDetail = resultDetail;
@@ -421,7 +419,7 @@ export default function OnlineDuelPage() {
             <p className="text-4xl font-bold mb-4">
                 {game.winner === 'draw'
                     ? t('duelFinalResultDraw')
-                    : game.winner ? `${game.players[game.winner]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
+                    : game.winner ? `${game.players[game.winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
             </p>
             <div className="space-x-4 mt-6">
                 <Link href="/online" passHref>
