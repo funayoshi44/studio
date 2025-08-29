@@ -207,8 +207,6 @@ export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: 
             if (game.status === 'in-progress' && game.playerIds.length === 1) {
                 game.status = 'finished';
                 game.winner = game.playerIds[0];
-                // DO NOT award points here. This is a side-effect that can cause issues.
-                // This should be handled by a Cloud Function listening for status changes.
             } else if (game.playerIds.length === 0) {
                 // If no players left, delete the game from the lobby by returning null.
                 return null;

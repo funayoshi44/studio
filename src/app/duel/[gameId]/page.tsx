@@ -25,6 +25,8 @@ import { rtdb } from '@/lib/firebase';
 const TOTAL_ROUNDS = 13;
 
 type PlayerHand = Omit<CardData, 'title' | 'caption' | 'frontImageUrl' | 'backImageUrl'>[];
+type LightCard = { id: string; suit: string; rank: number | string; number: number; };
+
 
 export default function OnlineDuelPage() {
   const { user } = useAuth();
@@ -50,7 +52,7 @@ export default function OnlineDuelPage() {
   const [scores, setScores] = useState<{ [uid: string]: number }>({});
   const [kyuso, setKyuso] = useState<{ [uid: string]: number }>({});
   const [only, setOnly] = useState<{ [uid: string]: number }>({});
-  const [moves, setMoves] = useState<{ [uid: string]: CardData | null }>({});
+  const [moves, setMoves] = useState<{ [uid: string]: LightCard | null }>({});
   const [roundWinner, setRoundWinner] = useState<string | null | 'draw'>(null);
   const [roundResultText, setRoundResultText] = useState('');
   const [roundResultDetail, setRoundResultDetail] = useState('');
@@ -75,44 +77,67 @@ export default function OnlineDuelPage() {
   useEffect(() => {
     if (!gameId || !user) return;
     
-    const gameBaseRef = `lobbies/duel/${gameId}`;
-    const gameStatePath = `${gameBaseRef}/gameState`;
+    const base = `lobbies/duel/${gameId}`;
+    const gs = `${base}/gameState`;
+    const unsubs: Array<() => void> = [];
 
-    const listeners = [
-        onValue(ref(rtdb, `${gameBaseRef}/status`), snap => {
-            const newStatus = snap.val();
-            if (gameStatus === 'in-progress' && newStatus === 'finished') {
-                 toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
-            }
-            setGameStatus(newStatus)
-        }),
-        onValue(ref(rtdb, `${gameBaseRef}/players`), snap => setGamePlayers(snap.val())),
-        onValue(ref(rtdb, `${gameBaseRef}/playerIds`), snap => setPlayerIds(snap.val() || [])),
-        onValue(ref(rtdb, `${gameBaseRef}/winner`), snap => setWinner(snap.val())),
-        // Granular game state listeners
-        onValue(ref(rtdb, `${gameStatePath}/currentRound`), snap => setCurrentRound(snap.val() ?? 1)),
-        onValue(ref(rtdb, `${gameStatePath}/playerHands`), snap => setPlayerHands(snap.val() ?? {})),
-        onValue(ref(rtdb, `${gameStatePath}/scores`), snap => setScores(snap.val() ?? {})),
-        onValue(ref(rtdb, `${gameStatePath}/kyuso`), snap => setKyuso(snap.val() ?? {})),
-        onValue(ref(rtdb, `${gameStatePath}/only`), snap => setOnly(snap.val() ?? {})),
-        onValue(ref(rtdb, `${gameStatePath}/moves`), snap => setMoves(snap.val() ?? {})),
-        onValue(ref(rtdb, `${gameStatePath}/roundWinner`), snap => setRoundWinner(snap.val() ?? null)),
-        onValue(ref(rtdb, `${gameStatePath}/roundResultText`), snap => setRoundResultText(snap.val() ?? '')),
-        onValue(ref(rtdb, `${gameStatePath}/roundResultDetail`), snap => setRoundResultDetail(snap.val() ?? '')),
-    ];
+    // Lightweight fields
+    unsubs.push(onValue(ref(rtdb, `${base}/status`), s => setGameStatus(s.val())));
+    unsubs.push(onValue(ref(rtdb, `${base}/players`), s => setGamePlayers(s.val())));
+    unsubs.push(onValue(ref(rtdb, `${base}/winner`), s => setWinner(s.val())));
+
+    // Minimal game state fields
+    unsubs.push(onValue(ref(rtdb, `${gs}/currentRound`), s => setCurrentRound(s.val() ?? 1)));
+    unsubs.push(onValue(ref(rtdb, `${gs}/scores`), s => setScores(s.val() ?? {})));
+    unsubs.push(onValue(ref(rtdb, `${gs}/kyuso`), s => setKyuso(s.val() ?? {})));
+    unsubs.push(onValue(ref(rtdb, `${gs}/only`), s => setOnly(s.val() ?? {})));
+    unsubs.push(onValue(ref(rtdb, `${gs}/roundWinner`), s => setRoundWinner(s.val() ?? null)));
+    unsubs.push(onValue(ref(rtdb, `${gs}/roundResultText`), s => setRoundResultText(s.val() ?? '')));
+    unsubs.push(onValue(ref(rtdb, `${gs}/roundResultDetail`), s => setRoundResultDetail(s.val() ?? '')));
+
+    // Subscribe to my own hand
+    unsubs.push(onValue(ref(rtdb, `${gs}/playerHands/${user.uid}`), s => {
+        setPlayerHands(prev => ({ ...prev, [user.uid]: s.val() ?? [] }));
+    }));
+
+    // Subscribe to my own move
+    unsubs.push(onValue(ref(rtdb, `${gs}/moves/${user.uid}`), s => {
+        setMoves(prev => ({ ...prev, [user.uid]: s.val() ?? null }));
+    }));
+
+    // Subscribe to opponent's move once opponentId is known
+    let oppUnsub: (() => void) | null = null;
+    const attachOpponentListener = (oppId?: string) => {
+        if (oppUnsub) { oppUnsub(); oppUnsub = null; } // Clean up old listener
+        if (!oppId) return;
+        
+        oppUnsub = onValue(ref(rtdb, `${gs}/moves/${oppId}`), s => {
+            setMoves(prev => ({ ...prev, [oppId]: s.val() ?? null }));
+        });
+        unsubs.push(() => oppUnsub && oppUnsub());
+    };
     
+    // Subscribe to playerIds to know when opponent joins/leaves
+    const playerIdsUnsub = onValue(ref(rtdb, `${base}/playerIds`), snap => {
+        const ids = snap.val() || [];
+        setPlayerIds(ids);
+        const currentOpponent = ids.find((p: string) => p !== user.uid);
+        attachOpponentListener(currentOpponent);
+    });
+    unsubs.push(playerIdsUnsub);
+
     // Update my online status within the game
     setPlayerOnlineStatus('duel', gameId, user.uid, true);
 
     // Unsubscribe from all listeners on cleanup
     return () => {
-       listeners.forEach(unsubscribe => unsubscribe());
+       unsubs.forEach(unsubscribe => unsubscribe());
        if (user) {
          setPlayerOnlineStatus('duel', gameId, user.uid, false);
        }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId, user, router, toast]);
+  }, [gameId, user]);
 
   // Redirect if player is not in game
    useEffect(() => {
@@ -212,7 +237,12 @@ export default function OnlineDuelPage() {
 
     // Filter hands using the card's ID
     newPlayerHands[user.uid] = newPlayerHands[user.uid].filter((c: any) => c.id !== myCard.id);
-    newPlayerHands[opponentId] = newPlayerHands[opponentId].filter((c: any) => c.id !== opponentCard.id);
+    
+    // Instead of reading opponent hand from DB, just update our local copy
+    setPlayerHands(prev => ({
+        ...prev,
+        [user.uid]: newPlayerHands[user.uid]
+    }));
     
     const updates: any = {};
     const gameBasePath = `lobbies/duel/${gameId}`;
@@ -221,11 +251,12 @@ export default function OnlineDuelPage() {
     updates[`${gameStatePath}/scores`] = newScores;
     updates[`${gameStatePath}/kyuso`] = newKyuso;
     updates[`${gameStatePath}/only`] = newOnly;
-    updates[`${gameStatePath}/playerHands`] = newPlayerHands;
+    updates[`${gameStatePath}/playerHands/${user.uid}`] = newPlayerHands[user.uid];
     updates[`${gameStatePath}/roundWinner`] = winnerId;
     updates[`${gameStatePath}/roundResultText`] = resultText;
     updates[`${gameStatePath}/roundResultDetail`] = resultDetail;
-    updates[`${gameStatePath}/history/${currentRound}`] = { [user.uid]: moves[user.uid], [opponentId]: moves[opponentId] };
+    updates[`${gameStatePath}/lastHistory`] = { round: currentRound, [user.uid]: moves[user.uid], [opponentId]: moves[opponentId] };
+
     
     if(isHost) {
         update(ref(rtdb), updates).then(() => {
@@ -258,9 +289,7 @@ export default function OnlineDuelPage() {
 
       if (ended) {
           finalStatus = 'finished';
-          if (finalWinnerId && finalWinnerId !== 'draw') {
-             awardPoints(finalWinnerId, 1);
-          }
+          // Award points should be handled by a cloud function, not here.
           const finalUpdates: any = {};
           finalUpdates[`lobbies/duel/${gameId}/status`] = finalStatus;
           finalUpdates[`lobbies/duel/${gameId}/winner`] = finalWinnerId;
@@ -290,7 +319,7 @@ export default function OnlineDuelPage() {
     }
   };
 
-  const rehydrateCard = (lightCard: any): CardData | null => {
+  const rehydrateCard = (lightCard: LightCard | null): CardData | null => {
       if (!lightCard) return null;
       const fullCard = cardMap.get(lightCard.id);
       return fullCard ? { ...fullCard, ...lightCard } : null;
@@ -315,7 +344,7 @@ export default function OnlineDuelPage() {
     );
   }
   
-  if (!playerHands || Object.keys(playerHands).length < 2) {
+  if (!playerHands || !playerHands[user.uid]) {
      return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game state...</div>;
   }
 
@@ -485,5 +514,3 @@ export default function OnlineDuelPage() {
     </div>
   );
 }
-
-    
