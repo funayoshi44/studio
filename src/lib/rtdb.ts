@@ -64,7 +64,8 @@ const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = [])
         roundResultText: '', roundResultDetail: '',
     };
     playerIds.forEach(uid => {
-        gameState.playerHands[uid] = createRandomDeck(allCards);
+        // Store lightweight card representation in RTDB
+        gameState.playerHands[uid] = createRandomDeck(allCards).map(c => ({ id: c.id, suit: c.suit, rank: c.rank, number: c.number }));
         gameState.scores[uid] = 0;
         gameState.kyuso[uid] = 0;
         gameState.only[uid] = 0;
@@ -99,7 +100,7 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
     const lobbyRef = ref(rtdb, `lobbies/${gameType}`);
     const allCards = await getCards();
 
-    return runTransaction(lobbyRef, (currentLobby) => {
+    const result = await runTransaction(lobbyRef, (currentLobby) => {
         if (currentLobby === null) {
             currentLobby = {};
         }
@@ -142,22 +143,27 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
             currentLobby[newGameId] = newGame;
             return currentLobby;
         }
-    }).then(async (result) => {
-        if(!result.committed) throw new Error("Failed to join or create game.");
-        // After transaction, find which game we are in
-        const finalLobby = (await get(lobbyRef)).val();
-        for (const gameId in finalLobby) {
-            if (finalLobby[gameId].playerIds.includes(user.uid)) {
-                 await awardPoints(user.uid, 1);
-                 return gameId;
-            }
-        }
-        throw new Error("Could not determine game ID after transaction.");
     });
+
+    if(!result.committed) throw new Error("Failed to join or create game.");
+    
+    // Use the result of the transaction instead of another GET
+    const finalLobby = result.snapshot.val();
+    for (const gameId in finalLobby) {
+        if (finalLobby[gameId].playerIds.includes(user.uid)) {
+             // Side-effect (awardPoints) should ideally be handled by a Cloud Function
+             // triggered by the game creation/joining event to avoid potential race conditions
+             // or multiple awards if client logic retries.
+             awardPoints(user.uid, 1);
+             return gameId;
+        }
+    }
+    throw new Error("Could not determine game ID after transaction.");
 };
 
+
 // --- Game Logic for RTDB ---
-export const subscribeToRTDBGame = (gameType: GameType, gameId: string, callback: (game: RTDBGame | null) => void) => {
+export const subscribeToRTDBGame = (gameType: GameType, gameId: string, callback: (game: RTDBGame | null) => void): (() => void) => {
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
     onValue(gameRef, (snapshot) => {
         callback(snapshot.val() as RTDBGame | null);
@@ -175,19 +181,22 @@ export const updateRTDBGameState = (gameType: GameType, gameId: string, newGameS
 export const submitRTDBMove = (gameType: GameType, gameId: string, userId: string, move: CardData) => {
     const moveRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState/moves/${userId}`);
     const lastMoveByRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState/lastMoveBy`);
-    set(moveRef, move);
+    // Store only lightweight card representation
+    const lightWeightMove = { id: move.id, suit: move.suit, rank: move.rank, number: move.number };
+    set(moveRef, lightWeightMove);
     set(lastMoveByRef, userId);
 };
 
 export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: string) => {
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
-    await runTransaction(gameRef, (game: RTDBGame) => {
+    await runTransaction(gameRef, (game: RTDBGame | null) => {
+        // If game is null, it's already been deleted or doesn't exist.
         if (!game) {
-            return;
+            return game;
         }
 
         // Remove player if they exist in the game
-        if (game.players && game.players[userId]) {
+        if (game.players?.[userId]) {
             delete game.players[userId];
         }
 
@@ -198,9 +207,10 @@ export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: 
             if (game.status === 'in-progress' && game.playerIds.length === 1) {
                 game.status = 'finished';
                 game.winner = game.playerIds[0];
-                awardPoints(game.winner!, 1);
+                // DO NOT award points here. This is a side-effect that can cause issues.
+                // This should be handled by a Cloud Function listening for status changes.
             } else if (game.playerIds.length === 0) {
-                // If no players left, delete the game from the lobby
+                // If no players left, delete the game from the lobby by returning null.
                 return null;
             }
         }

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
@@ -16,14 +16,17 @@ import { PokerCard as GameCard } from '@/components/ui/poker-card';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
 import type { CardData } from '@/lib/types';
-import { type RTDBGame, subscribeToRTDBGame, leaveRTDBGame, updateRTDBGameState, submitRTDBMove, setupPresence, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
+import { type RTDBGame, leaveRTDBGame, updateRTDBGameState, submitRTDBMove, setupPresence, teardownPresence, setPlayerOnlineStatus } from '@/lib/rtdb';
 import { awardPoints } from '@/lib/firestore';
+import { useCardCache } from '@/contexts/card-cache-context';
+import { onValue, ref, off } from 'firebase/database';
+import { rtdb } from '@/lib/firebase';
 
 const TOTAL_ROUNDS = 13;
 
 type DuelGameState = {
   currentRound: number;
-  playerHands: { [uid: string]: CardData[] };
+  playerHands: { [uid: string]: Omit<CardData, 'title'|'caption'|'frontImageUrl'>[] };
   scores: { [uid:string]: number };
   kyuso: { [uid:string]: number };
   only: { [uid:string]: number };
@@ -42,15 +45,20 @@ export default function OnlineDuelPage() {
   const gameId = params.gameId as string;
   const { toast } = useToast();
   const playVictorySound = useVictorySound();
+  const { cards: allCards, loading: cardsLoading } = useCardCache();
+  const cardMap = useMemo(() => new Map(allCards.map(c => [c.id, c])), [allCards]);
+
 
   const { t } = useTranslation();
-  const [game, setGame] = useState<RTDBGame | null>(null);
+  const [gameStatus, setGameStatus] = useState<'waiting'|'in-progress'|'finished'|null>(null);
+  const [gamePlayers, setGamePlayers] = useState<RTDBGame['players'] | null>(null);
+  const [playerIds, setPlayerIds] = useState<string[]>([]);
+  const [gameState, setGameState] = useState<DuelGameState | null>(null);
+  const [winner, setWinner] = useState<string | 'draw' | null | undefined>(null);
   const [loading, setLoading] = useState(false);
-
-  const gameState = game?.gameState as DuelGameState | undefined;
-  const opponentId = game && user ? game.playerIds.find(p => p !== user.uid) : null;
-  const opponentInfo = opponentId ? game?.players[opponentId] : null;
-  const isHost = user && game && game.playerIds[0] === user.uid;
+  
+  const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
+  const isHost = useMemo(() => user && playerIds.length > 0 && playerIds[0] === user.uid, [user, playerIds]);
 
 
   // Setup user presence in RTDB
@@ -63,73 +71,78 @@ export default function OnlineDuelPage() {
     }
   }, [user]);
 
-  // Subscribe to game updates from RTDB
+  // Subscribe to game updates from RTDB using granular listeners
   useEffect(() => {
     if (!gameId || !user) return;
     
-    const unsubscribeGame = subscribeToRTDBGame('duel', gameId, (gameData) => {
-      if (gameData) {
-        if (!gameData.playerIds.includes(user.uid)) {
-            toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive' });
-            router.push('/online');
-            return;
-        }
+    const gameBaseRef = ref(rtdb, `lobbies/duel/${gameId}`);
 
-        // Check if opponent has disconnected
-        if (game?.status === 'in-progress' && gameData.status === 'finished' && Array.isArray(gameData.winner) && gameData.winner.includes(user.uid)) {
-            toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
-            setTimeout(() => router.push('/online'), 3000);
-        }
-        
-        // Update my online status within the game
-        setPlayerOnlineStatus('duel', gameId, user.uid, true);
+    const listeners = [
+        onValue(ref(gameBaseRef, 'status'), snap => {
+            const newStatus = snap.val();
+            if (gameStatus === 'in-progress' && newStatus === 'finished') {
+                 toast({ title: t('opponentDisconnectedTitle'), description: t('opponentDisconnectedBody') });
+            }
+            setGameStatus(newStatus)
+        }),
+        onValue(ref(gameBaseRef, 'players'), snap => setGamePlayers(snap.val())),
+        onValue(ref(gameBase  Ref, 'playerIds'), snap => setPlayerIds(snap.val() || [])),
+        onValue(ref(gameBaseRef, 'gameState'), snap => setGameState(snap.val())),
+        onValue(ref(gameBaseRef, 'winner'), snap => setWinner(snap.val())),
+    ];
+    
+    // Update my online status within the game
+    setPlayerOnlineStatus('duel', gameId, user.uid, true);
 
-        setGame(gameData);
-      } else {
-        toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
-        router.push('/online');
-      }
-    });
-
+    // Unsubscribe from all listeners on cleanup
     return () => {
-      unsubscribeGame();
+       listeners.forEach(unsubscribe => unsubscribe());
        if (user) {
          setPlayerOnlineStatus('duel', gameId, user.uid, false);
        }
     };
-  }, [gameId, user, router, toast, game?.status, t]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameId, user, router, toast]);
+
+  // Redirect if player is not in game
+   useEffect(() => {
+    if (gameStatus && gameStatus !== 'waiting' && playerIds.length > 0 && user && !playerIds.includes(user.uid)) {
+      toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive' });
+      router.push('/online');
+    }
+   },[gameStatus, playerIds, user, router, toast]);
+
 
   // Evaluate round when both players have moved
   useEffect(() => {
-    if (!game || !gameState || !user || !opponentId) return;
+    if (!gameState || !user || !opponentId || !isHost) return;
 
-    // Only the host evaluates the round to prevent duplicate updates
-    if (!isHost) return;
-
-    const playerMove = gameState.moves?.[user.uid];
+    const myMove = gameState.moves?.[user.uid];
     const opponentMove = gameState.moves?.[opponentId];
 
-    if (playerMove != null && opponentMove != null && gameState.roundWinner === null) {
+    if (myMove != null && opponentMove != null && gameState.roundWinner === null) {
       evaluateRound();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.gameState, game?.playerIds, user, opponentId, isHost]);
+  }, [gameState?.moves, user, opponentId, isHost]);
 
   // Play sound/animation on win
   useEffect(() => {
-    if (user && game && gameState) {
-        if (gameState.roundWinner === user.uid || (Array.isArray(game.winner) && game.winner.includes(user.uid))) {
+    if (user && gameState) {
+        const isGameWinner = winner && (Array.isArray(winner) ? winner.includes(user.uid) : winner === user.uid);
+        if (gameState.roundWinner === user.uid || isGameWinner) {
             playVictorySound();
         }
     }
-  }, [gameState?.roundWinner, game?.winner, user, playVictorySound]);
+  }, [gameState?.roundWinner, winner, user, playVictorySound]);
   
   const handleSelectCard = async (card: CardData) => {
-    if (loading || !user || !game || !gameState) return;
+    if (loading || !user || !gameState) return;
     if (gameState.moves?.[user.uid]) return;
 
     setLoading(true);
     try {
+      // The full CardData object is passed here, but submitRTDBMove will only store the lightweight version
       await submitRTDBMove('duel', gameId, user.uid, card);
     } catch (error) {
       console.error("Failed to submit move:", error);
@@ -139,7 +152,7 @@ export default function OnlineDuelPage() {
   };
   
   const evaluateRound = () => {
-    if (!user || !opponentId || !gameState || !game) return;
+    if (!user || !opponentId || !gameState || !gamePlayers) return;
 
     let winnerId: string | 'draw' = 'draw';
     let resultText = '';
@@ -178,22 +191,25 @@ export default function OnlineDuelPage() {
     if (winnerId === 'draw') {
         resultText = t('draw');
     } else {
-        const winnerName = game.players[winnerId]?.displayName ?? 'Player';
+        const winnerName = gamePlayers[winnerId]?.displayName ?? 'Player';
         resultText = `${winnerName} ${t('wins')}!`;
     }
 
-    if(!resultDetail) resultDetail = `${game.players[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${game.players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
+    if(!resultDetail) resultDetail = `${gamePlayers[user.uid]?.displayName ?? 'You'}: ${myCardNumber} vs ${gamePlayers[opponentId]?.displayName ?? 'Opponent'}: ${opponentCardNumber}`;
 
     const roundHistory = { [user.uid]: myCard, [opponentId]: opponentCard };
     newGameState.history[newGameState.currentRound] = roundHistory;
-    newGameState.playerHands[user.uid] = newGameState.playerHands[user.uid].filter((c:CardData) => c.id !== myCard.id);
-    newGameState.playerHands[opponentId] = newGameState.playerHands[opponentId].filter((c:CardData) => c.id !== opponentCard.id);
+    
+    // Filter hands using the card's ID
+    newGameState.playerHands[user.uid] = newGameState.playerHands[user.uid].filter((c: CardData) => c.id !== myCard.id);
+    newGameState.playerHands[opponentId] = newGameState.playerHands[opponentId].filter((c: CardData) => c.id !== opponentCard.id);
+
     newGameState.roundWinner = winnerId;
     newGameState.roundResultText = resultText;
     newGameState.roundResultDetail = resultDetail;
     
     if(isHost) {
-        updateRTDBGameState('duel', game.id, newGameState).then(() => {
+        updateRTDBGameState('duel', gameId, newGameState).then(() => {
             setTimeout(() => {
                 checkGameEnd(newGameState);
             }, 2000);
@@ -202,10 +218,10 @@ export default function OnlineDuelPage() {
   };
   
   const checkGameEnd = (currentGameState: DuelGameState) => {
-     if(!user || !opponentId || !game || !isHost) return;
+     if(!user || !opponentId || !isHost) return;
 
-      const p1Id = game.playerIds[0];
-      const p2Id = game.playerIds[1];
+      const p1Id = playerIds[0];
+      const p2Id = playerIds[1];
       let ended = false;
       let finalWinnerId: string | 'draw' | null = null;
       let finalStatus: 'finished' | 'in-progress' = 'in-progress';
@@ -224,10 +240,17 @@ export default function OnlineDuelPage() {
       if (ended) {
           finalStatus = 'finished';
           if (finalWinnerId && finalWinnerId !== 'draw') {
-             awardPoints(finalWinnerId, 1);
+             // Points should be awarded by a Cloud Function listening for status change.
+             // awardPoints(finalWinnerId, 1);
           }
-          const finalState = { ...currentGameState, status: finalStatus, winner: finalWinnerId };
-          updateRTDBGameState('duel', game.id, finalState);
+          const finalState = { ...currentGameState };
+          // This will be a multi-location update.
+          const finalUpdates: any = {};
+          finalUpdates[`lobbies/duel/${gameId}/gameState`] = finalState;
+          finalUpdates[`lobbies/duel/${gameId}/status`] = finalStatus;
+          finalUpdates[`lobbies/duel/${gameId}/winner`] = finalWinnerId;
+          ref(rtdb).update(finalUpdates);
+
       } else {
           const nextRoundState: DuelGameState = {
               ...currentGameState,
@@ -237,7 +260,7 @@ export default function OnlineDuelPage() {
               roundResultText: '',
               roundResultDetail: '',
           };
-          updateRTDBGameState('duel', game.id, nextRoundState);
+          updateRTDBGameState('duel', gameId, nextRoundState);
       }
   };
 
@@ -253,11 +276,17 @@ export default function OnlineDuelPage() {
     }
   };
 
-  if (!user || !game) {
+  const rehydrateCard = (lightCard: any): CardData | null => {
+      if (!lightCard) return null;
+      const fullCard = cardMap.get(lightCard.id);
+      return fullCard ? { ...fullCard, ...lightCard } : null;
+  }
+
+  if (!user || !gameStatus || !gamePlayers || cardsLoading) {
     return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
   }
   
-  if (game.status === 'waiting') {
+  if (gameStatus === 'waiting') {
     return (
         <div className="text-center py-10">
             <h2 className="text-2xl font-bold mb-4">{t('waitingForPlayer')}</h2>
@@ -277,7 +306,7 @@ export default function OnlineDuelPage() {
   }
 
   const PlayerInfo = ({ uid }: { uid: string }) => {
-    const player = game?.players[uid];
+    const player = gamePlayers?.[uid];
     if (!player) return null;
     return (
         <div className="flex flex-col items-center gap-2">
@@ -294,25 +323,25 @@ export default function OnlineDuelPage() {
   }
   
   const ScoreDisplay = () => {
-    if (!game || !gameState || !game.playerIds[0] || !game.playerIds[1] || !gameState.scores) {
+    if (!gameState || !playerIds[0] || !playerIds[1] || !gameState.scores) {
       return null;
     }
-    const p1Id = game.playerIds[0];
-    const p2Id = game.playerIds[1];
-    if (!game.players[p1Id] || !game.players[p2Id]) return null;
+    const p1Id = playerIds[0];
+    const p2Id = playerIds[1];
+    if (!gamePlayers[p1Id] || !gamePlayers[p2Id]) return null;
 
     return (
       <div className="flex flex-col md:flex-row justify-center gap-2 md:gap-8 text-base mb-4">
           <>
             <Card className="p-3 md:p-4 bg-blue-100 dark:bg-blue-900/50">
-              <p className="font-bold">{game.players[p1Id].displayName}: {gameState.scores?.[p1Id] ?? 0} {t('wins')}</p>
+              <p className="font-bold">{gamePlayers[p1Id].displayName}: {gameState.scores?.[p1Id] ?? 0} {t('wins')}</p>
               <div className="text-sm opacity-80">
                 <span>{t('kyuso')}: {gameState.kyuso?.[p1Id] ?? 0} | </span>
                 <span>{t('onlyOne')}: {gameState.only?.[p1Id] ?? 0}</span>
               </div>
             </Card>
              <Card className="p-3 md:p-4 bg-red-100 dark:bg-red-900/50">
-                <p className="font-bold">{game.players[p2Id].displayName}: {gameState.scores?.[p2Id] ?? 0} {t('wins')}</p>
+                <p className="font-bold">{gamePlayers[p2Id].displayName}: {gameState.scores?.[p2Id] ?? 0} {t('wins')}</p>
                 <div className="text-sm opacity-80">
                     <span>{t('kyuso')}: {gameState.kyuso?.[p2Id] ?? 0} | </span>
                     <span>{t('onlyOne')}: {gameState.only?.[p2Id] ?? 0}</span>
@@ -323,14 +352,15 @@ export default function OnlineDuelPage() {
     );
   };
 
-  const myMove = gameState?.moves?.[user.uid];
-  const opponentMove = opponentId ? gameState?.moves?.[opponentId] : null;
-  const myCards = gameState.playerHands?.[user.uid] ?? [];
+  const myLightHand = gameState.playerHands?.[user.uid] ?? [];
+  const myFullHand = myLightHand.map(rehydrateCard).filter((c): c is CardData => c !== null);
+  const myMove = rehydrateCard(gameState?.moves?.[user.uid]);
+  const opponentMove = opponentId ? rehydrateCard(gameState?.moves?.[opponentId]) : null;
 
   return (
     <div className="text-center">
       {gameState.roundWinner === user.uid && <VictoryAnimation />}
-      {game.winner === user.uid && <VictoryAnimation />}
+      {winner === user.uid && <VictoryAnimation />}
 
       <div className="flex justify-between items-center mb-2">
         <div className="w-1/3"></div>
@@ -338,7 +368,7 @@ export default function OnlineDuelPage() {
             <h2 className="text-3xl font-bold">{t('duelTitle')} - Online</h2>
         </div>
         <div className="w-1/3 flex justify-end">
-             {game.status === 'in-progress' && (
+             {gameStatus === 'in-progress' && (
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="sm">
@@ -368,7 +398,7 @@ export default function OnlineDuelPage() {
       </div>
       <ScoreDisplay />
       
-      {game.status !== 'finished' && gameState && (
+      {gameStatus !== 'finished' && gameState && (
         <>
           {!gameState.roundWinner && (
             <div className="my-8">
@@ -376,7 +406,7 @@ export default function OnlineDuelPage() {
                     <>
                         <h3 className="text-xl font-bold mb-4">{t('selectCard')}</h3>
                         <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
-                            {myCards.sort((a,b) => a.number - b.number).map(card => (
+                            {myFullHand.sort((a,b) => a.number - b.number).map(card => (
                               <button key={card.id} onClick={() => handleSelectCard(card)} disabled={loading} className="transition-transform hover:scale-105">
                                   <GameCard card={card} revealed={true} />
                               </button>
@@ -414,12 +444,12 @@ export default function OnlineDuelPage() {
         </>
       )}
 
-      {game.status === 'finished' && (
+      {gameStatus === 'finished' && (
         <div className="my-8">
             <p className="text-4xl font-bold mb-4">
-                {game.winner === 'draw'
+                {winner === 'draw'
                     ? t('duelFinalResultDraw')
-                    : game.winner ? `${game.players[game.winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
+                    : winner ? `${gamePlayers[winner as string]?.displayName ?? 'Player'} ${t('winsTheGame')}!` : "Game Over"}
             </p>
             <div className="space-x-4 mt-6">
                 <Link href="/online" passHref>
