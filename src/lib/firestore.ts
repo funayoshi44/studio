@@ -255,14 +255,12 @@ export const joinGame = async (gameId: string, user: MockUser): Promise<void> =>
         
         if (isGameStarting) {
             const initialGameState = await getInitialStateForGame(gameData.gameType, newPlayerIds);
-            // This needs to be a batch write outside the transaction or handled differently
-            // We'll write it after the transaction for simplicity here.
             const batch = writeBatch(db);
+            
             for (const key in initialGameState) {
                 if (key === 'hands' || key === 'moves') { // These are sub-collections
                     for (const playerId in initialGameState[key]) {
-                        const subColPath = key; // 'hands' or 'moves'
-                        const playerSubDocRef = doc(db, 'games', gameId, subColPath, playerId);
+                        const playerSubDocRef = doc(db, 'games', gameId, key, playerId);
                         if(key === 'hands') {
                              batch.set(playerSubDocRef, { cards: initialGameState[key][playerId] });
                         } else {
@@ -300,8 +298,7 @@ export const startGame = async (gameId: string) => {
         for (const key in initialGameState) {
             if (key === 'hands' || key === 'moves') { // these are collections, not docs
                 for (const playerId in initialGameState[key]) {
-                    const subColPath = key;
-                    const playerSubDocRef = doc(db, 'games', gameId, subColPath, playerId);
+                    const playerSubDocRef = doc(db, 'games', gameId, key, playerId);
                     if (key === 'hands') {
                         batch.set(playerSubDocRef, { cards: initialGameState[key][playerId] });
                     } else {
@@ -343,8 +340,7 @@ export const updateShardedGameState = async (gameId: string, payload: any) => {
     for (const key in payload) {
         if (key === 'hands' || key === 'moves') {
              for (const playerId in payload[key]) {
-                const subColPath = key;
-                const subDocRef = doc(db, 'games', gameId, subColPath, playerId);
+                const subDocRef = doc(db, 'games', gameId, key, playerId);
                 if (payload[key][playerId] === null) {
                     batch.set(subDocRef, { card: null });
                 } else if (Array.isArray(payload[key][playerId])) {
@@ -461,8 +457,7 @@ export const findAndJoinGame = async (user: MockUser, gameType: GameType): Promi
             for (const key in initialGameState) {
                 if (key === 'hands' || key === 'moves') { // These are sub-collections
                     for(const playerId in initialGameState[key]) {
-                        const subColPath = key;
-                        const subDocRef = doc(db, 'games', suitableGameId, subColPath, playerId);
+                        const subDocRef = doc(db, 'games', suitableGameId, key, playerId);
                         if (key === 'hands') {
                              batch.set(subDocRef, { cards: initialGameState[key][playerId] });
                         } else {
