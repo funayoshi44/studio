@@ -27,7 +27,6 @@ export default function OnlineLobbyPage() {
   const [isMatching, setIsMatching] = useState(false);
   const [isJoining, setIsJoining] = useState<string | null>(null);
   const [matchingGameType, setMatchingGameType] = useState<GameType | null>(null);
-  const [availableGames, setAvailableGames] = useState<Game[]>([]);
   const [availableRTDBGames, setAvailableRTDBGames] = useState<RTDBGame[]>([]);
   
   useEffect(() => {
@@ -35,12 +34,6 @@ export default function OnlineLobbyPage() {
       router.push('/login');
       return;
     }
-    
-    // Firestore listener
-    const unsubscribeFirestore = subscribeToAvailableGames((games) => {
-        const filteredGames = games.filter(g => !g.playerIds.includes(user.uid));
-        setAvailableGames(filteredGames);
-    });
 
     // RTDB listener
     const rtdbGamesRef = ref(rtdb, 'lobbies');
@@ -52,7 +45,7 @@ export default function OnlineLobbyPage() {
                 const gamesInType = allLobbies[gameType];
                 Object.keys(gamesInType).forEach(gameId => {
                     const game = gamesInType[gameId];
-                    if (game.status === 'waiting' && !game.playerIds.includes(user.uid)) {
+                    if (game.status === 'waiting' && game.playerIds && !game.playerIds.includes(user.uid)) {
                         waitingGames.push({ id: gameId, ...game });
                     }
                 });
@@ -62,28 +55,19 @@ export default function OnlineLobbyPage() {
     });
 
     return () => {
-        unsubscribeFirestore();
         unsubscribeRTDB();
     };
   }, [user, router]);
   
-  const handleMatchmaking = async (gameType: GameType, dbType: 'firestore' | 'rtdb') => {
+  const handleMatchmaking = async (gameType: GameType) => {
     if (!user || isMatching) return;
 
     setIsMatching(true);
     setMatchingGameType(gameType);
 
     try {
-      let gameId: string;
-      let path: string;
-
-      if (dbType === 'rtdb') {
-        gameId = await findAndJoinRTDBGame(user, gameType);
-        path = gameType === 'janken' ? `/janken-rtdb/${gameId}` : `/duel/${gameId}`;
-      } else {
-        gameId = await findAndJoinGame(user, gameType);
-        path = gameType === 'duel' ? `/${gameType}-legacy/${gameId}` : `/${gameType}/${gameId}`;
-      }
+      const gameId = await findAndJoinRTDBGame(user, gameType);
+      const path = gameType === 'janken' ? `/janken-rtdb/${gameId}` : `/duel/${gameId}`;
       
       router.push(path);
 
@@ -99,23 +83,13 @@ export default function OnlineLobbyPage() {
     }
   };
 
-  const handleJoinGame = async (game: Game | RTDBGame) => {
+  const handleJoinGame = async (game: RTDBGame) => {
     if (!user) return;
     setIsJoining(game.id);
     try {
-        if ('gameType' in game && 'players' in game && 'id' in game) { // Type guard for RTDBGame
-            const path = game.gameType === 'janken' ? `/janken-rtdb/${game.id}` : `/duel/${game.id}`;
-            await findAndJoinRTDBGame(user, game.gameType); // This will handle joining logic
-            router.push(path);
-            return;
-        }
-
-        // Fallback to Firestore logic
-        const fsGame = game as Game;
-        await joinGame(fsGame.id, user);
-        const path = fsGame.gameType === 'duel' ? `/${fsGame.gameType}-legacy/${fsGame.id}` : `/${fsGame.gameType}/${fsGame.id}`;
+        const path = game.gameType === 'janken' ? `/janken-rtdb/${game.id}` : `/duel/${game.id}`;
+        await findAndJoinRTDBGame(user, game.gameType); // This will handle joining logic
         router.push(path);
-
     } catch (error) {
         console.error("Failed to join game:", error);
         toast({
@@ -157,16 +131,13 @@ export default function OnlineLobbyPage() {
                             </div>
                         ) : (
                             <div className="flex flex-col sm:flex-row gap-2">
-                                <Button onClick={() => handleMatchmaking(game.name, 'firestore')} disabled={isMatching}>
-                                    <Database className="mr-2"/> 従来方式
-                                </Button>
                                 {game.rtdbEnabled ? (
-                                    <Button onClick={() => handleMatchmaking(game.name, 'rtdb')} disabled={isMatching}>
-                                        <Zap className="mr-2" /> 高速方式 (RTDB)
+                                    <Button onClick={() => handleMatchmaking(game.name)} disabled={isMatching}>
+                                        <Zap className="mr-2" /> {t('autoMatch')}
                                     </Button>
                                 ) : (
                                     <Button disabled={true} variant="secondary">
-                                        <Construction className="mr-2" /> 高速方式 (準備中)
+                                        <Construction className="mr-2" /> {t('comingSoon')}
                                     </Button>
                                 )}
                             </div>
@@ -181,11 +152,10 @@ export default function OnlineLobbyPage() {
                 <CardDescription>{t('orJoinWaitingGame')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 max-h-96 overflow-y-auto">
-                 {[...availableRTDBGames, ...availableGames].length > 0 ? (
-                    [...availableRTDBGames, ...availableGames].map(game => {
+                 {availableRTDBGames.length > 0 ? (
+                    availableRTDBGames.map(game => {
                         const host = game.players[game.playerIds[0]];
                         if (!host) return null;
-                        const isRTDB = 'createdAt' in game && typeof game.createdAt === 'object';
                         return (
                             <div key={game.id} className="flex items-center justify-between p-4 rounded-lg border">
                                 <div className="flex items-center gap-4">
@@ -199,7 +169,7 @@ export default function OnlineLobbyPage() {
                                     <div>
                                         <p className="font-bold">{host.displayName}</p>
                                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                           {isRTDB ? <Zap className="w-4 h-4 text-yellow-500" /> : <Database className="w-4 h-4 text-blue-500" />}
+                                           <Zap className="w-4 h-4 text-yellow-500" />
                                            <span>{t(`${game.gameType}Title` as any)}</span>
                                         </div>
                                     </div>
