@@ -56,7 +56,7 @@ export default function OnlineLobbyPage() {
 
       if (dbType === 'rtdb') {
         gameId = await findAndJoinRTDBGame(user, gameType);
-        path = `/${gameType}/${gameId}`;
+        path = gameType === 'janken' ? `/janken-rtdb/${gameId}` : `/${gameType}/${gameId}`;
       } else {
         gameId = await findAndJoinGame(user, gameType);
         path = gameType === 'duel' ? `/${gameType}-legacy/${gameId}` : `/${gameType}/${gameId}`;
@@ -100,19 +100,22 @@ export default function OnlineLobbyPage() {
       setIsJoining(joinGameId);
       
       try {
-        const allGames = await findAvailableGames(); // fetch all to find the game
-        const game = allGames.find(g => g.id === joinGameId);
-        
-        if (joinGameId.startsWith('game_')) {
-             router.push(`/duel/${joinGameId}`);
-             return;
+        const id = joinGameId.trim();
+        if (id.startsWith('game_')) { // RTDB game ID convention
+            const gameType = id.includes('janken') ? 'janken' : 'duel'; // A simple guess
+            const path = gameType === 'janken' ? `/janken-rtdb/${id}` : `/duel/${id}`;
+            router.push(path);
+            return;
         }
+        
+        // Assume Firestore otherwise
+        const allGames = await findAvailableGames(); // fetch all to find the game
+        const game = allGames.find(g => g.id === id);
         
         if (game) {
             await handleJoinGame(game.id, game.gameType);
         } else {
-             toast({ title: "Trying to join RTDB game...", description: "If the game exists, you will be redirected."})
-             router.push(`/duel/${joinGameId}`);
+             toast({ title: "Game not found", description: "Could not find a waiting game with that ID in Firestore.", variant: 'destructive'})
         }
       } catch (error) {
           console.error("Failed to join game with ID:", error);
@@ -127,7 +130,7 @@ export default function OnlineLobbyPage() {
   
   const matchmakingGames: { name: GameType; icon: React.ElementType, rtdbEnabled: boolean }[] = [
     { name: 'duel', icon: Swords, rtdbEnabled: true },
-    { name: 'janken', icon: Scissors, rtdbEnabled: false },
+    { name: 'janken', icon: Scissors, rtdbEnabled: true },
     { name: 'poker', icon: Layers, rtdbEnabled: false },
   ];
 

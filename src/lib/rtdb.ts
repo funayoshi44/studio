@@ -1,7 +1,7 @@
 
 
 import { rtdb } from './firebase';
-import { ref, set, get, onValue, off, serverTimestamp, runTransaction, onDisconnect, goOffline, goOnline } from 'firebase/database';
+import { ref, set, get, onValue, off, serverTimestamp, runTransaction, onDisconnect, goOffline, goOnline, push } from 'firebase/database';
 import type { MockUser, CardData, GameType } from './types';
 import { getCards, awardPoints } from './firestore';
 
@@ -75,6 +75,22 @@ const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = [])
     return gameState;
 };
 
+const getInitialJankenGameState = (playerIds: string[] = []) => {
+    const gameState: any = {
+        currentRound: 1,
+        scores: {},
+        moves: {}, // { uid: { initial: null, final: null } }
+        phase: 'initial', // 'initial', 'final', 'result'
+        roundWinner: null,
+        roundResultText: '',
+    };
+    playerIds.forEach(uid => {
+        gameState.scores[uid] = 0;
+        gameState.moves[uid] = { initial: null, final: null };
+    });
+    return gameState;
+};
+
 
 // --- User Presence System ---
 export const setupPresence = (userId: string) => {
@@ -125,15 +141,16 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
             game.players[user.uid] = { displayName: user.displayName, photoURL: user.photoURL, online: true };
             if (game.playerIds.length === game.maxPlayers) {
                 game.status = 'in-progress';
-                if(game.gameType === 'duel') {
+                 if(game.gameType === 'duel') {
                     game.gameState = getInitialDuelGameState(allCards, game.playerIds);
+                } else if(game.gameType === 'janken') {
+                    game.gameState = getInitialJankenGameState(game.playerIds);
                 }
-                // TODO: Add logic for other game types
             }
             return currentLobby;
         } else {
             // Create new game
-            const newGameId = `game_${Date.now()}`;
+            const newGameId = `game_${push(lobbyRef).key}`;
             const newGame: RTDBGame = {
                 id: newGameId,
                 gameType,
@@ -155,9 +172,6 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
     const finalLobby = result.snapshot.val();
     for (const gameId in finalLobby) {
         if (finalLobby[gameId].playerIds.includes(user.uid)) {
-             // Side-effect (awardPoints) should ideally be handled by a Cloud Function
-             // triggered by the game creation/joining event to avoid potential race conditions
-             // or multiple awards if client logic retries.
              awardPoints(user.uid, 1);
              return gameId;
         }
@@ -184,14 +198,25 @@ export const updateRTDBGameState = (gameType: GameType, gameId: string, newGameS
     return set(gameStateRef, newGameState);
 };
 
-export const submitRTDBMove = (gameType: GameType, gameId: string, userId: string, move: CardData) => {
+export const submitRTDBMove = (gameType: GameType, gameId: string, userId: string, move: any, phase?: 'initial' | 'final') => {
     if (!rtdb) return;
-    const moveRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState/moves/${userId}`);
-    const lastMoveByRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState/lastMoveBy`);
-    // Store only lightweight card representation
-    const lightWeightMove = { id: move.id, suit: move.suit, rank: move.rank, number: move.number };
-    set(moveRef, lightWeightMove);
-    set(lastMoveByRef, userId);
+    let movePath: string;
+    if (gameType === 'janken') {
+        if (!phase) throw new Error("Janken move requires a phase.");
+        movePath = `lobbies/${gameType}/${gameId}/gameState/moves/${userId}/${phase}`;
+    } else {
+         // Default for Duel
+        movePath = `lobbies/${gameType}/${gameId}/gameState/moves/${userId}`;
+    }
+    
+    const moveRef = ref(rtdb, movePath);
+    let moveData = move;
+    // For Duel, store lightweight card representation
+    if (gameType === 'duel' && move.id) {
+        moveData = { id: move.id, suit: move.suit, rank: move.rank, number: move.number };
+    }
+
+    return set(moveRef, moveData);
 };
 
 export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: string) => {
