@@ -120,7 +120,7 @@ const getInitialDuelGameState = (allCards: CardData[], playerIds: string[]) => {
         kyuso,
         only,
         moves,
-        lastHistory: null
+        lastHistory: {} // Initialize as an empty object instead of null
     };
 };
 
