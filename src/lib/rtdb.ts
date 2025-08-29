@@ -77,6 +77,7 @@ const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = [])
 
 // --- User Presence System ---
 export const setupPresence = (userId: string) => {
+    if (!rtdb) return;
     goOnline(rtdb);
     const userStatusRef = ref(rtdb, `/status/${userId}`);
     const presenceData = { isOnline: true, lastChanged: serverTimestamp() };
@@ -92,11 +93,13 @@ export const setupPresence = (userId: string) => {
 };
 
 export const teardownPresence = () => {
+    if (!rtdb) return;
     goOffline(rtdb);
 }
 
 // --- Game Lobby & Matchmaking for RTDB ---
 export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): Promise<string> => {
+    if (!rtdb) throw new Error("Realtime Database not initialized");
     const lobbyRef = ref(rtdb, `lobbies/${gameType}`);
     const allCards = await getCards();
 
@@ -164,6 +167,7 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
 
 // --- Game Logic for RTDB ---
 export const subscribeToRTDBGame = (gameType: GameType, gameId: string, callback: (game: RTDBGame | null) => void): (() => void) => {
+    if (!rtdb) return () => {};
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
     onValue(gameRef, (snapshot) => {
         callback(snapshot.val() as RTDBGame | null);
@@ -174,11 +178,13 @@ export const subscribeToRTDBGame = (gameType: GameType, gameId: string, callback
 };
 
 export const updateRTDBGameState = (gameType: GameType, gameId: string, newGameState: any) => {
+    if (!rtdb) return;
     const gameStateRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState`);
     return set(gameStateRef, newGameState);
 };
 
 export const submitRTDBMove = (gameType: GameType, gameId: string, userId: string, move: CardData) => {
+    if (!rtdb) return;
     const moveRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState/moves/${userId}`);
     const lastMoveByRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState/lastMoveBy`);
     // Store only lightweight card representation
@@ -188,6 +194,7 @@ export const submitRTDBMove = (gameType: GameType, gameId: string, userId: strin
 };
 
 export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: string) => {
+    if (!rtdb) return;
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
     await runTransaction(gameRef, (game: RTDBGame | null) => {
         // If game is null, it's already been deleted or doesn't exist.
@@ -219,6 +226,7 @@ export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: 
 
 // Set player online status within a game
 export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId: string, isOnline: boolean) => {
+    if (!rtdb) return;
     const playerStatusRef = ref(rtdb, `lobbies/${gameType}/${gameId}/players/${userId}/online`);
     onDisconnect(playerStatusRef).set(false); // Set to offline on disconnect
     set(playerStatusRef, isOnline);

@@ -1,5 +1,5 @@
 
-import { doc, onSnapshot } from 'firebase/firestore';
+import { collection, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export function subscribeToGameSharded(opts: {
@@ -19,6 +19,7 @@ export function subscribeToGameSharded(opts: {
   const { gameId, myUid, oppUid } = opts;
   const unsubs: Array<() => void> = [];
 
+  if (!db) return () => {};
   if (!gameId || !myUid) {
     console.error("gameId and myUid must be provided to subscribeToGameSharded");
     return () => {};
