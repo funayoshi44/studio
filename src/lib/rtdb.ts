@@ -230,24 +230,24 @@ export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId
 
 export const subscribeToLobbies = (gameType: GameType, callback: (lobbies: any[]) => void) => {
     const lobbiesRef = ref(rtdb, `lobbies/${gameType}`);
-    const listener = onValue(lobbiesRef, (snapshot) => {
+    const unsubscribe = onValue(lobbiesRef, (snapshot) => {
         const lobbiesData = snapshot.val();
         const lobbiesArray = lobbiesData ? Object.keys(lobbiesData).map(key => ({ id: key, ...lobbiesData[key] })) : [];
         callback(lobbiesArray);
     });
-    return () => off(lobbiesRef, 'value', listener);
+    return unsubscribe;
 };
 
 export const subscribeToOnlineUsers = (callback: (users: any[]) => void) => {
     const onlineUsersRef = ref(rtdb, 'status');
-    const listener = onValue(onlineUsersRef, (snapshot) => {
+    const unsubscribe = onValue(onlineUsersRef, (snapshot) => {
         const usersData = snapshot.val();
         const usersArray = usersData ? Object.keys(usersData)
             .filter(uid => usersData[uid].isOnline)
             .map(uid => ({ uid, ...usersData[uid] })) : [];
         callback(usersArray);
     });
-    return () => off(onlineUsersRef, 'value', listener);
+    return unsubscribe;
 };
 
 
@@ -271,12 +271,11 @@ export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
         }
     }
     
+    // Helper to convert RTDB timestamp (number) to a comparable value
+    const toMs = (timestamp: any): number => (typeof timestamp === 'number' ? timestamp : 0);
+
     // Sort by createdAt timestamp descending
-    allGames.sort((a, b) => {
-        const timeA = (a.createdAt as any)?.time || 0;
-        const timeB = (b.createdAt as any)?.time || 0;
-        return timeB - timeA;
-    });
+    allGames.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
 
     return allGames.slice(0, 50); // Limit to 50 most recent games
 };

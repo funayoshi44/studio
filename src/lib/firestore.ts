@@ -263,21 +263,23 @@ export const addCard = async (
   const imageRef = ref(storage, filePath);
   const uploadResult = await uploadBytes(imageRef, imageFile);
   const imageUrl = await getDownloadURL(uploadResult.ref);
-  
-  const cardToSave: any = {
-    ...cardData,
-    frontImageUrl: imageUrl,
-    authorId: author.uid,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  };
 
+  let backImageUrl: string | null = null;
   if (backImageFile) {
       const backFilePath = `${CARDS_COLLECTION}/backs/${Date.now()}_${backImageFile.name}`;
       const backImageRef = ref(storage, backFilePath);
       const backUploadResult = await uploadBytes(backImageRef, backImageFile);
-      cardToSave.backImageUrl = await getDownloadURL(backUploadResult.ref);
+      backImageUrl = await getDownloadURL(backUploadResult.ref);
   }
+  
+  const cardToSave: any = {
+    ...cardData,
+    frontImageUrl: imageUrl,
+    backImageUrl: backImageUrl, // This will be null if no back image is provided
+    authorId: author.uid,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
 
   const cardsCollection = collection(db, CARDS_COLLECTION);
   await addDoc(cardsCollection, cardToSave);
