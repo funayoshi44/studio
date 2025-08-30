@@ -1,11 +1,11 @@
 
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-import { subscribeToGame, submitMove, updateShardedGameState, leaveGame, type Game, getCards, type CardData } from '@/lib/firestore';
+import { leaveRTDBGame } from '@/lib/rtdb';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
@@ -16,26 +16,12 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { VictoryAnimation } from '@/components/victory-animation';
 import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { getJankenActions, type JankenAction } from '@/lib/firestore';
+import { type JankenAction } from '@/lib/firestore';
+import { useJankenGame } from '@/hooks/use-janken-game';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
 const moves: Move[] = ['rock', 'paper', 'scissors'];
-
-type JankenGameState = {
-    round: number;
-    scores: { [uid: string]: number };
-    phase: 'initial' | 'final' | 'result';
-    moves: {
-        [uid: string]: {
-            initial: Move | null;
-            final: Move | null;
-        }
-    };
-    roundWinner: string | null | 'draw';
-    roundResultText: string;
-};
-
 
 const JankenMoveButton = ({ action, move, onSelect, disabled }: { action?: JankenAction, move: Move, onSelect: (move: Move) => void, disabled: boolean }) => {
     const getJankenEmoji = (move: Move) => {
@@ -90,81 +76,44 @@ const JankenMoveSelector = ({ onSelect, disabled, jankenActions }: { onSelect: (
 export default function OnlineJankenPage() {
     const { user } = useAuth();
     const router = useRouter();
-    const params = useParams();
-    const gameId = params.gameId as string;
     const { t } = useTranslation();
     const { toast } = useToast();
+    const { gameId, gameState, loading, error } = useJankenGame();
 
-    const [game, setGame] = useState<Game | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [jankenActions, setJankenActions] = useState<{ [uid: string]: { [key in Move]?: JankenAction } }>({});
+    const {
+        status,
+        players,
+        playerIds,
+        currentRound,
+        scores,
+        phase,
+        movesState,
+        roundWinner,
+        roundResultText,
+        jankenActions,
+        isSubmittingMove,
+        handleSelectMove,
+    } = gameState;
 
-    const gameState = game?.gameState as JankenGameState | undefined;
-    const opponent = useMemo(() => game?.playerIds.find(p => p !== user?.uid), [game, user]);
-
-    useEffect(() => {
-        if (!gameId || !user) return;
-        const unsubscribe = subscribeToGame(gameId, (gameData) => {
-            if (gameData) {
-                if (!gameData.playerIds.includes(user.uid)) {
-                    toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive' });
-                    router.push('/online');
-                    return;
-                }
-                setGame(gameData);
-            } else {
-                toast({ title: "Error", description: "Game not found.", variant: 'destructive' });
-                router.push('/online');
-            }
-        });
-        return () => unsubscribe();
-    }, [gameId, user, router, toast]);
-
-    useEffect(() => {
-        if (!game) return;
-        const fetchAllActions = async () => {
-            const allActions: { [uid: string]: { [key in Move]?: JankenAction } } = {};
-            for (const uid of game.playerIds) {
-                try {
-                    allActions[uid] = await getJankenActions(uid);
-                } catch (error) {
-                    console.error(`Failed to fetch janken actions for user ${uid}`, error);
-                }
-            }
-            setJankenActions(allActions);
-        };
-        fetchAllActions();
-    }, [game]);
-
-
-    const handleSelectMove = async (move: Move) => {
-        if (!user || !gameState) return;
-        setLoading(true);
-        try {
-            await submitMove(gameId, user.uid, move);
-        } catch (error) {
-            console.error(error);
-            toast({ title: "Error", description: "Failed to submit move.", variant: 'destructive' });
-        }
-        setLoading(false);
-    };
+    const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
+    const myJankenActions = useMemo(() => user ? jankenActions[user.uid] : {}, [jankenActions, user]);
 
     const handleForfeit = async () => {
         if (user && gameId) {
-            await leaveGame(gameId, user.uid);
+            await leaveRTDBGame('janken', gameId, user.uid);
             router.push('/online');
         }
     };
     
     const handleCopyGameId = () => {
+        if(!gameId) return;
         navigator.clipboard.writeText(gameId);
         toast({ title: t('gameIdCopied') });
     };
 
     const MoveDisplay = ({ uid, phase }: { uid: string, phase: 'initial' | 'final' | 'result' }) => {
-        if (!gameState) return null;
-        const playerMoves = gameState.moves[uid];
-        const move = phase === 'result' ? playerMoves.final : playerMoves[phase];
+        const playerMoves = movesState[uid];
+        const move = phase === 'result' ? playerMoves?.final : playerMoves?.[phase];
 
         const getJankenEmoji = (m: Move | null) => {
             if (!m) return '?';
@@ -212,11 +161,11 @@ export default function OnlineJankenPage() {
     };
 
 
-    if (!user || !game || !gameState || !opponent) {
+    if (loading || !user || !players || playerIds.length === 0 ) {
         return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
     }
 
-    if (game.status === 'waiting') {
+    if (status === 'waiting') {
         return (
             <div className="text-center py-10">
                 <h2 className="text-2xl font-bold mb-4">{t('waitingForPlayer')}</h2>
@@ -231,12 +180,14 @@ export default function OnlineJankenPage() {
         );
     }
     
-     if (game.status === 'finished') {
+     if (status === 'finished') {
+        const winnerId = gameState.winner;
+        const winnerName = winnerId && winnerId !== 'draw' ? players[winnerId]?.displayName : null;
         return (
             <div className="my-8 text-center">
-                {game.winner === user.uid && <VictoryAnimation />}
+                {winnerId === user.uid && <VictoryAnimation />}
                 <p className="text-4xl font-bold mb-4">
-                    {game.winner === 'draw' ? t('draw') : `${game.players[game.winner as string]?.displayName} ${t('winsTheGame')}!`}
+                    {winnerId === 'draw' ? t('draw') : `${winnerName} ${t('winsTheGame')}!`}
                 </p>
                 <div className="space-x-4 mt-6">
                     <Link href="/online" passHref>
@@ -247,9 +198,8 @@ export default function OnlineJankenPage() {
         );
     }
 
-    const myMoves = gameState.moves[user.uid];
-    const opponentMoves = gameState.moves[opponent];
-    const myJankenActions = jankenActions[user.uid] || {};
+    const myMoves = movesState[user.uid];
+    const opponentMoves = opponentId ? movesState[opponentId] : null;
 
 
     return (
@@ -268,11 +218,11 @@ export default function OnlineJankenPage() {
                 </AlertDialog>
             </div>
             
-            <div className="mb-4 text-muted-foreground">{t('round')} {gameState.round}</div>
+            <div className="mb-4 text-muted-foreground">{t('round')} {currentRound}</div>
             
             <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-                <div className="bg-blue-100 dark:bg-blue-900/50 p-3 rounded-lg font-bold">{t('you')}: {gameState.scores[user.uid]} {t('wins')}</div>
-                <div className="bg-red-100 dark:bg-red-900/50 p-3 rounded-lg font-bold">{game.players[opponent].displayName}: {gameState.scores[opponent]} {t('wins')}</div>
+                <div className="bg-blue-100 dark:bg-blue-900/50 p-3 rounded-lg font-bold">{t('you')}: {scores[user.uid] || 0} {t('wins')}</div>
+                {opponentId && <div className="bg-red-100 dark:bg-red-900/50 p-3 rounded-lg font-bold">{players[opponentId]?.displayName}: {scores[opponentId] || 0} {t('wins')}</div>}
             </div>
 
             <div className="grid grid-cols-2 gap-4 my-8">
@@ -280,20 +230,20 @@ export default function OnlineJankenPage() {
                     <Avatar className="w-16 h-16"><AvatarImage src={user.photoURL ?? undefined} /><AvatarFallback>{user.displayName?.[0]}</AvatarFallback></Avatar>
                     <p className="font-bold">{user.displayName}</p>
                 </div>
-                 <div className="flex flex-col items-center gap-2">
-                    <Avatar className="w-16 h-16"><AvatarImage src={game.players[opponent].photoURL ?? undefined} /><AvatarFallback>{game.players[opponent].displayName?.[0]}</AvatarFallback></Avatar>
-                    <p className="font-bold">{game.players[opponent].displayName}</p>
-                </div>
+                 {opponentId && <div className="flex flex-col items-center gap-2">
+                    <Avatar className="w-16 h-16"><AvatarImage src={players[opponentId]?.photoURL ?? undefined} /><AvatarFallback>{players[opponentId]?.displayName?.[0]}</AvatarFallback></Avatar>
+                    <p className="font-bold">{players[opponentId]?.displayName}</p>
+                </div>}
             </div>
 
-            {gameState.phase !== 'result' && (
+            {phase !== 'result' && (
                 <div className="my-8">
-                    <h3 className="text-xl font-bold mb-4">{gameState.phase === 'initial' ? t('jankenPhase1Title') : t('jankenPhase2Title')}</h3>
-                     {gameState.phase === 'final' && (
+                    <h3 className="text-xl font-bold mb-4">{phase === 'initial' ? t('jankenPhase1Title') : t('jankenPhase2Title')}</h3>
+                     {phase === 'final' && opponentMoves?.initial && (
                         <div className="text-sm text-muted-foreground mb-4">Opponent's first move was: {getJankenEmoji(opponentMoves.initial)}</div>
                      )}
-                    <JankenMoveSelector onSelect={handleSelectMove} disabled={loading || (myMoves && myMoves[gameState.phase] != null)} jankenActions={myJankenActions} />
-                    {myMoves && myMoves[gameState.phase] && opponentMoves && !opponentMoves[gameState.phase] && (
+                    <JankenMoveSelector onSelect={handleSelectMove} disabled={isSubmittingMove || (myMoves && myMoves[phase] != null)} jankenActions={myJankenActions} />
+                    {myMoves && myMoves[phase] && opponentMoves && !opponentMoves[phase] && (
                         <p className="mt-4 animate-pulse">{t('waitingForOpponentMove')}</p>
                     )}
                 </div>
@@ -304,23 +254,23 @@ export default function OnlineJankenPage() {
                     <h4 className="font-bold">{t('firstMoves')}</h4>
                     <div className="flex justify-around items-center text-4xl mt-2">
                         <MoveDisplay uid={user.uid} phase="initial"/>
-                        <MoveDisplay uid={opponent} phase="initial"/>
+                        {opponentId && <MoveDisplay uid={opponentId} phase="initial"/>}
                     </div>
                 </div>
-                {gameState.phase === 'result' && (
+                {phase === 'result' && (
                     <div>
                         <h4 className="font-bold">{t('finalResult')}</h4>
                          <div className="flex justify-around items-center text-4xl mt-2">
                              <MoveDisplay uid={user.uid} phase="result"/>
-                             <MoveDisplay uid={opponent} phase="result"/>
+                             {opponentId && <MoveDisplay uid={opponentId} phase="result"/>}
                         </div>
                     </div>
                 )}
             </div>
 
-            {gameState.phase === 'result' && (
+            {phase === 'result' && (
                 <div className="my-6">
-                    <p className="text-2xl font-bold mb-4 animate-pulse">{gameState.roundResultText}</p>
+                    <p className="text-2xl font-bold mb-4 animate-pulse">{roundResultText}</p>
                 </div>
             )}
             
@@ -333,3 +283,5 @@ function getJankenEmoji(move: "rock" | "paper" | "scissors" | null): React.React
     const emojiMap = { rock: '✊', paper: '✋', scissors: '✌️' };
     return emojiMap[move];
 }
+
+    
