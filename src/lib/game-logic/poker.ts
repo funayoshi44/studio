@@ -1,4 +1,5 @@
 
+
 import type { CardData } from '@/lib/types';
 
 
@@ -128,7 +129,7 @@ export const evaluatePokerHand = (hand: PokerCard[]): HandRank => {
     const rankValues = Object.values(rankCounts).sort((a,b) => b-a);
     
     if (isRoyal && is5SuitFlush) return { name: '5-Suit Royal Flush', value: 14 };
-    if (isRoyal && isFlush) return { name: 'Royal Straight Flush', value: 13 };
+    if (isRoyal && isFlush) return { name: 'Royal Flush', value: 13 };
     if (isStraight && is5SuitFlush) return { name: '5-Suit Straight Flush', value: 12 };
     if (isStraight && isFlush) return { name: 'Straight Flush', value: 11 };
     if (rankValues.includes(5)) return { name: 'Five of a Kind', value: 10 };

@@ -1,4 +1,5 @@
 
+
 import { rtdb } from './firebase';
 import { ref, set, get, onValue, off, serverTimestamp, runTransaction, onDisconnect, goOffline, goOnline, push, update } from 'firebase/database';
 import type { MockUser, CardData, GameType, Game } from './types';
@@ -231,24 +232,24 @@ export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId
 
 export const subscribeToLobbies = (gameType: GameType, callback: (lobbies: any[]) => void) => {
     const lobbiesRef = ref(rtdb, `lobbies/${gameType}`);
-    const unsubscribe = onValue(lobbiesRef, (snapshot) => {
+    const listener = onValue(lobbiesRef, (snapshot) => {
         const lobbiesData = snapshot.val();
         const lobbiesArray = lobbiesData ? Object.keys(lobbiesData).map(key => ({ id: key, ...lobbiesData[key] })) : [];
         callback(lobbiesArray);
     });
-    return () => unsubscribe();
+    return () => off(lobbiesRef, 'value', listener);
 };
 
 export const subscribeToOnlineUsers = (callback: (users: any[]) => void) => {
     const onlineUsersRef = ref(rtdb, 'status');
-    const unsubscribe = onValue(onlineUsersRef, (snapshot) => {
+    const listener = onValue(onlineUsersRef, (snapshot) => {
         const usersData = snapshot.val();
         const usersArray = usersData ? Object.keys(usersData)
             .filter(uid => usersData[uid].isOnline)
             .map(uid => ({ uid, ...usersData[uid] })) : [];
         callback(usersArray);
     });
-    return () => unsubscribe();
+    return () => off(onlineUsersRef, 'value', listener);
 };
 
 
@@ -272,7 +273,12 @@ export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
         }
     }
     
-    const toMs = (timestamp: any): number => (typeof timestamp === 'number' ? timestamp : 0);
+    const toMs = (timestamp: any): number => {
+        if (typeof timestamp === 'object' && timestamp !== null && 'time' in timestamp) {
+            return timestamp.time;
+        }
+        return typeof timestamp === 'number' ? timestamp : 0;
+    };
     
     allGames.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
 

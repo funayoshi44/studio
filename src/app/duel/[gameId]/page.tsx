@@ -43,7 +43,7 @@ export default function OnlineDuelPage() {
   const opponentMove = useMemo(() => (opponentId ? moves?.[opponentId] : null), [moves, opponentId]);
 
   if (loading || !user) {
-    return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
+    return <div className="flex flex-col items-center justify-center min-h-screen gap-4"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
   }
 
   if (status === 'waiting') {

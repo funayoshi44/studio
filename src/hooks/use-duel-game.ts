@@ -106,7 +106,13 @@ export function useDuelGame() {
             const movesUnsub = onValue(ref(rtdb, `${gs}/moves`), s => setMoves(s.val() ?? {}));
             unsubs.push(movesUnsub);
             
-            const playerIdsUnsub = onValue(ref(rtdb, `${base}/playerIds`), snap => setPlayerIds(snap.val() || []));
+            const playerIdsUnsub = onValue(ref(rtdb, `${base}/playerIds`), snap => {
+                const newPlayerIds = snap.val() || [];
+                setPlayerIds(newPlayerIds);
+                if (status === 'in-progress' && newPlayerIds.length < 2) {
+                    setError("Your opponent has disconnected.");
+                }
+            });
             unsubs.push(playerIdsUnsub);
 
             setPlayerOnlineStatus('duel', gameId, user.uid, true);
@@ -118,7 +124,7 @@ export function useDuelGame() {
                 setPlayerOnlineStatus('duel', gameId, user.uid, false);
             }
         };
-    }, [gameId, user, router, toast]);
+    }, [gameId, user, router, toast, status]);
 
     const checkGameEnd = useCallback((currentScores: any, currentKyuso: any, currentOnly: any) => {
         if (!isHost || !playerIds || playerIds.length < 2) return;
@@ -152,7 +158,7 @@ export function useDuelGame() {
         }
     }, [isHost, playerIds, currentRound, gameId]);
 
-    const evaluateRound = useCallback(() => {
+    const evaluateRound = useCallback(async () => {
         if (!isHost || !user || !opponentId || !players || playerIds.length < 2) return;
 
         const myCard = rehydrateCard(moves[user.uid]);
@@ -193,9 +199,8 @@ export function useDuelGame() {
         updates[`${gsPath}/roundResultText`] = resultText;
         updates[`${gsPath}/roundResultDetail`] = resultDetail;
         
-        update(ref(rtdb), updates).then(() => {
-            setTimeout(() => checkGameEnd(newScores, newKyuso, newOnly), 2000);
-        });
+        await update(ref(rtdb), updates);
+        setTimeout(() => checkGameEnd(newScores, newKyuso, newOnly), 2000);
     }, [isHost, user, opponentId, players, moves, scores, kyuso, only, gameId, t, rehydrateCard, checkGameEnd]);
 
     useEffect(() => {

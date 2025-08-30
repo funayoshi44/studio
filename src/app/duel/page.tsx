@@ -11,7 +11,7 @@ import type { AdjustDifficultyInput } from '@/ai/flows/ai-opponent-difficulty-ad
 import Link from 'next/link';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Lightbulb, Loader2 } from 'lucide-react';
-import { PokerCard as GameCardComponent } from '@/components/ui/poker-card';
+import { PokerCard } from '@/components/ui/poker-card';
 import type { CardData } from '@/lib/types';
 import { useVictorySound } from '@/hooks/use-victory-sound';
 import { VictoryAnimation } from '@/components/victory-animation';
@@ -68,6 +68,7 @@ const createDefaultDeck = (count = 13): CardData[] => {
         return {
             id: `default-${rank}`,
             frontImageUrl: `https://picsum.photos/seed/card-default-${rank}/200/300`,
+            backImageUrl: null,
             suit: 'default',
             rank: rank,
             title: `Default Card ${rank}`,
@@ -379,7 +380,7 @@ export default function DuelPage() {
               <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                 {state.playerCards.sort((a, b) => a.number - b.number).map(card => (
                   <button key={card.id} onClick={() => selectPlayerCard(card)} disabled={loading} className="transition-transform hover:scale-105">
-                     <GameCardComponent card={card} revealed={true} />
+                     <PokerCard card={card} revealed={true} />
                   </button>
                 ))}
               </div>
@@ -391,11 +392,11 @@ export default function DuelPage() {
               <div className="flex justify-center space-x-8">
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('you')}</h4>
-                   <GameCardComponent card={state.playerCard} revealed={true} />
+                   <PokerCard card={state.playerCard} revealed={true} />
                 </div>
                 <div className="text-center">
                   <h4 className="text-lg font-bold mb-2">{t('cpu')}</h4>
-                  <GameCardComponent card={state.cpuCard} revealed={state.cpuCard !== null} />
+                  <PokerCard card={state.cpuCard} revealed={state.cpuCard !== null} />
                 </div>
               </div>
             </div>
