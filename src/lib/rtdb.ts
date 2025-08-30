@@ -48,16 +48,16 @@ const createDefaultDeck = (count = 13): CardData[] => {
     });
 };
 
-const createRandomDeck = (allCards: CardData[]): CardData[] => {
+const createRandomDeck = (allCards: CardData[], count: number = 13): CardData[] => {
     let deck = [...allCards];
-    if (deck.length < 13) {
-        const needed = 13 - deck.length;
-        const defaultCards = createDefaultDeck(13);
+    if (deck.length < count) {
+        const needed = count - deck.length;
+        const defaultCards = createDefaultDeck(count);
         const uniqueDefaults = defaultCards.filter(dc => !deck.some(rc => rc.number === dc.number));
         deck.push(...uniqueDefaults.slice(0, needed));
     }
     const shuffled = deck.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 13);
+    return shuffled.slice(0, count);
 };
 
 const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = []) => {
@@ -68,7 +68,7 @@ const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = [])
     };
     playerIds.forEach(uid => {
         // Store lightweight card representation in RTDB
-        gameState.playerHands[uid] = createRandomDeck(allCards).map(c => ({ id: c.id, suit: c.suit, rank: c.rank, number: c.number }));
+        gameState.playerHands[uid] = createRandomDeck(allCards, 13).map(c => ({ id: c.id, suit: c.suit, rank: c.rank, number: c.number }));
         gameState.scores[uid] = 0;
         gameState.kyuso[uid] = 0;
         gameState.only[uid] = 0;
@@ -274,10 +274,10 @@ export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
     }
     
     const toMs = (timestamp: any): number => {
-        if (typeof timestamp === 'object' && timestamp !== null && 'time' in timestamp) {
-            return timestamp.time;
+        if (typeof timestamp === 'number') {
+            return timestamp;
         }
-        return typeof timestamp === 'number' ? timestamp : 0;
+        return 0;
     };
     
     allGames.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));

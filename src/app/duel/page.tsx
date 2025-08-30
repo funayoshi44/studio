@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useContext, useEffect, useCallback } from 'react';
@@ -91,12 +92,12 @@ const createDefaultDeck = (count = 13): CardData[] => {
     });
 };
 
-const createRandomDeck = (allCards: CardData[]): CardData[] => {
+const createRandomDeck = (allCards: CardData[], count: number = 13): CardData[] => {
     let deck = [...allCards];
     // If not enough registered cards, supplement with default cards
-    if (deck.length < 13) {
-        const needed = 13 - deck.length;
-        const defaultCards = createDefaultDeck(13); // Create a full default deck
+    if (deck.length < count) {
+        const needed = count - deck.length;
+        const defaultCards = createDefaultDeck(count); // Create a full default deck
         // Get unique default cards that don't clash with registered ones by number
         const uniqueDefaults = defaultCards.filter(dc => !deck.some(rc => rc.number === dc.number));
         deck.push(...uniqueDefaults.slice(0, needed));
@@ -104,7 +105,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
     
     // Shuffle and pick 13
     const shuffled = deck.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, 13);
+    return shuffled.slice(0, count);
 };
 
 export default function DuelPage() {
@@ -120,8 +121,8 @@ export default function DuelPage() {
 
     setState(prevState => ({ ...prevState, isLoading: true }));
     try {
-        const playerDeck = createRandomDeck(allCards);
-        const cpuDeck = createRandomDeck(allCards);
+        const playerDeck = createRandomDeck(allCards, 13);
+        const cpuDeck = createRandomDeck(allCards, 13);
 
         setState(prevState => ({
             ...prevState,
