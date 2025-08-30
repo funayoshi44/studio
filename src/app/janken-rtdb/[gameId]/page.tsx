@@ -48,8 +48,8 @@ export default function RTDBOnlineJankenPage() {
     } = gameState;
 
     const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
-    const myMoves = useMemo(() => movesState[user?.uid ?? ''], [movesState, user]);
-    const opponentMoves = useMemo(() => opponentId ? movesState[opponentId] : null, [movesState, opponentId]);
+    const myMoves = useMemo(() => movesState?.[user?.uid ?? ''], [movesState, user]);
+    const opponentMoves = useMemo(() => (opponentId ? movesState?.[opponentId] : null), [movesState, opponentId]);
 
     const JankenMoveButton = ({ action, move, onSelect, disabled }: { action?: JankenAction, move: Move, onSelect: (move: Move) => void, disabled: boolean }) => {
         const content = action ? (
@@ -172,9 +172,9 @@ export default function RTDBOnlineJankenPage() {
             {phase !== 'result' && (
                 <div className="my-8">
                     <h3 className="text-xl font-bold mb-4">{phase === 'initial' ? t('jankenPhase1Title') : t('jankenPhase2Title')}</h3>
-                     {phase === 'final' && opponentId && (
+                     {phase === 'final' && opponentId && opponentMoves?.initial && (
                         <div className="text-sm text-muted-foreground mb-4 flex justify-center items-center gap-2">
-                            Opponent's first move was: <MoveDisplay uid={opponentId} phase='initial'/>
+                            Opponent's first move was: <div className="w-16 h-20 flex items-center justify-center text-3xl bg-gray-200 dark:bg-gray-700 rounded-lg">{getJankenEmoji(opponentMoves.initial)}</div>
                         </div>
                      )}
                      <JankenMoveSelector onSelect={handleSelectMove} disabled={isSubmittingMove || (myMoves && myMoves[phase] != null)} />

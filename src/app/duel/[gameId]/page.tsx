@@ -4,11 +4,8 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useTranslation } from '@/hooks/use-translation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
-import { PokerCard as GameCard } from '@/components/ui/poker-card';
-import type { CardData } from '@/lib/types';
+import { PokerCard } from '@/components/ui/poker-card';
 import { useDuelGame } from '@/hooks/use-duel-game';
 import { OnlineGamePlayerInfo } from '@/components/online-game/player-info';
 import { OnlineGameScoreDisplay } from '@/components/online-game/score-display';
@@ -42,8 +39,8 @@ export default function OnlineDuelPage() {
   } = gameState;
 
   const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
-  const myMove = useMemo(() => moves[user?.uid ?? ''], [moves, user]);
-  const opponentMove = useMemo(() => opponentId ? moves[opponentId] : null, [moves, opponentId]);
+  const myMove = useMemo(() => moves?.[user?.uid ?? ''], [moves, user]);
+  const opponentMove = useMemo(() => (opponentId ? moves?.[opponentId] : null), [moves, opponentId]);
 
   if (loading || !user) {
     return <div className="text-center py-10"><Loader2 className="h-8 w-8 animate-spin" /> Loading game...</div>;
@@ -93,7 +90,7 @@ export default function OnlineDuelPage() {
                       <div className="flex flex-wrap justify-center gap-2 max-w-4xl mx-auto">
                           {myFullHand.sort((a,b) => a.number - b.number).map(card => (
                             <button key={card.id} onClick={() => handleSelectCard(card)} disabled={isSubmittingMove} className="transition-transform hover:scale-105">
-                                <GameCard card={card} revealed={true} />
+                                <PokerCard card={card} revealed={true} />
                             </button>
                           ))}
                       </div>
@@ -109,12 +106,12 @@ export default function OnlineDuelPage() {
             <div className="flex justify-around items-center">
               <div className="text-center">
                 <OnlineGamePlayerInfo uid={user.uid} players={players} />
-                <div className="mt-2"><GameCard card={myMove} revealed={true}/></div>
+                <div className="mt-2"><PokerCard card={myMove} revealed={true}/></div>
               </div>
               <div className="text-2xl font-bold">VS</div>
               <div className="text-center">
                 {opponentId && <OnlineGamePlayerInfo uid={opponentId} players={players} />}
-                <div className="mt-2"><GameCard card={opponentMove} revealed={opponentMove !== null}/></div>
+                <div className="mt-2"><PokerCard card={opponentMove} revealed={opponentMove !== null}/></div>
               </div>
             </div>
           </div>
@@ -128,15 +125,6 @@ export default function OnlineDuelPage() {
         )}
       </>
 
-      <Card className="max-w-4xl mx-auto mt-12 text-left bg-card/50">
-        <CardHeader><CardTitle>📖 {t('duelTitle')} Rules</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>• {t('duelDescription')}</p>
-          <p>• Higher number wins each round.</p>
-          <p>• <strong>{t('kyuso')}:</strong> Win with a number exactly 1 smaller than the opponent's (e.g., 5 beats 6). 3 Kyuso wins result in an instant victory.</p>
-          <p>• <strong>{t('onlyOne')}:</strong> 1 beats 13 for an instant victory.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
