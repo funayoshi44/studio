@@ -1,9 +1,8 @@
 
 import { rtdb } from './firebase';
 import { ref, set, get, onValue, off, serverTimestamp, runTransaction, onDisconnect, goOffline, goOnline, push, update } from 'firebase/database';
-import type { MockUser, CardData, GameType } from './types';
+import type { MockUser, CardData, GameType, Game } from './types';
 import { getCards, awardPoints } from './firestore';
-import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 // --- Type Definitions for RTDB ---
 export interface RTDBGame {
@@ -11,6 +10,7 @@ export interface RTDBGame {
     gameType: GameType;
     players: { [uid: string]: Partial<MockUser> & { online: boolean } };
     playerIds: string[];
+    hostId: string;
     status: 'waiting' | 'in-progress' | 'finished';
     createdAt: object;
     maxPlayers: number;
@@ -61,7 +61,7 @@ const createRandomDeck = (allCards: CardData[]): CardData[] => {
 const getInitialDuelGameState = (allCards: CardData[], playerIds: string[] = []) => {
     const gameState: any = {
         currentRound: 1, playerHands: {}, scores: {}, kyuso: {}, only: {},
-        moves: {}, lastMoveBy: null, history: {}, roundWinner: null,
+        moves: {}, roundWinner: null,
         roundResultText: '', roundResultDetail: '',
     };
     playerIds.forEach(uid => {
@@ -102,11 +102,9 @@ export const setupPresence = (userId: string) => {
     
     onValue(ref(rtdb, '.info/connected'), (snapshot) => {
         if (snapshot.val() === false) {
-            // If we lose connection, mark as offline
              set(userStatusRef, isOfflineData);
             return;
         }
-        // If we are connected, set online status and set up onDisconnect
         onDisconnect(userStatusRef).set(isOfflineData).then(() => {
             set(userStatusRef, isOnlineData);
         });
@@ -140,7 +138,6 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
         }
         
         if (suitableGameId) {
-            // Join existing game
             const game = currentLobby[suitableGameId];
             game.playerIds.push(user.uid);
             game.players[user.uid] = { displayName: user.displayName, photoURL: user.photoURL, online: true };
@@ -155,12 +152,12 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
             gameIdToReturn = suitableGameId;
             return currentLobby;
         } else {
-            // Create new game
             const newGameKey = push(lobbyRef).key;
             if (!newGameKey) throw new Error("Could not generate a new game key.");
             const newGame: RTDBGame = {
                 id: newGameKey,
                 gameType,
+                hostId: user.uid,
                 players: { [user.uid]: { displayName: user.displayName, photoURL: user.photoURL, online: true } },
                 playerIds: [user.uid],
                 status: 'waiting',
@@ -181,61 +178,6 @@ export const findAndJoinRTDBGame = async (user: MockUser, gameType: GameType): P
 };
 
 
-// --- Game Logic for RTDB ---
-export const startGame = async (gameId: string): Promise<void> => {
-    const gameRef = ref(rtdb, `lobbies/poker/${gameId}`);
-    const gameSnap = await get(gameRef);
-    if (!gameSnap.exists()) {
-        throw new Error("Game not found!");
-    }
-    const gameData: RTDBGame = gameSnap.val();
-    const playerIds = gameData.playerIds;
-
-    const allCards = await getCards();
-    const deck = createPokerDeck(allCards);
-
-    const playerHands: { [uid: string]: any[] } = {};
-    playerIds.forEach(uid => {
-        playerHands[uid] = deck.splice(0, 5).map(c => ({ id: c.id, suit: c.suit, rank: c.rank, number: c.number, value: c.value }));
-    });
-
-    const initialGameState = {
-        phase: 'exchanging',
-        deck,
-        playerHands,
-        selectedCards: {},
-        exchangeCounts: Object.fromEntries(playerIds.map(id => [id, 0])),
-        playerRanks: {},
-        turnOrder: playerIds,
-        currentTurnIndex: 0,
-        winners: null,
-        resultText: '',
-    };
-    
-    await update(gameRef, {
-        status: 'in-progress',
-        gameState: initialGameState
-    });
-};
-
-
-export const subscribeToRTDBGame = (gameType: GameType, gameId: string, callback: (game: RTDBGame | null) => void): (() => void) => {
-    if (!rtdb) return () => {};
-    const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
-    onValue(gameRef, (snapshot) => {
-        callback(snapshot.val() as RTDBGame | null);
-    });
-
-    // Return an unsubscribe function
-    return () => off(gameRef);
-};
-
-export const updateRTDBGameState = (gameType: GameType, gameId: string, newGameState: any) => {
-    if (!rtdb) return;
-    const gameStateRef = ref(rtdb, `lobbies/${gameType}/${gameId}/gameState`);
-    return set(gameStateRef, newGameState);
-};
-
 export const submitRTDBMove = (gameType: GameType, gameId: string, userId: string, move: any, phase?: 'initial' | 'final') => {
     if (!rtdb) return;
     let movePath: string;
@@ -243,13 +185,11 @@ export const submitRTDBMove = (gameType: GameType, gameId: string, userId: strin
         if (!phase) throw new Error("Janken move requires a phase.");
         movePath = `lobbies/${gameType}/${gameId}/gameState/moves/${userId}/${phase}`;
     } else {
-         // Default for Duel
         movePath = `lobbies/${gameType}/${gameId}/gameState/moves/${userId}`;
     }
     
     const moveRef = ref(rtdb, movePath);
     let moveData = move;
-    // For Duel, store lightweight card representation
     if (gameType === 'duel' && move.id) {
         moveData = { id: move.id, suit: move.suit, rank: move.rank, number: move.number };
     }
@@ -261,37 +201,82 @@ export const leaveRTDBGame = async (gameType: GameType, gameId: string, userId: 
     if (!rtdb) return;
     const gameRef = ref(rtdb, `lobbies/${gameType}/${gameId}`);
     await runTransaction(gameRef, (game: RTDBGame | null) => {
-        // If game is null, it's already been deleted or doesn't exist.
         if (!game) {
             return game;
         }
-
-        // Remove player if they exist in the game
         if (game.players?.[userId]) {
             delete game.players[userId];
         }
 
         if (game.playerIds) {
             game.playerIds = game.playerIds.filter(id => id !== userId);
-        
-            // If game is in progress and only one player remains, they win.
-            if (game.status === 'in-progress' && game.playerIds.length === 1) {
+            if (game.status === 'in-progress' && game.playerIds.length < 2) {
                 game.status = 'finished';
-                game.winner = game.playerIds[0];
+                game.winner = game.playerIds[0] || 'draw'; // The remaining player wins
             } else if (game.playerIds.length === 0) {
-                // If no players left, delete the game from the lobby by returning null.
                 return null;
             }
         }
-
         return game;
     });
 };
 
-// Set player online status within a game
 export const setPlayerOnlineStatus = (gameType: GameType, gameId: string, userId: string, isOnline: boolean) => {
     if (!rtdb) return;
     const playerStatusRef = ref(rtdb, `lobbies/${gameType}/${gameId}/players/${userId}/online`);
-    onDisconnect(playerStatusRef).set(false); // Set to offline on disconnect
+    onDisconnect(playerStatusRef).set(false);
     set(playerStatusRef, isOnline);
 }
+
+export const subscribeToLobbies = (gameType: GameType, callback: (lobbies: any[]) => void) => {
+    const lobbiesRef = ref(rtdb, `lobbies/${gameType}`);
+    const listener = onValue(lobbiesRef, (snapshot) => {
+        const lobbiesData = snapshot.val();
+        const lobbiesArray = lobbiesData ? Object.keys(lobbiesData).map(key => ({ id: key, ...lobbiesData[key] })) : [];
+        callback(lobbiesArray);
+    });
+    return () => off(lobbiesRef, 'value', listener);
+};
+
+export const subscribeToOnlineUsers = (callback: (users: any[]) => void) => {
+    const onlineUsersRef = ref(rtdb, 'status');
+    const listener = onValue(onlineUsersRef, (snapshot) => {
+        const usersData = snapshot.val();
+        const usersArray = usersData ? Object.keys(usersData)
+            .filter(uid => usersData[uid].isOnline)
+            .map(uid => ({ uid, ...usersData[uid] })) : [];
+        callback(usersArray);
+    });
+    return () => off(onlineUsersRef, 'value', listener);
+};
+
+
+export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
+    if (!rtdb) return [];
+    
+    const allGames: Game[] = [];
+    const gameTypes: GameType[] = ['duel', 'janken']; // Poker not included yet
+
+    for (const gameType of gameTypes) {
+        const gamesRef = ref(rtdb, `lobbies/${gameType}`);
+        const snapshot = await get(gamesRef);
+        if (snapshot.exists()) {
+            const gamesData = snapshot.val();
+            for (const gameId in gamesData) {
+                const game = gamesData[gameId] as Game;
+                if (game.playerIds?.includes(userId) && game.status === 'finished') {
+                    allGames.push({ id: gameId, ...game });
+                }
+            }
+        }
+    }
+    
+    // Sort by createdAt timestamp descending
+    allGames.sort((a, b) => {
+        const timeA = (a.createdAt as any)?.time || 0;
+        const timeB = (b.createdAt as any)?.time || 0;
+        return timeB - timeA;
+    });
+
+    return allGames.slice(0, 50); // Limit to 50 most recent games
+};

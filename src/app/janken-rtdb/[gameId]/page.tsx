@@ -14,6 +14,7 @@ import { OnlineGamePlayerInfo } from '@/components/online-game/player-info';
 import { OnlineGameScoreDisplay } from '@/components/online-game/score-display';
 import { OnlineGameWaitingScreen } from '@/components/online-game/waiting-screen';
 import { OnlineGameForfeitButton } from '@/components/online-game/forfeit-button';
+import { OnlineGameResultScreen } from '@/components/online-game/result-screen';
 
 type Move = 'rock' | 'paper' | 'scissors';
 const moves: Move[] = ['rock', 'paper', 'scissors'];
@@ -34,6 +35,7 @@ export default function RTDBOnlineJankenPage() {
         status,
         players,
         playerIds,
+        winner,
         currentRound,
         scores,
         phase,
@@ -95,10 +97,10 @@ export default function RTDBOnlineJankenPage() {
         )
     }
 
-    const MoveDisplay = ({ uid, phase }: { uid: string, phase: 'initial' | 'final' }) => {
+    const MoveDisplay = ({ uid, phase }: { uid: string, phase: 'initial' | 'final' | 'result' }) => {
         if (!players || !movesState) return null;
         const playerMoves = movesState[uid];
-        const move = playerMoves?.[phase];
+        const move = phase === 'result' ? playerMoves?.final : playerMoves?.[phase];
         const action = jankenActions[uid]?.[move!];
         
         const renderContent = () => {
@@ -125,7 +127,7 @@ export default function RTDBOnlineJankenPage() {
             return <div className="w-24 h-32 flex items-center justify-center text-6xl bg-gray-200 dark:bg-gray-700 rounded-lg">{getJankenEmoji(move)}</div>;
         }
 
-        if (phase === 'result' || (phase === 'final' && phase === 'initial') || uid === user?.uid) {
+        if (uid === user?.uid || phase === 'result') {
             return renderContent();
         }
 
@@ -143,6 +145,10 @@ export default function RTDBOnlineJankenPage() {
 
     if (error) {
         return <div className="text-center text-destructive py-10">{error}</div>
+    }
+
+    if (status === 'finished') {
+        return <OnlineGameResultScreen gameType="janken" winner={winner} players={players} />;
     }
 
     return (

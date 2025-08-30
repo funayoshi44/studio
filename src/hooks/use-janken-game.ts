@@ -24,6 +24,8 @@ export function useJankenGame() {
     const [status, setStatus] = useState<'waiting' | 'in-progress' | 'finished' | null>(null);
     const [players, setPlayers] = useState<any>(null);
     const [playerIds, setPlayerIds] = useState<string[]>([]);
+    const [hostId, setHostId] = useState<string | null>(null);
+    const [winner, setWinner] = useState<string | 'draw' | null | undefined>(null);
     const [currentRound, setCurrentRound] = useState(1);
     const [scores, setScores] = useState<{ [uid: string]: number }>({});
     const [phase, setPhase] = useState<'initial' | 'final' | 'result'>('initial');
@@ -35,7 +37,7 @@ export function useJankenGame() {
     const [error, setError] = useState<string | null>(null);
 
     const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
-    const isHost = useMemo(() => user && playerIds.length > 0 && playerIds[0] === user.uid, [user, playerIds]);
+    const isHost = useMemo(() => user && hostId === user.uid, [user, hostId]);
 
     useEffect(() => {
         if (user) setupPresence(user.uid);
@@ -56,6 +58,12 @@ export function useJankenGame() {
                 router.push('/online');
                 return false;
             }
+            if (snap.val().playerIds && !snap.val().playerIds.includes(user.uid) && snap.val().status !== 'waiting') {
+                setError("You are not a player in this game.");
+                toast({ title: "Access Denied", description: "You are not a player in this game.", variant: 'destructive'});
+                router.push('/online');
+                return false;
+            }
             return true;
         }
 
@@ -64,7 +72,9 @@ export function useJankenGame() {
             
             unsubs.push(onValue(ref(rtdb, `${base}/status`), s => setStatus(s.val())));
             unsubs.push(onValue(ref(rtdb, `${base}/players`), s => setPlayers(s.val())));
+            unsubs.push(onValue(ref(rtdb, `${base}/hostId`), s => setHostId(s.val())));
             unsubs.push(onValue(ref(rtdb, `${base}/playerIds`), s => setPlayerIds(s.val() ?? [])));
+            unsubs.push(onValue(ref(rtdb, `${base}/winner`), s => setWinner(s.val())));
             unsubs.push(onValue(ref(rtdb, `${gs}/currentRound`), s => setCurrentRound(s.val() ?? 1)));
             unsubs.push(onValue(ref(rtdb, `${gs}/scores`), s => setScores(s.val() ?? {})));
             unsubs.push(onValue(ref(rtdb, `${gs}/phase`), s => setPhase(s.val() ?? 'initial')));
@@ -104,21 +114,23 @@ export function useJankenGame() {
     );
 
     const nextRound = useCallback(() => {
-        if (!isHost) return;
+        if (!isHost || playerIds.length < 2) return;
+        const p1Id = playerIds[0];
+        const p2Id = playerIds[1];
         update(ref(rtdb, `lobbies/janken/${gameId}/gameState`), {
             currentRound: currentRound + 1,
             phase: 'initial',
             roundWinner: null,
             roundResultText: '',
             moves: {
-                [playerIds[0]]: { initial: null, final: null },
-                [playerIds[1]]: { initial: null, final: null },
+                [p1Id]: { initial: null, final: null },
+                [p2Id]: { initial: null, final: null },
             }
         });
     }, [isHost, gameId, currentRound, playerIds]);
 
     const evaluateRound = useCallback(() => {
-        if (!isHost || !user || !opponentId || !movesState || !players) return;
+        if (!isHost || !user || !opponentId || !movesState || !players || playerIds.length < 2) return;
         const p1Id = playerIds[0];
         const p2Id = playerIds[1];
         const p1Moves = movesState[p1Id];
@@ -164,6 +176,7 @@ export function useJankenGame() {
         if (!isHost || !user || !opponentId || !movesState || !players) return;
         const myMoves = movesState[user.uid];
         const opponentMoves = movesState[opponentId];
+
         if (phase === 'initial' && myMoves?.initial && opponentMoves?.initial) {
             update(ref(rtdb, `lobbies/janken/${gameId}/gameState`), { phase: 'final' });
         } else if (phase === 'final' && myMoves?.final && opponentMoves?.final) {
@@ -193,6 +206,7 @@ export function useJankenGame() {
             status,
             players,
             playerIds,
+            winner,
             currentRound,
             scores,
             phase,

@@ -18,6 +18,11 @@ import Image from 'next/image';
 import { Tooltip, TooltipProvider, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { type JankenAction } from '@/lib/firestore';
 import { useJankenGame } from '@/hooks/use-janken-game';
+import { OnlineGamePlayerInfo } from '@/components/online-game/player-info';
+import { OnlineGameScoreDisplay } from '@/components/online-game/score-display';
+import { OnlineGameWaitingScreen } from '@/components/online-game/waiting-screen';
+import { OnlineGameResultScreen } from '@/components/online-game/result-screen';
+import { OnlineGameForfeitButton } from '@/components/online-game/forfeit-button';
 
 
 type Move = 'rock' | 'paper' | 'scissors';
@@ -84,6 +89,7 @@ export default function OnlineJankenPage() {
         status,
         players,
         playerIds,
+        winner,
         currentRound,
         scores,
         phase,
@@ -98,12 +104,6 @@ export default function OnlineJankenPage() {
     const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
     const myJankenActions = useMemo(() => user ? jankenActions[user.uid] : {}, [jankenActions, user]);
 
-    const handleForfeit = async () => {
-        if (user && gameId) {
-            await leaveRTDBGame('janken', gameId, user.uid);
-            router.push('/online');
-        }
-    };
     
     const handleCopyGameId = () => {
         if(!gameId) return;
@@ -166,36 +166,11 @@ export default function OnlineJankenPage() {
     }
 
     if (status === 'waiting') {
-        return (
-            <div className="text-center py-10">
-                <h2 className="text-2xl font-bold mb-4">{t('waitingForPlayer')}</h2>
-                <p className="mb-4 text-muted-foreground">{t('shareGameId')}</p>
-                <div className="flex items-center justify-center gap-2 mb-6">
-                    <code className="p-2 bg-muted rounded-md">{gameId}</code>
-                    <Button onClick={handleCopyGameId} size="icon" variant="ghost"><Copy className="h-4 w-4"/></Button>
-                </div>
-                <p className="mb-4">{t('orShareUrl')}</p>
-                <Loader2 className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-8"/>
-            </div>
-        );
+        return <OnlineGameWaitingScreen gameId={gameId} />;
     }
     
      if (status === 'finished') {
-        const winnerId = gameState.winner;
-        const winnerName = winnerId && winnerId !== 'draw' ? players[winnerId]?.displayName : null;
-        return (
-            <div className="my-8 text-center">
-                {winnerId === user.uid && <VictoryAnimation />}
-                <p className="text-4xl font-bold mb-4">
-                    {winnerId === 'draw' ? t('draw') : `${winnerName} ${t('winsTheGame')}!`}
-                </p>
-                <div className="space-x-4 mt-6">
-                    <Link href="/online" passHref>
-                        <Button size="lg">{t('backToMenu')}</Button>
-                    </Link>
-                </div>
-            </div>
-        );
+        return <OnlineGameResultScreen gameType="janken" winner={winner} players={players} />;
     }
 
     const myMoves = movesState[user.uid];
@@ -207,33 +182,17 @@ export default function OnlineJankenPage() {
             <div className="flex justify-between items-center mb-2">
                 <div/>
                 <h2 className="text-3xl font-bold">{t('jankenTitle')} - Online</h2>
-                <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm"><Flag className="mr-2 h-4 w-4" />{t('forfeit')}</Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                        <AlertDialogHeader><AlertDialogTitle>{t('forfeitConfirmationTitle')}</AlertDialogTitle><AlertDialogDescription>{t('forfeitConfirmationBody')}</AlertDialogDescription></AlertDialogHeader>
-                        <AlertDialogFooter><AlertDialogAction onClick={handleForfeit}>{t('forfeit')}</AlertDialogAction><AlertDialogCancel>{t('cancel')}</AlertDialogCancel></AlertDialogFooter>
-                    </AlertDialogContent>
-                </AlertDialog>
+                <OnlineGameForfeitButton gameType="janken" gameId={gameId} />
             </div>
             
             <div className="mb-4 text-muted-foreground">{t('round')} {currentRound}</div>
             
-            <div className="flex justify-center space-x-4 md:space-x-8 text-lg mb-4">
-                <div className="bg-blue-100 dark:bg-blue-900/50 p-3 rounded-lg font-bold">{t('you')}: {scores[user.uid] || 0} {t('wins')}</div>
-                {opponentId && <div className="bg-red-100 dark:bg-red-900/50 p-3 rounded-lg font-bold">{players[opponentId]?.displayName}: {scores[opponentId] || 0} {t('wins')}</div>}
-            </div>
+            <OnlineGameScoreDisplay players={players} playerIds={playerIds} scores={scores} />
 
             <div className="grid grid-cols-2 gap-4 my-8">
-                <div className="flex flex-col items-center gap-2">
-                    <Avatar className="w-16 h-16"><AvatarImage src={user.photoURL ?? undefined} /><AvatarFallback>{user.displayName?.[0]}</AvatarFallback></Avatar>
-                    <p className="font-bold">{user.displayName}</p>
-                </div>
-                 {opponentId && <div className="flex flex-col items-center gap-2">
-                    <Avatar className="w-16 h-16"><AvatarImage src={players[opponentId]?.photoURL ?? undefined} /><AvatarFallback>{players[opponentId]?.displayName?.[0]}</AvatarFallback></Avatar>
-                    <p className="font-bold">{players[opponentId]?.displayName}</p>
-                </div>}
+                {playerIds.map(uid => (
+                    <OnlineGamePlayerInfo key={uid} uid={uid} players={players} />
+                ))}
             </div>
 
             {phase !== 'result' && (
@@ -283,5 +242,3 @@ function getJankenEmoji(move: "rock" | "paper" | "scissors" | null): React.React
     const emojiMap = { rock: '✊', paper: '✋', scissors: '✌️' };
     return emojiMap[move];
 }
-
-    

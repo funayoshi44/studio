@@ -23,7 +23,6 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import type { Game, GameType, MockUser, Post, CardData, ChatRoom, ChatMessage, Announcement, JankenAction, CardSeries } from './types';
-import { createPokerDeck, evaluatePokerHand } from './game-logic/poker';
 
 
 const CARDS_COLLECTION = process.env.NEXT_PUBLIC_CARDS_COLLECTION_NAME || 'cards';
@@ -39,62 +38,6 @@ export const awardPoints = async (userId: string, amount: number) => {
     await updateDoc(userRef, {
         points: increment(amount)
     });
-};
-
-// Listen for game updates (deprecated for sharded model)
-export const subscribeToGame = (gameId: string, callback: (game: Game | null) => void) => {
-  if (!db) return () => {};
-  const gameRef = doc(db, 'games', gameId);
-  return onSnapshot(gameRef, (docSnap) => {
-    if (docSnap.exists()) {
-      callback({ id: docSnap.id, ...docSnap.data() } as Game);
-    } else {
-      callback(null);
-    }
-  });
-};
-
-// Update a single document
-export const updateGameState = async (gameId: string, updates: any): Promise<void> => {
-  if (!db) return;
-  const gameRef = doc(db, 'games', gameId);
-  await updateDoc(gameRef, { gameState: updates });
-};
-
-// Update multiple sharded state documents
-export const updateShardedGameState = async (gameId: string, payload: any) => {
-    if (!db) return;
-    const batch = writeBatch(db);
-    
-    for (const key in payload) {
-        if (key === 'hands' || key === 'moves') {
-             for (const playerId in payload[key]) {
-                const subDocRef = doc(db, 'games', gameId, key, playerId);
-                if (payload[key][playerId] === null) {
-                    batch.set(subDocRef, { card: null });
-                } else if (Array.isArray(payload[key][playerId])) {
-                    batch.set(subDocRef, { cards: payload[key][playerId] });
-                } else {
-                    batch.set(subDocRef, { card: payload[key][playerId] });
-                }
-            }
-        } else {
-             const stateSubDocRef = doc(db, 'games', gameId, 'state', key);
-             batch.set(stateSubDocRef, payload[key], { merge: true });
-        }
-    }
-    await batch.commit();
-}
-
-
-// Submit a move to its own document
-export const submitMove = async (gameId: string, userId: string, move: any) => {
-    if (!db) return;
-    const moveDocRef = doc(db, 'games', gameId, 'moves', userId);
-    await setDoc(moveDocRef, { card: move });
-    
-    const mainStateRef = doc(db, 'games', gameId, 'state', 'main');
-    await updateDoc(mainStateRef, { lastMoveBy: userId });
 };
 
 // Upload a profile image and get the URL
@@ -409,27 +352,6 @@ export const deleteSeries = async (id: string): Promise<void> => {
 }
 
 
-// --- Game History ---
-export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
-    if (!db) return [];
-    const gamesCollection = collection(db, 'games');
-    const q = query(
-        gamesCollection,
-        where('playerIds', 'array-contains', userId),
-        where('status', '==', 'finished'),
-        orderBy('createdAt', 'desc'),
-        limit(50) 
-    );
-
-    const querySnapshot = await getDocs(q);
-    const history: Game[] = [];
-    querySnapshot.forEach((doc) => {
-        history.push({ id: doc.id, ...doc.data() } as Game);
-    });
-    return history;
-};
-
-
 // --- Announcements ---
 
 export const createAnnouncement = async (author: MockUser, title: string, content: string): Promise<string> => {
@@ -584,11 +506,3 @@ export const sendMessage = async (chatRoomId: string, senderId: string, text: st
         [`participantsInfo.${senderId}`]: senderInfo
     });
 };
-
-    
-
-    
-
-
-
-

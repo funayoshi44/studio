@@ -8,8 +8,8 @@ import { useTranslation } from '@/hooks/use-translation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
-import { getUserGameHistory, type Game } from '@/lib/firestore';
-import type { GameType, Difficulty, OnlineGameRecord } from '@/lib/types';
+import type { Game, GameType, Difficulty, OnlineGameRecord } from '@/lib/types';
+import { getUserGameHistory } from '@/lib/rtdb';
 import { Loader2, Swords, Scissors, Layers, Trophy, AlertTriangle, MinusCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -42,7 +42,7 @@ export default function HistoryPage() {
               gameType: game.gameType,
               opponent: opponent ? { uid: opponentId!, displayName: opponent.displayName!, photoURL: opponent.photoURL! } : { uid: 'unknown', displayName: 'Unknown Player', photoURL: '' },
               result: result,
-              playedAt: game.createdAt.toDate(),
+              playedAt: new Date((game.createdAt as any)?.time || Date.now()),
             };
           });
           setOnlineHistory(processedHistory);

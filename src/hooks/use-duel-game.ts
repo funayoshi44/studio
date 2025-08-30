@@ -30,6 +30,7 @@ export function useDuelGame() {
     const [status, setStatus] = useState<'waiting' | 'in-progress' | 'finished' | null>(null);
     const [players, setPlayers] = useState<any>(null);
     const [playerIds, setPlayerIds] = useState<string[]>([]);
+    const [hostId, setHostId] = useState<string | null>(null);
     const [winner, setWinner] = useState<string | 'draw' | null | undefined>(null);
     const [currentRound, setCurrentRound] = useState(1);
     const [scores, setScores] = useState<{ [uid: string]: number }>({});
@@ -45,7 +46,7 @@ export function useDuelGame() {
     const [error, setError] = useState<string | null>(null);
 
     const opponentId = useMemo(() => playerIds.find(p => p !== user?.uid), [playerIds, user]);
-    const isHost = useMemo(() => user && playerIds.length > 0 && playerIds[0] === user.uid, [user, playerIds]);
+    const isHost = useMemo(() => user && hostId === user.uid, [user, hostId]);
 
     const rehydrateCard = useCallback((lightCard: LightCard | null): CardData | null => {
         if (!lightCard) return null;
@@ -91,6 +92,7 @@ export function useDuelGame() {
 
             unsubs.push(onValue(ref(rtdb, `${base}/status`), s => setStatus(s.val())));
             unsubs.push(onValue(ref(rtdb, `${base}/players`), s => setPlayers(s.val())));
+            unsubs.push(onValue(ref(rtdb, `${base}/hostId`), s => setHostId(s.val())));
             unsubs.push(onValue(ref(rtdb, `${base}/winner`), s => setWinner(s.val())));
             unsubs.push(onValue(ref(rtdb, `${gs}/currentRound`), s => setCurrentRound(s.val() ?? 1)));
             unsubs.push(onValue(ref(rtdb, `${gs}/scores`), s => setScores(s.val() ?? {})));
@@ -100,22 +102,11 @@ export function useDuelGame() {
             unsubs.push(onValue(ref(rtdb, `${gs}/roundResultText`), s => setRoundResultText(s.val() ?? '')));
             unsubs.push(onValue(ref(rtdb, `${gs}/roundResultDetail`), s => setRoundResultDetail(s.val() ?? '')));
             unsubs.push(onValue(ref(rtdb, `${gs}/playerHands/${user.uid}`), s => setPlayerHands(prev => ({ ...prev, [user.uid]: s.val() ?? [] }))));
-            unsubs.push(onValue(ref(rtdb, `${gs}/moves/${user.uid}`), s => setMoves(prev => ({ ...prev, [user.uid]: s.val() ?? null }))));
             
-            let oppUnsub: (() => void) | null = null;
-            const attachOpponentListener = (oppId?: string) => {
-                if (oppUnsub) { oppUnsub(); oppUnsub = null; }
-                if (!oppId) return;
-                oppUnsub = onValue(ref(rtdb, `${gs}/moves/${oppId}`), s => setMoves(prev => ({ ...prev, [oppId]: s.val() ?? null })));
-                unsubs.push(() => oppUnsub && oppUnsub());
-            };
+            const movesUnsub = onValue(ref(rtdb, `${gs}/moves`), s => setMoves(s.val() ?? {}));
+            unsubs.push(movesUnsub);
             
-            const playerIdsUnsub = onValue(ref(rtdb, `${base}/playerIds`), snap => {
-                const ids = snap.val() || [];
-                setPlayerIds(ids);
-                const currentOpponent = ids.find((p: string) => p !== user.uid);
-                attachOpponentListener(currentOpponent);
-            });
+            const playerIdsUnsub = onValue(ref(rtdb, `${base}/playerIds`), snap => setPlayerIds(snap.val() || []));
             unsubs.push(playerIdsUnsub);
 
             setPlayerOnlineStatus('duel', gameId, user.uid, true);
@@ -130,15 +121,15 @@ export function useDuelGame() {
     }, [gameId, user, router, toast]);
 
     const checkGameEnd = useCallback((currentScores: any, currentKyuso: any, currentOnly: any) => {
-        if (!user || !opponentId || !isHost) return;
+        if (!isHost || !playerIds || playerIds.length < 2) return;
 
         const p1Id = playerIds[0];
         const p2Id = playerIds[1];
         let ended = false;
         let finalWinnerId: string | 'draw' | null = null;
         
-        if (currentOnly[p1Id] > 0) { ended = true; finalWinnerId = p1Id; }
-        else if (currentOnly[p2Id] > 0) { ended = true; finalWinnerId = p2Id; }
+        if (currentOnly[p1Id] >= 1) { ended = true; finalWinnerId = p1Id; }
+        else if (currentOnly[p2Id] >= 1) { ended = true; finalWinnerId = p2Id; }
         else if (currentKyuso[p1Id] >= 3) { ended = true; finalWinnerId = p1Id; }
         else if (currentKyuso[p2Id] >= 3) { ended = true; finalWinnerId = p2Id; }
         else if (currentRound >= TOTAL_ROUNDS) {
@@ -159,25 +150,18 @@ export function useDuelGame() {
                 roundResultDetail: '',
             });
         }
-    }, [user, opponentId, isHost, playerIds, currentRound, gameId]);
+    }, [isHost, playerIds, currentRound, gameId]);
 
     const evaluateRound = useCallback(() => {
-        if (!user || !opponentId || !players) return;
+        if (!isHost || !user || !opponentId || !players || playerIds.length < 2) return;
 
-        let winnerId: string | 'draw' = 'draw';
-        let resultText = '';
-        let resultDetail = '';
-        let winType = '';
-        
-        const newScores = { ...scores };
-        const newKyuso = { ...kyuso };
-        const newOnly = { ...only };
-        
         const myCard = rehydrateCard(moves[user.uid]);
         const opponentCard = rehydrateCard(moves[opponentId]);
-        
         if (!myCard || !opponentCard) return;
 
+        let winnerId: string | 'draw' = 'draw';
+        let winType = '';
+        
         if (myCard.number === 1 && opponentCard.number === 13) { winnerId = user.uid; winType = 'only'; }
         else if (opponentCard.number === 1 && myCard.number === 13) { winnerId = opponentId; winType = 'only'; }
         else if (myCard.number === opponentCard.number - 1) { winnerId = user.uid; winType = 'kyuso'; }
@@ -185,23 +169,26 @@ export function useDuelGame() {
         else if (myCard.number > opponentCard.number) { winnerId = user.uid; }
         else if (opponentCard.number > myCard.number) { winnerId = opponentId; }
 
+        const newScores = { ...scores };
+        const newKyuso = { ...kyuso };
+        const newOnly = { ...only };
+        
         if (winnerId !== 'draw') {
             newScores[winnerId] = (newScores[winnerId] || 0) + 1;
-            if (winType === 'only') { newOnly[winnerId] = (newOnly[winnerId] || 0) + 1; resultDetail = t('duelResultOnlyOne'); }
-            else if (winType === 'kyuso') { newKyuso[winnerId] = (newKyuso[winnerId] || 0) + 1; resultDetail = t('duelResultKyuso'); }
+            if (winType === 'only') newOnly[winnerId] = (newOnly[winnerId] || 0) + 1;
+            if (winType === 'kyuso') newKyuso[winnerId] = (newKyuso[winnerId] || 0) + 1;
         }
         
-        resultText = winnerId === 'draw' ? t('draw') : `${players[winnerId]?.displayName ?? 'Player'} ${t('wins')}!`;
-        if (!resultDetail) resultDetail = `${players[user.uid]?.displayName ?? 'You'}: ${myCard.number} vs ${players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCard.number}`;
-
-        const myNewHand = (playerHands[user.uid] || []).filter((c: any) => c.id !== myCard.id);
+        const resultText = winnerId === 'draw' ? t('draw') : `${players[winnerId]?.displayName ?? 'Player'} ${t('wins')}!`;
+        let resultDetail = `${players[user.uid]?.displayName ?? 'You'}: ${myCard.number} vs ${players[opponentId]?.displayName ?? 'Opponent'}: ${opponentCard.number}`;
+        if (winType === 'only') resultDetail = t('duelResultOnlyOne');
+        if (winType === 'kyuso') resultDetail = t('duelResultKyuso');
 
         const updates: any = {};
         const gsPath = `lobbies/duel/${gameId}/gameState`;
         updates[`${gsPath}/scores`] = newScores;
         updates[`${gsPath}/kyuso`] = newKyuso;
         updates[`${gsPath}/only`] = newOnly;
-        updates[`${gsPath}/playerHands/${user.uid}`] = myNewHand;
         updates[`${gsPath}/roundWinner`] = winnerId;
         updates[`${gsPath}/roundResultText`] = resultText;
         updates[`${gsPath}/roundResultDetail`] = resultDetail;
@@ -209,10 +196,10 @@ export function useDuelGame() {
         update(ref(rtdb), updates).then(() => {
             setTimeout(() => checkGameEnd(newScores, newKyuso, newOnly), 2000);
         });
-    }, [user, opponentId, players, scores, kyuso, only, moves, playerHands, gameId, t, rehydrateCard, checkGameEnd]);
+    }, [isHost, user, opponentId, players, moves, scores, kyuso, only, gameId, t, rehydrateCard, checkGameEnd]);
 
     useEffect(() => {
-        if (!user || !opponentId || !isHost) return;
+        if (!isHost || !user || !opponentId) return;
         const myMove = moves?.[user.uid];
         const opponentMove = moves?.[opponentId];
         if (myMove != null && opponentMove != null && roundWinner === null) {
