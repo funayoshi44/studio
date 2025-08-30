@@ -24,6 +24,7 @@ const createDefaultPokerDeck = (): PokerCard[] => {
             deck.push({
                 id: `default-poker-${rank.name}${suit}${idCounter++}`, // Ensure unique ID
                 frontImageUrl: `https://picsum.photos/seed/card-poker-${rank.name}${suit}/200/300`,
+                backImageUrl: null,
                 suit: suit,
                 rank: rank.number,
                 title: `${rank.name} of ${suit}`,

@@ -24,6 +24,7 @@ const createDefaultDeck = (count = 13): CardData[] => {
         return {
             id: `default-${rank}`,
             frontImageUrl: `https://picsum.photos/seed/card-default-${rank}/200/300`,
+            backImageUrl: null,
             suit: 'default',
             rank: rank,
             title: `Default Card ${rank}`,
@@ -235,7 +236,7 @@ export const subscribeToLobbies = (gameType: GameType, callback: (lobbies: any[]
         const lobbiesArray = lobbiesData ? Object.keys(lobbiesData).map(key => ({ id: key, ...lobbiesData[key] })) : [];
         callback(lobbiesArray);
     });
-    return unsubscribe;
+    return () => unsubscribe();
 };
 
 export const subscribeToOnlineUsers = (callback: (users: any[]) => void) => {
@@ -247,7 +248,7 @@ export const subscribeToOnlineUsers = (callback: (users: any[]) => void) => {
             .map(uid => ({ uid, ...usersData[uid] })) : [];
         callback(usersArray);
     });
-    return unsubscribe;
+    return () => unsubscribe();
 };
 
 
@@ -271,10 +272,8 @@ export const getUserGameHistory = async (userId: string): Promise<Game[]> => {
         }
     }
     
-    // Helper to convert RTDB timestamp (number) to a comparable value
     const toMs = (timestamp: any): number => (typeof timestamp === 'number' ? timestamp : 0);
-
-    // Sort by createdAt timestamp descending
+    
     allGames.sort((a, b) => toMs(b.createdAt) - toMs(a.createdAt));
 
     return allGames.slice(0, 50); // Limit to 50 most recent games

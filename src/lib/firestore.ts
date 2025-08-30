@@ -275,7 +275,7 @@ export const addCard = async (
   const cardToSave: any = {
     ...cardData,
     frontImageUrl: imageUrl,
-    backImageUrl: backImageUrl, // This will be null if no back image is provided
+    backImageUrl: backImageUrl ?? null, // Ensure backImageUrl is null if not provided
     authorId: author.uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
